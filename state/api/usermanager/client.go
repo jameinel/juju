@@ -9,37 +9,32 @@ import (
 	"github.com/juju/errors"
 	"github.com/juju/names"
 
-	"github.com/juju/juju/state/api"
+	"github.com/juju/juju/state/api/base"
 	"github.com/juju/juju/state/api/params"
+	"github.com/juju/juju/state/apiserver/usermanager"
 )
 
 // TODO(mattyw) 2014-03-07 bug #1288750
 // Need a SetPassword method.
 type Client struct {
-	st *api.State
+	base.ClientFacade
+	facade base.FacadeCaller
 }
 
-var call = func(st *api.State, method string, params, result interface{}) error {
-	return st.Call("UserManager", "", method, params, result)
-}
-
-func NewClient(st *api.State) *Client {
-	return &Client{st}
-}
-
-func (c *Client) Close() error {
-	return c.st.Close()
+func NewClient(st base.APICallCloser) *Client {
+	frontend, backend := base.NewClientFacade(st, "UserManager")
+	return &Client{ClientFacade: frontend, facade: backend}
 }
 
 func (c *Client) AddUser(username, displayName, password string) error {
-	if !names.IsUser(username) {
+	if !names.IsValidUser(username) {
 		return fmt.Errorf("invalid user name %q", username)
 	}
-	userArgs := params.ModifyUsers{
-		Changes: []params.ModifyUser{{Username: username, DisplayName: displayName, Password: password}},
+	userArgs := usermanager.ModifyUsers{
+		Changes: []usermanager.ModifyUser{{Username: username, DisplayName: displayName, Password: password}},
 	}
 	results := new(params.ErrorResults)
-	err := call(c.st, "AddUser", userArgs, results)
+	err := c.facade.FacadeCall("AddUser", userArgs, results)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -50,39 +45,39 @@ func (c *Client) RemoveUser(tag string) error {
 	u := params.Entity{Tag: tag}
 	p := params.Entities{Entities: []params.Entity{u}}
 	results := new(params.ErrorResults)
-	err := call(c.st, "RemoveUser", p, results)
+	err := c.facade.FacadeCall("RemoveUser", p, results)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	return results.OneError()
 }
 
-func (c *Client) UserInfo(username string) (params.UserInfoResult, error) {
+func (c *Client) UserInfo(username string) (usermanager.UserInfoResult, error) {
 	u := params.Entity{Tag: username}
 	p := params.Entities{Entities: []params.Entity{u}}
-	results := new(params.UserInfoResults)
-	err := call(c.st, "UserInfo", p, results)
+	results := new(usermanager.UserInfoResults)
+	err := c.facade.FacadeCall("UserInfo", p, results)
 	if err != nil {
-		return params.UserInfoResult{}, errors.Trace(err)
+		return usermanager.UserInfoResult{}, errors.Trace(err)
 	}
 	if len(results.Results) != 1 {
-		return params.UserInfoResult{}, errors.Errorf("expected 1 result, got %d", len(results.Results))
+		return usermanager.UserInfoResult{}, errors.Errorf("expected 1 result, got %d", len(results.Results))
 	}
 	result := results.Results[0]
 	if err := result.Error; err != nil {
-		return params.UserInfoResult{}, errors.Trace(err)
+		return usermanager.UserInfoResult{}, errors.Trace(err)
 	}
 	return result, nil
 }
 
 func (c *Client) SetPassword(username, password string) error {
-	userArgs := params.ModifyUsers{
-		Changes: []params.ModifyUser{{
+	userArgs := usermanager.ModifyUsers{
+		Changes: []usermanager.ModifyUser{{
 			Username: username,
 			Password: password}},
 	}
 	results := new(params.ErrorResults)
-	err := call(c.st, "SetPassword", userArgs, results)
+	err := c.facade.FacadeCall("SetPassword", userArgs, results)
 	if err != nil {
 		return err
 	}

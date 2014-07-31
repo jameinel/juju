@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/juju/loggo"
@@ -40,6 +41,8 @@ func Bootstrap(ctx environs.BootstrapContext, env environs.Environ, args environ
 
 	var inst instance.Instance
 	defer func() { handleBootstrapError(err, ctx, inst, env) }()
+
+	network.InitializeFromConfig(env.Config())
 
 	// First thing, ensure we have tools otherwise there's no point.
 	selectedTools, err := EnsureBootstrapTools(ctx, env, config.PreferredSeries(env.Config()), args.Constraints.Arch)
@@ -76,11 +79,9 @@ func Bootstrap(ctx environs.BootstrapContext, env environs.Environ, args environ
 	machineConfig.InstanceId = inst.Id()
 	machineConfig.HardwareCharacteristics = hw
 
-	err = bootstrap.SaveState(
-		env.Storage(),
-		&bootstrap.BootstrapState{
-			StateInstances: []instance.Id{inst.Id()},
-		})
+	err = SaveState(env.Storage(), &BootstrapState{
+		StateInstances: []instance.Id{inst.Id()},
+	})
 	if err != nil {
 		return fmt.Errorf("cannot save state: %v", err)
 	}
@@ -139,7 +140,7 @@ func handleBootstrapError(err error, ctx environs.BootstrapContext, inst instanc
 	// We only delete the bootstrap state file if either we didn't
 	// start an instance, or we managed to cleanly stop it.
 	if inst == nil {
-		if rmerr := bootstrap.DeleteStateFile(env.Storage()); rmerr != nil {
+		if rmerr := DeleteStateFile(env.Storage()); rmerr != nil {
 			logger.Errorf("cannot delete bootstrap state file: %v", rmerr)
 		}
 	}
@@ -218,6 +219,7 @@ type addresser interface {
 type hostChecker struct {
 	addr   network.Address
 	client ssh.Client
+	wg     *sync.WaitGroup
 
 	// checkDelay is the amount of time to wait between retries.
 	checkDelay time.Duration
@@ -239,6 +241,7 @@ func (*hostChecker) Close() error {
 }
 
 func (hc *hostChecker) loop(dying <-chan struct{}) (io.Closer, error) {
+	defer hc.wg.Done()
 	// The value of connectSSH is taken outside the goroutine that may outlive
 	// hostChecker.loop, or we evoke the wrath of the race detector.
 	connectSSH := connectSSH
@@ -270,6 +273,7 @@ type parallelHostChecker struct {
 	*parallel.Try
 	client ssh.Client
 	stderr io.Writer
+	wg     sync.WaitGroup
 
 	// active is a map of adresses to channels for addresses actively
 	// being tested. The goroutine testing the address will continue
@@ -298,7 +302,9 @@ func (p *parallelHostChecker) UpdateAddresses(addrs []network.Address) {
 			checkDelay:      p.checkDelay,
 			checkHostScript: p.checkHostScript,
 			closed:          closed,
+			wg:              &p.wg,
 		}
+		p.wg.Add(1)
 		p.active[addr] = closed
 		p.Start(hc.loop)
 	}
@@ -354,6 +360,7 @@ func waitSSH(ctx environs.BootstrapContext, interrupted <-chan os.Signal, client
 		checkDelay:      timeout.RetryDelay,
 		checkHostScript: checkHostScript,
 	}
+	defer checker.wg.Wait()
 	defer checker.Kill()
 
 	fmt.Fprintln(ctx.GetStderr(), "Waiting for address")

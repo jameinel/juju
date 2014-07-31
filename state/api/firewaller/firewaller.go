@@ -16,33 +16,26 @@ const firewallerFacade = "Firewaller"
 
 // State provides access to the Firewaller API facade.
 type State struct {
-	caller base.Caller
+	facade base.FacadeCaller
 	*common.EnvironWatcher
 }
 
-func (st *State) call(method string, params, result interface{}) error {
-	return st.caller.Call(firewallerFacade, "", method, params, result)
-}
-
 // NewState creates a new client-side Firewaller facade.
-func NewState(caller base.Caller) *State {
+func NewState(caller base.APICaller) *State {
+	facadeCaller := base.NewFacadeCaller(caller, firewallerFacade)
 	return &State{
-		caller:         caller,
-		EnvironWatcher: common.NewEnvironWatcher(firewallerFacade, caller),
+		facade:         facadeCaller,
+		EnvironWatcher: common.NewEnvironWatcher(facadeCaller),
 	}
 }
 
 // life requests the life cycle of the given entity from the server.
 func (st *State) life(tag names.Tag) (params.Life, error) {
-	return common.Life(st.caller, firewallerFacade, tag)
+	return common.Life(st.facade, tag)
 }
 
 // Unit provides access to methods of a state.Unit through the facade.
-func (st *State) Unit(unitTag string) (*Unit, error) {
-	tag, err := names.ParseUnitTag(unitTag)
-	if err != nil {
-		return nil, err
-	}
+func (st *State) Unit(tag names.UnitTag) (*Unit, error) {
 	life, err := st.life(tag)
 	if err != nil {
 		return nil, err
@@ -56,11 +49,7 @@ func (st *State) Unit(unitTag string) (*Unit, error) {
 
 // Machine provides access to methods of a state.Machine through the
 // facade.
-func (st *State) Machine(machineTag string) (*Machine, error) {
-	tag, err := names.ParseMachineTag(machineTag)
-	if err != nil {
-		return nil, err
-	}
+func (st *State) Machine(tag names.MachineTag) (*Machine, error) {
 	life, err := st.life(tag)
 	if err != nil {
 		return nil, err
@@ -77,13 +66,13 @@ func (st *State) Machine(machineTag string) (*Machine, error) {
 // environment.
 func (st *State) WatchEnvironMachines() (watcher.StringsWatcher, error) {
 	var result params.StringsWatchResult
-	err := st.call("WatchEnvironMachines", nil, &result)
+	err := st.facade.FacadeCall("WatchEnvironMachines", nil, &result)
 	if err != nil {
 		return nil, err
 	}
 	if err := result.Error; err != nil {
 		return nil, result.Error
 	}
-	w := watcher.NewStringsWatcher(st.caller, result)
+	w := watcher.NewStringsWatcher(st.facade.RawAPICaller(), result)
 	return w, nil
 }

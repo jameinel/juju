@@ -36,7 +36,7 @@ type SSHCommonSuite struct {
 // fakecommand outputs its arguments to stdout for verification
 var fakecommand = `#!/bin/bash
 
-echo $@ | tee $0.args
+echo "$@" | tee $0.args
 `
 
 func (s *SSHCommonSuite) SetUpTest(c *gc.C) {
@@ -56,10 +56,12 @@ func (s *SSHCommonSuite) SetUpTest(c *gc.C) {
 }
 
 const (
-	commonArgsNoProxy = `-o StrictHostKeyChecking no -o PasswordAuthentication no -o ServerAliveInterval 30 `
-	commonArgs        = `-o StrictHostKeyChecking no -o ProxyCommand juju ssh --proxy=false --pty=false 127.0.0.1 nc -q0 %h %p -o PasswordAuthentication no -o ServerAliveInterval 30 `
-	sshArgs           = commonArgs + `-t -t `
-	sshArgsNoProxy    = commonArgsNoProxy + `-t -t `
+	noProxy           = `-o StrictHostKeyChecking no -o PasswordAuthentication no -o ServerAliveInterval 30 `
+	args              = `-o StrictHostKeyChecking no -o ProxyCommand juju ssh --proxy=false --pty=false localhost nc -q0 %h %p -o PasswordAuthentication no -o ServerAliveInterval 30 `
+	commonArgsNoProxy = noProxy + `-o UserKnownHostsFile /dev/null `
+	commonArgs        = args + `-o UserKnownHostsFile /dev/null `
+	sshArgs           = args + `-t -t -o UserKnownHostsFile /dev/null `
+	sshArgsNoProxy    = noProxy + `-t -t -o UserKnownHostsFile /dev/null `
 )
 
 var sshTests = []struct {
@@ -210,7 +212,7 @@ func (s *SSHCommonSuite) makeMachines(n int, c *gc.C, setAddresses bool) []*stat
 		}
 		// must set an instance id as the ssh command uses that as a signal the
 		// machine has been provisioned
-		inst, md := testing.AssertStartInstance(c, s.Conn.Environ, m.Id())
+		inst, md := testing.AssertStartInstance(c, s.Environ, m.Id())
 		c.Assert(m.SetProvisioned(inst.Id(), "fake_nonce", md), gc.IsNil)
 		machines[i] = m
 	}

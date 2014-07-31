@@ -15,35 +15,28 @@ const deployerFacade = "Deployer"
 
 // State provides access to the deployer worker's idea of the state.
 type State struct {
-	caller base.Caller
+	facade base.FacadeCaller
 	*common.APIAddresser
 }
 
 // NewState creates a new State instance that makes API calls
 // through the given caller.
-func NewState(caller base.Caller) *State {
+func NewState(caller base.APICaller) *State {
+	facadeCaller := base.NewFacadeCaller(caller, deployerFacade)
 	return &State{
-		APIAddresser: common.NewAPIAddresser(deployerFacade, caller),
-		caller:       caller,
+		facade:       facadeCaller,
+		APIAddresser: common.NewAPIAddresser(facadeCaller),
 	}
 
-}
-
-func (st *State) call(method string, params, result interface{}) error {
-	return st.caller.Call(deployerFacade, "", method, params, result)
 }
 
 // unitLife returns the lifecycle state of the given unit.
-func (st *State) unitLife(tag names.Tag) (params.Life, error) {
-	return common.Life(st.caller, deployerFacade, tag)
+func (st *State) unitLife(tag names.UnitTag) (params.Life, error) {
+	return common.Life(st.facade, tag)
 }
 
 // Unit returns the unit with the given tag.
-func (st *State) Unit(unitTag string) (*Unit, error) {
-	tag, err := names.ParseUnitTag(unitTag)
-	if err != nil {
-		return nil, err
-	}
+func (st *State) Unit(tag names.UnitTag) (*Unit, error) {
 	life, err := st.unitLife(tag)
 	if err != nil {
 		return nil, err
@@ -56,11 +49,8 @@ func (st *State) Unit(unitTag string) (*Unit, error) {
 }
 
 // Machine returns the machine with the given tag.
-func (st *State) Machine(machineTag string) (*Machine, error) {
-	tag, err := names.ParseMachineTag(machineTag)
-	if err != nil {
-		return nil, err
-	}
+func (st *State) Machine(tag names.MachineTag) (*Machine, error) {
+	// TODO(dfc) this cannot return an error any more
 	return &Machine{
 		tag: tag,
 		st:  st,
@@ -70,7 +60,7 @@ func (st *State) Machine(machineTag string) (*Machine, error) {
 // StateAddresses returns the list of addresses used to connect to the state.
 func (st *State) StateAddresses() ([]string, error) {
 	var result params.StringsResult
-	err := st.call("StateAddresses", nil, &result)
+	err := st.facade.FacadeCall("StateAddresses", nil, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +70,6 @@ func (st *State) StateAddresses() ([]string, error) {
 // ConnectionInfo returns all the address information that the deployer task
 // needs in one call.
 func (st *State) ConnectionInfo() (result params.DeployerConnectionValues, err error) {
-	err = st.call("ConnectionInfo", nil, &result)
+	err = st.facade.FacadeCall("ConnectionInfo", nil, &result)
 	return result, err
 }
