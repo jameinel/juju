@@ -1,8 +1,6 @@
 #!/bin/bash
 
 remote_cmd() {	
-        #USER=ubuntu
-        USER=jameinel
 	#LIBJUJU=/var/lib/juju
 	LIBJUJU=/home/$USER/.juju/local
 
