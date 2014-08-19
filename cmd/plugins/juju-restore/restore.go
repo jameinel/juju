@@ -42,6 +42,9 @@ import (
 	"github.com/juju/juju/utils/ssh"
 )
 
+//var User = "ubuntu"
+var User = "jameinel"
+
 func main() {
 	Main(os.Args)
 }
@@ -109,12 +112,22 @@ func (c *restoreCommand) Init(args []string) error {
 var updateBootstrapMachineTemplate = mustParseTemplate(`
 	set -exu
 
+	#USER={{.User}}
+	JUJU_ENV={{.Environment}}
+	#JUJU_LOG=/var/log/juju
+	#JUJU_LIB=/var/lib/juju
+	#JUJU_AGENT=jujud-machine-0
+	#JUJU_DB_SERVICE=juju-db
+	JUJU_LOG=/var/log/juju-$USER-$JUJU_ENV
+	JUJU_LIB=/home/$USER/.juju/$JUJU_ENV
+	JUJU_AGENT=juju-agent-$USER-$JUJU_ENV
+	JUJU_DB_SERVICE=juju-db-$USER-$JUJU_ENV
+
 	export LC_ALL=C
 	tar xzf juju-backup.tgz
 	test -d juju-backup
 
-
-	initctl stop jujud-machine-0
+	initctl stop $JUJU_AGENT
 
 	#The code apt-get throws when lock is taken
 	APTOUTPUT=100 
@@ -132,18 +145,18 @@ var updateBootstrapMachineTemplate = mustParseTemplate(`
 
 
 	initctl stop juju-db
-	rm -r /var/lib/juju
-	rm -r /var/log/juju
+	rm -r $JUJU_LIB
+	rm -r $JUJU_LOG
 
 	tar -C / -xvp -f juju-backup/root.tar
-	mkdir -p /var/lib/juju/db
+	mkdir -p $JUJU_LIB/db
 
 	# Prefer jujud-mongodb binaries if available 
 	export MONGORESTORE=mongorestore
 	if [ -f /usr/lib/juju/bin/mongorestore ]; then
 		export MONGORESTORE=/usr/lib/juju/bin/mongorestore;
 	fi	
-	$MONGORESTORE --drop --dbpath /var/lib/juju/db juju-backup/dump
+	$MONGORESTORE --drop --dbpath $JUJU_LIB/db juju-backup/dump
 
 	initctl start juju-db
 
@@ -187,10 +200,10 @@ var updateBootstrapMachineTemplate = mustParseTemplate(`
 	initctl stop juju-db
 
 	# Update the agent.conf for machine-0 with the new addresses
-	cd /var/lib/juju/agents
+	cd $JUJU_LIB/agents
 
 	# Remove extra state machines from conf
-	REMOVECOUNT=$(grep -Ec "^-.*{{.AgentConfig.ApiPort}}$" /var/lib/juju/agents/machine-0/agent.conf )
+	REMOVECOUNT=$(grep -Ec "^-.*{{.AgentConfig.ApiPort}}$" $JUJU_LIB/agents/machine-0/agent.conf )
 	awk '/\-.*{{.AgentConfig.ApiPort}}$/{i++}i<1' machine-0/agent.conf > machine-0/agent.conf.new
 	awk -v removecount=$REMOVECOUNT '/\-.*{{.AgentConfig.ApiPort}}$/{i++}i==removecount' machine-0/agent.conf >> machine-0/agent.conf.new
 	mv machine-0/agent.conf.new  machine-0/agent.conf
@@ -208,13 +221,14 @@ var updateBootstrapMachineTemplate = mustParseTemplate(`
 	initctl start jujud-machine-0
 `)
 
-func updateBootstrapMachineScript(instanceId instance.Id, agentConf agentConfig, addr, paddr string) string {
+func updateBootstrapMachineScript(instanceId instance.Id, agentConf agentConfig, addr, paddr, envname string) string {
 	return execTemplate(updateBootstrapMachineTemplate, struct {
 		NewInstanceId  instance.Id
 		AgentConfig    agentConfig
 		Address        string
 		PrivateAddress string
-	}{instanceId, agentConf, addr, paddr})
+		Environment    string
+	}{instanceId, agentConf, addr, paddr, envname})
 }
 
 func (c *restoreCommand) Run(ctx *cmd.Context) error {
@@ -259,7 +273,7 @@ func (c *restoreCommand) Run(ctx *cmd.Context) error {
 		return fmt.Errorf("cannot connect to bootstrap instance: %v", err)
 	}
 	progress("restoring bootstrap machine")
-	machine0Addr, err := restoreBootstrapMachine(apiState, c.backupFile, agentConf)
+	machine0Addr, err := restoreBootstrapMachine(apiState, c.backupFile, agentConf, c.ConnectionName())
 	if err != nil {
 		return fmt.Errorf("cannot restore bootstrap machine: %v", err)
 	}
@@ -358,7 +372,7 @@ func rebootstrap(cfg *config.Config, ctx *cmd.Context, cons constraints.Value) (
 	return env, nil
 }
 
-func restoreBootstrapMachine(st *api.State, backupFile string, agentConf agentConfig) (addr string, err error) {
+func restoreBootstrapMachine(st *api.State, backupFile string, agentConf agentConfig, envname string) (addr string, err error) {
 	client := st.Client()
 	addr, err = client.PublicAddress("0")
 	if err != nil {
@@ -383,7 +397,7 @@ func restoreBootstrapMachine(st *api.State, backupFile string, agentConf agentCo
 		return "", fmt.Errorf("cannot copy backup file to bootstrap instance: %v", err)
 	}
 	progress("updating bootstrap machine")
-	if err := runViaSsh(addr, updateBootstrapMachineScript(newInstId, agentConf, addr, paddr)); err != nil {
+	if err := runViaSsh(addr, updateBootstrapMachineScript(newInstId, agentConf, addr, paddr, envname)); err != nil {
 		return "", fmt.Errorf("update script failed: %v", err)
 	}
 	return addr, nil
@@ -416,7 +430,8 @@ func extractConfig(backupFile string) (agentConfig, error) {
 	if err != nil {
 		return agentConfig{}, err
 	}
-	agentConf, err := findFileInTar(outerTar, "var/lib/juju/agents/machine-0/agent.conf")
+	//agentConf, err := findFileInTar(outerTar, "var/lib/juju/agents/machine-0/agent.conf")
+	agentConf, err := findFileInTar(outerTar, "home/jameinel/.juju/local/agents/machine-0/agent.conf")
 	if err != nil {
 		return agentConfig{}, err
 	}
@@ -555,7 +570,7 @@ func runMachineUpdate(m *state.Machine, sshArg string) error {
 
 func runViaSsh(addr string, script string) error {
 	// This is taken from cmd/juju/ssh.go there is no other clear way to set user
-	userAddr := "ubuntu@" + addr
+	userAddr := User + "@" + addr
 	userCmd := ssh.Command(userAddr, []string{"sudo", "-n", "bash", "-c " + utils.ShQuote(script)}, nil)
 	var stderrBuf bytes.Buffer
 	var stdoutBuf bytes.Buffer
@@ -570,7 +585,7 @@ func runViaSsh(addr string, script string) error {
 }
 
 func sendViaScp(file, host, destFile string) error {
-	err := ssh.Copy([]string{file, "ubuntu@" + host + ":" + destFile}, nil)
+	err := ssh.Copy([]string{file, User + "@" + host + ":" + destFile}, nil)
 	if err != nil {
 		return fmt.Errorf("scp command failed: %v", err)
 	}

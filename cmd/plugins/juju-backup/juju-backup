@@ -2,7 +2,7 @@
 
 remote_cmd() {	
 	#LIBJUJU=/var/lib/juju
-	LIBJUJU=/home/$USER/.juju/local
+	LIBJUJU=/home/$JUJU_USER/.juju/$JUJU_ENV
 
 	# usage: execute message cmd [arg...]
 	# Execute the given command with the given arguments and exit with an
@@ -56,15 +56,15 @@ remote_cmd() {
 
 	#---------------------------------------------------------------------
 	next_step 'Backing up mongo database'
-	execute 'Stopping mongo' stop juju-db-$USER-local
-	trap "start juju-db-$USER-local" 0		# ensure it starts again on failure
+	execute 'Stopping mongo' stop juju-db-$JUJU_USER-$JUJU_ENV
+	trap "start juju-db-$JUJU_USER-$JUJU_ENV" 0		# ensure it starts again on failure
 	execute 'Backing up mongo' $MONGODUMP --dbpath $LIBJUJU/db
 	execute 'Backing up environ config' $MONGOEXPORT \
 		--dbpath $LIBJUJU/db \
 		--db juju \
 		--collection settings \
 		--out environconfig.json
-	execute 'Starting mongo' start juju-db-$USER-local
+	execute 'Starting mongo' start juju-db-$JUJU_USER-$JUJU_ENV
 	trap - 0
 
 	next_step 'Copying Juju configuration'
@@ -81,7 +81,8 @@ remote_cmd() {
 	#   - /etc/rsyslog.d/*juju* config files for the agents (ignore any unit agents)
 	#  - Juju logs for machine 0 and all machines.
 	execute 'Archiving selected files' copy_files \
-		/etc/init/juju-db.conf \
+		/etc/init/juju-db*.conf \
+		/etc/init/juju-agent*.conf \
 		/etc/init/jujud-machine-*.conf \
 		$LIBJUJU/agents/machine-* \
 		$LIBJUJU/tools \
@@ -100,15 +101,20 @@ remote_cmd() {
 	execute 'Performing tar' tar -czf juju-backup.tgz juju-backup
 	rm -r juju-backup
 	#execute 'Changing ownership of backup archive to ubuntu' chown -R ubuntu.ubuntu juju-backup*
-	execute 'Changing ownership of backup archive to ubuntu' chown -R $USER.$USER juju-backup*
+	execute 'Changing ownership of backup archive to ubuntu' chown -R $JUJU_USER.$JUJU_USER juju-backup*
 	
 	echo
 	echo Juju backup finished.
 	echo
 }
 
+# We need to know the local USER who is running this command, and use that
+# inside of the remote_cmd which is actually running as root. So we pass those
+# values in to the beginning of REMOTE_SCRIPT
 # Run the backup script on the remote machine.
 REMOTE_SCRIPT="
+        JUJU_USER=$USER
+        JUJU_ENV=$JUJU_ENV
 	$(declare -f remote_cmd)
 	remote_cmd
 "
