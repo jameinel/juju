@@ -117,7 +117,9 @@ func setenv(env []string, val string) []string {
 	return append(env, val)
 }
 
-func findExecutable(execFile string) (string, error) {
+var findExecutable = FindExecutable
+
+func FindExecutable(execFile string) (string, error) {
 	logger.Debugf("looking for: %s", execFile)
 	if filepath.IsAbs(execFile) {
 		return execFile, nil

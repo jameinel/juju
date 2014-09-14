@@ -328,6 +328,61 @@ func upstartService(namespace, dataDir, dbDir, mongoPath string, port, oplogSize
 	return svc, nil
 }
 
+const tokuTarballName = "tokumx-1.5.0-linux-x86_64-main.tar.gz"
+
+func findExecutable(execFile string) (string, error) {
+	logger.Debugf("looking for: %s", execFile)
+	if filepath.IsAbs(execFile) {
+		return execFile, nil
+	}
+
+	dir, file := filepath.Split(execFile)
+
+	// Now we have two possibilities:
+	//   file == path indicating that the PATH was searched
+	//   dir != "" indicating that it is a relative path
+
+	if dir == "" {
+		path := os.Getenv("PATH")
+		for _, name := range filepath.SplitList(path) {
+			result := filepath.Join(name, file)
+			info, err := os.Stat(result)
+			if err == nil {
+				// Sanity check to see if executable.
+				if info.Mode()&0111 != 0 {
+					return result, nil
+				}
+			}
+		}
+
+		return "", fmt.Errorf("could not find %q in the path", file)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(filepath.Join(cwd, execFile)), nil
+}
+
+// TODO: If we want to actually have this function live, it needs to take a
+// platform target, etc.
+func LookForTokumxTarball() string {
+	jujuLocation, err := findExecutable(os.Args[0])
+	if err != nil {
+		logger.Debugf("couldn't find 'juju' executable: %s", err)
+		return ""
+	}
+	tokuLocation := filepath.Join(filepath.Dir(jujuLocation), tokuTarballName)
+	logger.Debugf("checking: %s", tokuLocation)
+	if _, err := os.Stat(tokuLocation); err != nil {
+		logger.Infof("couldn't find %s", tokuTarballName)
+		return ""
+	} else {
+		logger.Infof("found %s", tokuLocation)
+		return tokuLocation
+	}
+}
+
 func aptGetInstallMongod() error {
 	// Only Quantal requires the PPA.
 	if version.Current.Series == "quantal" {
@@ -340,6 +395,20 @@ func aptGetInstallMongod() error {
 	logger.Infof("installing %s", pkg)
 	for _, cmd := range cmds {
 		if err := apt.GetInstall(cmd...); err != nil {
+			return err
+		}
+	}
+	// XXX: TERRIBLE, DO NOT LET THIS LIVE
+	tmpTokuPath := "/tmp/" + tokuTarballName
+	if _, err := os.Stat(tmpTokuPath); err == nil {
+		// We do this after the apt-get install so that we'll override
+		// mongo et al. We strip 1 component (the toku-1.5.0-linux-x86_64 prefix)
+		cmd := exec.Command("tar", "x", "--strip-components=1", "-f", tmpTokuPath)
+		cmd.Dir = "/usr/lib/juju"
+		logger.Infof("Found %s, extracting to /usr/lib/juju/bin", tmpTokuPath)
+		if err := cmd.Run(); err != nil {
+			// We probably want stderr in this message as well.
+			logger.Warningf("Failed to extract tokumx from tarball: %s", err)
 			return err
 		}
 	}
