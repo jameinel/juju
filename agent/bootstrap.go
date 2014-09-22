@@ -105,20 +105,29 @@ func InitializeState(c ConfigSetter, envCfg *config.Config, machineCfg Bootstrap
 	if err = initAPIHostPorts(c, st, machineCfg.Addresses, servingInfo.APIPort); err != nil {
 		return nil, nil, err
 	}
-	if err := st.SetStateServingInfo(servingInfo); err != nil {
+	ssi := paramsStateServingInfoToStateStateServingInfo(servingInfo)
+	if err := st.SetStateServingInfo(ssi); err != nil {
 		return nil, nil, fmt.Errorf("cannot set state serving info: %v", err)
 	}
-	m, err := initUsersAndBootstrapMachine(c, st, machineCfg)
+	m, err := initConstraintsAndBootstrapMachine(c, st, machineCfg)
 	if err != nil {
 		return nil, nil, err
 	}
 	return st, m, nil
 }
 
-func initUsersAndBootstrapMachine(c ConfigSetter, st *state.State, cfg BootstrapMachineConfig) (*state.Machine, error) {
-	if err := initBootstrapUser(st, c.OldPassword()); err != nil {
-		return nil, fmt.Errorf("cannot initialize bootstrap user: %v", err)
+func paramsStateServingInfoToStateStateServingInfo(i params.StateServingInfo) state.StateServingInfo {
+	return state.StateServingInfo{
+		APIPort:        i.APIPort,
+		StatePort:      i.StatePort,
+		Cert:           i.Cert,
+		PrivateKey:     i.PrivateKey,
+		SharedSecret:   i.SharedSecret,
+		SystemIdentity: i.SystemIdentity,
 	}
+}
+
+func initConstraintsAndBootstrapMachine(c ConfigSetter, st *state.State, cfg BootstrapMachineConfig) (*state.Machine, error) {
 	if err := st.SetEnvironConstraints(cfg.Constraints); err != nil {
 		return nil, fmt.Errorf("cannot set initial environ constraints: %v", err)
 	}
@@ -129,30 +138,6 @@ func initUsersAndBootstrapMachine(c ConfigSetter, st *state.State, cfg Bootstrap
 	return m, nil
 }
 
-// initBootstrapUser creates the initial admin user for the database, and sets
-// the initial password.
-func initBootstrapUser(st *state.State, passwordHash string) error {
-	logger.Debugf("adding admin user")
-	// Set up initial authentication.
-	u, err := st.AddAdminUser("") // empty initial passowrd
-	if err != nil {
-		return err
-	}
-
-	// Note that at bootstrap time, the password is set to
-	// the hash of its actual value. The first time a client
-	// connects to mongo, it changes the mongo password
-	// to the original password.
-	logger.Debugf("setting password hash for admin user")
-	// TODO(jam): http://pad.lv/1248839
-	// We could teach bootstrap how to generate a custom salt and apply
-	// that to the hash that was generated. At which point we'd need to set
-	// it here. For now, we pass "" so that on first login we will create a
-	// new salt, but the fixed-salt password is still available from
-	// cloud-init.
-	return u.SetPasswordHash(passwordHash, "")
-}
-
 // initMongoAdminUser adds the admin user with the specified
 // password to the admin database in Mongo.
 func initMongoAdminUser(info mongo.Info, dialOpts mongo.DialOpts, password string) error {
@@ -161,7 +146,7 @@ func initMongoAdminUser(info mongo.Info, dialOpts mongo.DialOpts, password strin
 		return err
 	}
 	defer session.Close()
-	return mongo.SetAdminMongoPassword(session, "admin", password)
+	return mongo.SetAdminMongoPassword(session, mongo.AdminUser, password)
 }
 
 // initBootstrapMachine initializes the initial bootstrap machine in state.
@@ -170,7 +155,7 @@ func initBootstrapMachine(c ConfigSetter, st *state.State, cfg BootstrapMachineC
 
 	jobs := make([]state.MachineJob, len(cfg.Jobs))
 	for i, job := range cfg.Jobs {
-		machineJob, err := state.MachineJobFromParams(job)
+		machineJob, err := machineJobFromParams(job)
 		if err != nil {
 			return nil, fmt.Errorf("invalid bootstrap machine job %q: %v", job, err)
 		}
@@ -214,4 +199,21 @@ func initBootstrapMachine(c ConfigSetter, st *state.State, cfg BootstrapMachineC
 func initAPIHostPorts(c ConfigSetter, st *state.State, addrs []network.Address, apiPort int) error {
 	hostPorts := network.AddressesWithPort(addrs, apiPort)
 	return st.SetAPIHostPorts([][]network.HostPort{hostPorts})
+}
+
+// machineJobFromParams returns the job corresponding to params.MachineJob.
+// TODO(dfc) this function should live in apiserver/params, move there once
+// state does not depend on apiserver/params
+func machineJobFromParams(job params.MachineJob) (state.MachineJob, error) {
+	switch job {
+	case params.JobHostUnits:
+		return state.JobHostUnits, nil
+	case params.JobManageEnviron:
+		return state.JobManageEnviron, nil
+	case params.JobManageStateDeprecated:
+		// Deprecated in 1.18.
+		return state.JobManageStateDeprecated, nil
+	default:
+		return -1, errors.Errorf("invalid machine job %q", job)
+	}
 }

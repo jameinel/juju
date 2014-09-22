@@ -58,7 +58,7 @@ func (cs *ConnSuite) SetUpTest(c *gc.C) {
 	cs.MgoSuite.SetUpTest(c)
 	cs.policy = statetesting.MockPolicy{}
 	cfg := testing.EnvironConfig(c)
-	cs.owner = names.NewUserTag("admin")
+	cs.owner = names.NewLocalUserTag("admin")
 	cs.State = TestingInitialize(c, cfg, &cs.policy)
 	uuid, ok := cfg.UUID()
 	c.Assert(ok, jc.IsTrue)
@@ -70,7 +70,6 @@ func (cs *ConnSuite) SetUpTest(c *gc.C) {
 	cs.services = cs.MgoSuite.Session.DB("juju").C("services")
 	cs.units = cs.MgoSuite.Session.DB("juju").C("units")
 	cs.stateServers = cs.MgoSuite.Session.DB("juju").C("stateServers")
-	cs.State.AddAdminUser("pass")
 	cs.factory = factory.NewFactory(cs.State)
 	c.Log("SetUpTest done")
 }

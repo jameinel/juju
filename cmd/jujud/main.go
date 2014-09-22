@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -122,7 +123,9 @@ func jujuDMain(args []string, ctx *cmd.Context) (code int, err error) {
 func Main(args []string) {
 	defer func() {
 		if r := recover(); r != nil {
-			logger.Criticalf("Unhandled panic: \n%v", r)
+			buf := make([]byte, 4096)
+			buf = buf[:runtime.Stack(buf, false)]
+			logger.Criticalf("Unhandled panic: \n%v\n%s", r, buf)
 			os.Exit(exit_panic)
 		}
 	}()
@@ -182,7 +185,11 @@ func (*simpleFormatter) Format(level loggo.Level, module string, timestamp time.
 	return fmt.Sprintf("%s %s %s %s", ts, level, module, message)
 }
 
-func setupLogging(conf agent.Config) error {
+// setupLogging redirects logging to rolled log files.
+//
+// NOTE: do not use this in the bootstrap agent, or
+// if you do, change the bootstrap error reporting.
+func setupAgentLogging(conf agent.Config) error {
 	filename := filepath.Join(conf.LogDir(), conf.Tag().String()+".log")
 
 	log := &lumberjack.Logger{
@@ -195,3 +202,5 @@ func setupLogging(conf agent.Config) error {
 	_, err := loggo.ReplaceDefaultWriter(writer)
 	return err
 }
+
+var setupLogging = setupAgentLogging

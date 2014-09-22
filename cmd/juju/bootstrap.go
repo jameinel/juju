@@ -175,7 +175,12 @@ func (c *BootstrapCommand) Run(ctx *cmd.Context) (resultErr error) {
 		return fmt.Errorf("the name of the environment must be specified")
 	}
 
-	environ, cleanup, err := environFromName(ctx, c.ConnectionName(), "Bootstrap")
+	environ, cleanup, err := environFromName(
+		ctx,
+		c.ConnectionName(),
+		"Bootstrap",
+		bootstrapFuncs.EnsureNotBootstrapped,
+	)
 
 	// If we error out for any reason, clean up the environment.
 	defer func() {
@@ -251,6 +256,7 @@ func (c *BootstrapCommand) Run(ctx *cmd.Context) (resultErr error) {
 		Constraints: c.Constraints,
 		Placement:   c.Placement,
 		UploadTools: c.UploadTools,
+		KeepBroken:  c.KeepBrokenEnvironment,
 	})
 	if err != nil {
 		return errors.Annotate(err, "failed to bootstrap environment")

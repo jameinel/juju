@@ -41,7 +41,10 @@ func Bootstrap(ctx environs.BootstrapContext, env environs.Environ, args environ
 	// no way to make sure that only one succeeds.
 
 	var inst instance.Instance
-	defer func() { handleBootstrapError(err, ctx, inst, env) }()
+	// If we have not been asked to keep a broken bootstrap, make sure we clean up.
+	if !args.KeepBroken {
+		defer func() { handleBootstrapError(err, ctx, inst, env) }()
+	}
 
 	// We don't care what it is right now, but fail early if we can't find it
 	if tokuTarballPath := mongo.LookForTokumxTarball(); tokuTarballPath == "" {
