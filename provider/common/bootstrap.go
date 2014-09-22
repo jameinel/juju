@@ -47,8 +47,10 @@ func Bootstrap(ctx environs.BootstrapContext, env environs.Environ, args environ
 	}
 
 	// We don't care what it is right now, but fail early if we can't find it
-	if tokuTarballPath := mongo.LookForTokumxTarball(); tokuTarballPath == "" {
-		return "", "", nil, errors.Errorf("could not find tokumx tarball")
+	if os.Getenv("JUJU_UPLOAD_TOKUMX") != "" {
+		if tokuTarballPath := mongo.LookForTokumxTarball(); tokuTarballPath == "" {
+			return "", "", nil, errors.Errorf("could not find tokumx tarball")
+		}
 	}
 	// First thing, ensure we have tools otherwise there's no point.
 	series = config.PreferredSeries(env.Config())
@@ -195,13 +197,15 @@ func ConfigureMachine(ctx environs.BootstrapContext, client ssh.Client, host str
 	if err := udata.ConfigureJuju(); err != nil {
 		return err
 	}
-	if tokuTarballPath := mongo.LookForTokumxTarball(); tokuTarballPath == "" {
-		ctx.Infof("did not find tokumx tarball")
-	} else {
-		ctx.Infof("uploading tokumx tarball from %s", tokuTarballPath)
-		// Upload to a temp location so we can copy it later
-		// XXX: We should not be uploading this to /tmp
-		client.Copy([]string{tokuTarballPath, "ubuntu@" + host + ":/tmp/"}, nil)
+	if os.Getenv("JUJU_UPLOAD_TOKUMX") != "" {
+		if tokuTarballPath := mongo.LookForTokumxTarball(); tokuTarballPath == "" {
+			ctx.Infof("did not find tokumx tarball")
+		} else {
+			ctx.Infof("uploading tokumx tarball from %s", tokuTarballPath)
+			// Upload to a temp location so we can copy it later
+			// XXX: We should not be uploading this to /tmp
+			client.Copy([]string{tokuTarballPath, "ubuntu@" + host + ":/tmp/"}, nil)
+		}
 	}
 	configScript, err := sshinit.ConfigureScript(cloudcfg)
 	if err != nil {
