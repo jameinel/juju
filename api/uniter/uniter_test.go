@@ -7,7 +7,7 @@ import (
 	stdtesting "testing"
 
 	"github.com/juju/utils"
-	gc "launchpad.net/gocheck"
+	gc "gopkg.in/check.v1"
 
 	"github.com/juju/juju/api"
 	"github.com/juju/juju/api/uniter"
@@ -59,7 +59,8 @@ func (s *uniterSuite) setUpTest(c *gc.C, addStateServer bool) {
 	s.st = s.OpenAPIAs(c, s.wordpressUnit.Tag(), password)
 
 	// Create the uniter API facade.
-	s.uniter = s.st.Uniter()
+	s.uniter, err = s.st.Uniter()
+	c.Assert(err, gc.IsNil)
 	c.Assert(s.uniter, gc.NotNil)
 }
 
@@ -76,7 +77,7 @@ func (s *uniterSuite) addMachineServiceCharmAndUnit(c *gc.C, serviceName string)
 }
 
 func (s *uniterSuite) addRelation(c *gc.C, first, second string) *state.Relation {
-	eps, err := s.State.InferEndpoints([]string{first, second})
+	eps, err := s.State.InferEndpoints(first, second)
 	c.Assert(err, gc.IsNil)
 	rel, err := s.State.AddRelation(eps...)
 	c.Assert(err, gc.IsNil)
@@ -90,7 +91,7 @@ func (s *uniterSuite) addRelatedService(c *gc.C, firstSvc, relatedSvc string, un
 	c.Assert(err, gc.IsNil)
 	err = relUnit.EnterScope(nil)
 	c.Assert(err, gc.IsNil)
-	relatedUnit, err := relatedService.Unit(relatedSvc + "/0")
+	relatedUnit, err := s.State.Unit(relatedSvc + "/0")
 	c.Assert(err, gc.IsNil)
 	return rel, relatedService, relatedUnit
 }
