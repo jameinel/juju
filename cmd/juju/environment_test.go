@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	jc "github.com/juju/testing/checkers"
-	gc "launchpad.net/gocheck"
+	gc "gopkg.in/check.v1"
 
 	"github.com/juju/juju/cmd/envcmd"
 	"github.com/juju/juju/environs/config"
@@ -130,7 +130,7 @@ func (s *SetEnvironmentSuite) TestChangeDefaultSeries(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	series, ok := stateConfig.DefaultSeries()
 	c.Assert(ok, gc.Equals, true)
-	c.Assert(series, gc.Equals, "precise") // default-series set in RepoSuite.SetUpTest
+	c.Assert(series, gc.Equals, config.LatestLtsSeries()) // default-series set in RepoSuite.SetUpTest
 
 	_, err = testing.RunCommand(c, envcmd.Wrap(&SetEnvironmentCommand{}), "default-series=raring")
 	c.Assert(err, gc.IsNil)

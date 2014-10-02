@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/juju/utils"
 	"github.com/juju/utils/filestorage"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -230,6 +229,22 @@ func getBackupMetadata(st *State, id string) (*metadata.Metadata, error) {
 	return doc.asMetadata(), nil
 }
 
+// newBackupID returns a new ID for a state backup.  The format is the
+// UTC timestamp from the metadata followed by the environment ID:
+// "YYYYMMDD-hhmmss.<env ID>".  This makes the ID a little more human-
+// consumable (in contrast to a plain UUID string).  Ideally we would
+// use some form of environment name rather than the UUID, but for now
+// the raw env ID is sufficient.
+func newBackupID(metadata *metadata.Metadata) string {
+	rawts := metadata.Started()
+	Y, M, D := rawts.Date()
+	h, m, s := rawts.Clock()
+	timestamp := fmt.Sprintf("%04d%02d%02d-%02d%02d%02d", Y, M, D, h, m, s)
+	origin := metadata.Origin()
+	env := origin.Environment()
+	return timestamp + "." + env
+}
+
 // addBackupMetadata stores metadata for a backup where it can be
 // accessed later.  It returns a new ID that is associated with the
 // backup.  If the provided metadata already has an ID set, it is
@@ -237,12 +252,8 @@ func getBackupMetadata(st *State, id string) (*metadata.Metadata, error) {
 func addBackupMetadata(st *State, metadata *metadata.Metadata) (string, error) {
 	// We use our own mongo _id value since the auto-generated one from
 	// mongo may contain sensitive data (see bson.ObjectID).
-	id, err := utils.NewUUID()
-	if err != nil {
-		return "", errors.Annotate(err, "error generating new ID")
-	}
-	idStr := id.String()
-	return idStr, addBackupMetadataID(st, metadata, idStr)
+	id := newBackupID(metadata)
+	return id, addBackupMetadataID(st, metadata, id)
 }
 
 func addBackupMetadataID(st *State, metadata *metadata.Metadata, id string) error {
@@ -329,11 +340,11 @@ func newBackupMetadataStorage(st *State) filestorage.MetadataStorage {
 }
 
 func (s *backupMetadataStorage) AddDoc(doc interface{}) (string, error) {
-	metadata, ok := doc.(metadata.Metadata)
+	meta, ok := doc.(*metadata.Metadata)
 	if !ok {
 		return "", errors.Errorf("doc must be of type state.backups.metadata.Metadata")
 	}
-	return addBackupMetadata(s.state, &metadata)
+	return addBackupMetadata(s.state, meta)
 }
 
 func (s *backupMetadataStorage) Doc(id string) (interface{}, error) {
@@ -361,17 +372,26 @@ func (s *backupMetadataStorage) ListDocs() ([]interface{}, error) {
 }
 
 func (s *backupMetadataStorage) ListMetadata() ([]filestorage.Metadata, error) {
-	// This will be implemented when backups needs this functionality.
-	// For now the method is stubbed out for the same of the
-	// MetadataStorage interface.
-	return nil, errors.NotImplementedf("ListMetadata")
+	collection, closer := s.state.getCollection(backupsMetaC)
+	defer closer()
+
+	var docs []backupMetadataDoc
+	if err := collection.Find(nil).All(&docs); err != nil {
+		return nil, errors.Trace(err)
+	}
+	list := make([]filestorage.Metadata, len(docs))
+	for i, doc := range docs {
+		meta := doc.asMetadata()
+		list[i] = meta
+	}
+	return list, nil
 }
 
 func (s *backupMetadataStorage) RemoveDoc(id string) error {
-	// This will be implemented when backups needs this functionality.
-	// For now the method is stubbed out for the same of the
-	// MetadataStorage interface.
-	return errors.NotImplementedf("RemoveDoc")
+	collection, closer := s.state.getCollection(backupsMetaC)
+	defer closer()
+
+	return errors.Trace(collection.RemoveId(id))
 }
 
 func (s *backupMetadataStorage) New() filestorage.Metadata {
@@ -391,7 +411,7 @@ func (s *backupMetadataStorage) SetStored(meta filestorage.Metadata) error {
 //---------------------------
 // raw file storage
 
-const backupStorageRoot = "/"
+const backupStorageRoot = "backups"
 
 // Ensure we satisfy the interface.
 var _ filestorage.RawFileStorage = (*envFileStorage)(nil)

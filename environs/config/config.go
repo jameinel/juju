@@ -18,7 +18,7 @@ import (
 	"github.com/juju/schema"
 	"github.com/juju/utils"
 	"github.com/juju/utils/proxy"
-	"gopkg.in/juju/charm.v3"
+	"gopkg.in/juju/charm.v4"
 
 	"github.com/juju/juju/cert"
 	"github.com/juju/juju/juju/osenv"
@@ -61,7 +61,7 @@ const (
 
 	// fallbackLtsSeries is the latest LTS series we'll use, if we fail to
 	// obtain this information from the system.
-	fallbackLtsSeries string = "precise"
+	fallbackLtsSeries string = "trusty"
 )
 
 // TODO(katco-): Please grow this over time.
@@ -170,9 +170,11 @@ func LatestLtsSeries() string {
 	return latestLtsSeries
 }
 
-// distroLtsSeries returns the latest LTS series, if this information is
+var distroLtsSeries = distroLtsSeriesFunc
+
+// distroLtsSeriesFunc returns the latest LTS series, if this information is
 // available on this system.
-func distroLtsSeries() (string, error) {
+func distroLtsSeriesFunc() (string, error) {
 	out, err := exec.Command("distro-info", "--lts").Output()
 	if err != nil {
 		return "", err
@@ -870,6 +872,17 @@ func (c *Config) ImageStream() string {
 	return "released"
 }
 
+// ToolsStream returns the simplestreams stream
+// used to identify which tools to use when
+// when bootstrapping or upgrading an environment.
+func (c *Config) ToolsStream() string {
+	v, _ := c.defined["tools-stream"].(string)
+	if v != "" {
+		return v
+	}
+	return "released"
+}
+
 // TestMode indicates if the environment is intended for testing.
 // In this case, accessing the charm store does not affect statistical
 // data of the store.
@@ -945,6 +958,7 @@ var fields = schema.Fields{
 	"tools-metadata-url":         schema.String(),
 	"image-metadata-url":         schema.String(),
 	"image-stream":               schema.String(),
+	"tools-stream":               schema.String(),
 	"authorized-keys":            schema.String(),
 	"authorized-keys-path":       schema.String(),
 	"firewall-mode":              schema.String(),
@@ -1018,6 +1032,7 @@ var alwaysOptional = schema.Defaults{
 	"apt-ftp-proxy":              schema.Omit,
 	"lxc-clone":                  schema.Omit,
 	"disable-network-management": schema.Omit,
+	"tools-stream":               schema.Omit,
 
 	// Deprecated fields, retain for backwards compatibility.
 	"tools-url":            "",

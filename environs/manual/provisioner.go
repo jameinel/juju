@@ -21,7 +21,6 @@ import (
 	"github.com/juju/juju/environs/config"
 	"github.com/juju/juju/instance"
 	"github.com/juju/juju/network"
-	"github.com/juju/juju/state"
 )
 
 const manualInstancePrefix = "manual:"
@@ -33,7 +32,7 @@ var logger = loggo.GetLogger("juju.environs.manual")
 // consumer from the actual API implementation type.
 type ProvisioningClientAPI interface {
 	AddMachines([]params.AddMachineParams) ([]params.AddMachinesResult, error)
-	DestroyMachines(machines ...string) error
+	ForceDestroyMachines(machines ...string) error
 	ProvisioningScript(params.ProvisioningScriptParams) (script string, err error)
 }
 
@@ -75,7 +74,7 @@ func ProvisionMachine(args ProvisionMachineArgs) (machineId string, err error) {
 	defer func() {
 		if machineId != "" && err != nil {
 			logger.Errorf("provisioning failed, removing machine %v: %v", machineId, err)
-			if cleanupErr := args.Client.DestroyMachines(machineId); cleanupErr != nil {
+			if cleanupErr := args.Client.ForceDestroyMachines(machineId); cleanupErr != nil {
 				logger.Warningf("error cleaning up machine: %s", cleanupErr)
 			}
 			machineId = ""
@@ -142,18 +141,6 @@ func recordMachineInState(client ProvisioningClientAPI, machineParams params.Add
 		return "", machineInfo.Error
 	}
 	return machineInfo.Machine, nil
-}
-
-// convertToStateJobs takes a slice of params.MachineJob and makes them a slice of state.MachineJob
-func convertToStateJobs(jobs []params.MachineJob) ([]state.MachineJob, error) {
-	outJobs := make([]state.MachineJob, len(jobs))
-	var err error
-	for j, job := range jobs {
-		if outJobs[j], err = state.MachineJobFromParams(job); err != nil {
-			return nil, err
-		}
-	}
-	return outJobs, nil
 }
 
 // gatherMachineParams collects all the information we know about the machine

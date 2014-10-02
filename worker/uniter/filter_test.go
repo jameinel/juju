@@ -9,8 +9,8 @@ import (
 
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/utils"
-	"gopkg.in/juju/charm.v3"
-	gc "launchpad.net/gocheck"
+	gc "gopkg.in/check.v1"
+	"gopkg.in/juju/charm.v4"
 	"launchpad.net/tomb"
 
 	"github.com/juju/juju/api"
@@ -62,7 +62,8 @@ func (s *FilterSuite) APILogin(c *gc.C, unit *state.Unit) {
 	err = unit.SetPassword(password)
 	c.Assert(err, gc.IsNil)
 	s.st = s.OpenAPIAs(c, unit.Tag(), password)
-	s.uniter = s.st.Uniter()
+	s.uniter, err = s.st.Uniter()
+	c.Assert(err, gc.IsNil)
 	c.Assert(s.uniter, gc.NotNil)
 }
 
@@ -83,7 +84,7 @@ func (s *FilterSuite) TestUnitDeath(c *gc.C) {
 	asserter.AssertNoReceive()
 
 	// Set dying.
-	err = s.unit.SetStatus(params.StatusStarted, "", nil)
+	err = s.unit.SetStatus(state.StatusStarted, "", nil)
 	c.Assert(err, gc.IsNil)
 	err = s.unit.Destroy()
 	c.Assert(err, gc.IsNil)
@@ -137,7 +138,7 @@ func (s *FilterSuite) TestServiceDeath(c *gc.C) {
 	}
 	dyingAsserter.AssertNoReceive()
 
-	err = s.unit.SetStatus(params.StatusStarted, "", nil)
+	err = s.unit.SetStatus(state.StatusStarted, "", nil)
 	c.Assert(err, gc.IsNil)
 	err = s.wordpress.Destroy()
 	c.Assert(err, gc.IsNil)
@@ -178,7 +179,7 @@ func (s *FilterSuite) TestResolvedEvents(c *gc.C) {
 	resolvedAsserter.AssertNoReceive()
 
 	// Change the unit in an irrelevant way; no events.
-	err = s.unit.SetStatus(params.StatusError, "blarg", nil)
+	err = s.unit.SetStatus(state.StatusError, "blarg", nil)
 	c.Assert(err, gc.IsNil)
 	resolvedAsserter.AssertNoReceive()
 
@@ -496,7 +497,7 @@ func getAssertActionChange(s *FilterSuite, f *filter, c *gc.C) func(ids []string
 				c.Fatalf("timed out")
 			}
 		}
-		c.Assert(expected, jc.DeepEquals, seen)
+		c.Assert(seen, jc.DeepEquals, expected)
 
 		getAssertNoActionChange(s, f, c)()
 	}
@@ -661,9 +662,50 @@ func (s *FilterSuite) addRelation(c *gc.C) *state.Relation {
 	c.Assert(err, gc.IsNil)
 	svcName := fmt.Sprintf("mysql%d", len(rels))
 	s.AddTestingService(c, svcName, s.mysqlcharm)
-	eps, err := s.State.InferEndpoints([]string{svcName, "wordpress"})
+	eps, err := s.State.InferEndpoints(svcName, "wordpress")
 	c.Assert(err, gc.IsNil)
 	rel, err := s.State.AddRelation(eps...)
 	c.Assert(err, gc.IsNil)
 	return rel
+}
+
+func (s *FilterSuite) TestMeterStatusEvents(c *gc.C) {
+	f, err := newFilter(s.uniter, s.unit.Tag().String())
+	c.Assert(err, gc.IsNil)
+	defer statetesting.AssertStop(c, f)
+
+	assertNoChange := func() {
+		s.BackingState.StartSync()
+		select {
+		case <-f.MeterStatusEvents():
+			c.Fatalf("unexpected meter status event")
+		case <-time.After(coretesting.ShortWait):
+		}
+	}
+	assertChange := func() {
+		s.BackingState.StartSync()
+		select {
+		case _, ok := <-f.MeterStatusEvents():
+			c.Assert(ok, gc.Equals, true)
+		case <-time.After(coretesting.LongWait):
+			c.Fatalf("timed out")
+		}
+		assertNoChange()
+	}
+
+	// Initial meter status does not trigger event.
+	assertNoChange()
+
+	// Set unit meter status to trigger event.
+	err = s.unit.SetMeterStatus("GREEN", "Operating normally.")
+	c.Assert(err, gc.IsNil)
+	assertChange()
+
+	// Make sure bundled events arrive properly.
+	for i := 0; i < 5; i++ {
+		err = s.unit.SetMeterStatus("RED", fmt.Sprintf("Update %d.", i))
+		c.Assert(err, gc.IsNil)
+	}
+
+	assertChange()
 }

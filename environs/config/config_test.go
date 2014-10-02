@@ -14,7 +14,7 @@ import (
 	gitjujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/utils/proxy"
-	gc "launchpad.net/gocheck"
+	gc "gopkg.in/check.v1"
 
 	"github.com/juju/juju/cert"
 	"github.com/juju/juju/environs/config"
@@ -56,7 +56,7 @@ var sampleConfig = testing.Attrs{
 	"state-port":                1234,
 	"api-port":                  4321,
 	"syslog-port":               2345,
-	"default-series":            "precise",
+	"default-series":            config.LatestLtsSeries(),
 }
 
 type configTest struct {
@@ -530,6 +530,14 @@ var configTests = []configTest{
 			"type":         "my-type",
 			"name":         "my-name",
 			"image-stream": "daily",
+		},
+	}, {
+		about:       "explicit tools stream",
+		useDefaults: config.UseDefaults,
+		attrs: testing.Attrs{
+			"type":         "my-type",
+			"name":         "my-name",
+			"tools-stream": "proposed",
 		},
 	}, {
 		about:       "Explicit state port",
@@ -1103,6 +1111,12 @@ func (test configTest) check(c *gc.C, home *gitjujutesting.FakeHome) {
 		c.Assert(cfg.ImageStream(), gc.Equals, "released")
 	}
 
+	if v, ok := test.attrs["tools-stream"]; ok {
+		c.Assert(cfg.ToolsStream(), gc.Equals, v)
+	} else {
+		c.Assert(cfg.ToolsStream(), gc.Equals, "released")
+	}
+
 	url, urlPresent := cfg.ImageMetadataURL()
 	if v, _ := test.attrs["image-metadata-url"].(string); v != "" {
 		c.Assert(url, gc.Equals, v)
@@ -1546,6 +1560,22 @@ func (s *ConfigSuite) TestGenerateStateServerCertAndKey(c *gc.C) {
 			c.Assert(keyPEM, gc.Equals, "")
 		}
 	}
+}
+
+func (s *ConfigSuite) TestLastestLtsSeriesFallback(c *gc.C) {
+	config.ResetCachedLtsSeries()
+	s.PatchValue(config.DistroLtsSeries, func() (string, error) {
+		return "", fmt.Errorf("error")
+	})
+	c.Assert(config.LatestLtsSeries(), gc.Equals, "trusty")
+}
+
+func (s *ConfigSuite) TestLastestLtsSeries(c *gc.C) {
+	config.ResetCachedLtsSeries()
+	s.PatchValue(config.DistroLtsSeries, func() (string, error) {
+		return "series", nil
+	})
+	c.Assert(config.LatestLtsSeries(), gc.Equals, "series")
 }
 
 var caCert = `

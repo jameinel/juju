@@ -11,7 +11,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/juju/utils/set"
-	"gopkg.in/juju/charm.v3"
+	"gopkg.in/juju/charm.v4"
 
 	"github.com/juju/juju/api"
 	"github.com/juju/juju/apiserver/params"
@@ -537,7 +537,8 @@ func (context *statusContext) processUnits(units map[string]*state.Unit, service
 
 func (context *statusContext) processUnit(unit *state.Unit, serviceCharm string) (status api.UnitStatus) {
 	status.PublicAddress, _ = unit.PublicAddress()
-	for _, port := range unit.OpenedPorts() {
+	unitPorts, _ := unit.OpenedPorts()
+	for _, port := range unitPorts {
 		status.OpenedPorts = append(status.OpenedPorts, port.String())
 	}
 	if unit.IsPrincipal() {
@@ -606,7 +607,7 @@ type stateAgent interface {
 	lifer
 	AgentPresence() (bool, error)
 	AgentTools() (*tools.Tools, error)
-	Status() (params.Status, string, map[string]interface{}, error)
+	Status() (state.Status, string, map[string]interface{}, error)
 }
 
 // processAgent retrieves version and status information from the given entity.
@@ -619,7 +620,9 @@ func processAgent(entity stateAgent) (
 		out.Version = t.Version.Number.String()
 	}
 
-	out.Status, out.Info, out.Data, out.Err = entity.Status()
+	var st state.Status
+	st, out.Info, out.Data, out.Err = entity.Status()
+	out.Status = params.Status(st)
 	compatStatus = out.Status
 	compatInfo = out.Info
 	out.Data = filterStatusData(out.Data)

@@ -10,7 +10,7 @@ import (
 	"github.com/juju/names"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/utils"
-	gc "launchpad.net/gocheck"
+	gc "gopkg.in/check.v1"
 
 	"github.com/juju/juju/api"
 	"github.com/juju/juju/api/provisioner"
@@ -125,7 +125,7 @@ func (s *provisionerSuite) TestGetSetStatusWithData(c *gc.C) {
 func (s *provisionerSuite) TestMachinesWithTransientErrors(c *gc.C) {
 	machine, err := s.State.AddMachine("quantal", state.JobHostUnits)
 	c.Assert(err, gc.IsNil)
-	err = machine.SetStatus(params.StatusError, "blah", map[string]interface{}{"transient": true})
+	err = machine.SetStatus(state.StatusError, "blah", map[string]interface{}{"transient": true})
 	c.Assert(err, gc.IsNil)
 	machines, info, err := s.provisioner.MachinesWithTransientErrors()
 	c.Assert(err, gc.IsNil)

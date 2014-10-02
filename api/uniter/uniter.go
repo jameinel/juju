@@ -5,9 +5,10 @@ package uniter
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/juju/names"
-	"gopkg.in/juju/charm.v3"
+	"gopkg.in/juju/charm.v4"
 
 	"github.com/juju/juju/api/base"
 	"github.com/juju/juju/api/common"
@@ -24,16 +25,20 @@ type State struct {
 	facade base.FacadeCaller
 	// unitTag contains the authenticated unit's tag.
 	unitTag names.UnitTag
+
+	// charmsURL is the root URL used to fetch charm archives.
+	charmsURL *url.URL
 }
 
 // NewState creates a new client-side Uniter facade.
-func NewState(caller base.APICaller, authTag names.UnitTag) *State {
+func NewState(caller base.APICaller, authTag names.UnitTag, charmsURL *url.URL) *State {
 	facadeCaller := base.NewFacadeCaller(caller, uniterFacade)
 	return &State{
 		EnvironWatcher: common.NewEnvironWatcher(facadeCaller),
 		APIAddresser:   common.NewAPIAddresser(facadeCaller),
 		facade:         facadeCaller,
 		unitTag:        authTag,
+		charmsURL:      charmsURL,
 	}
 }
 
@@ -142,8 +147,8 @@ func (st *State) Charm(curl *charm.URL) (*Charm, error) {
 		return nil, fmt.Errorf("charm url cannot be nil")
 	}
 	return &Charm{
-		st:  st,
-		url: curl.String(),
+		st:   st,
+		curl: curl,
 	}, nil
 }
 
@@ -173,7 +178,7 @@ func (st *State) Action(tag names.ActionTag) (*Action, error) {
 	}
 	return &Action{
 		name:   result.Action.Name,
-		params: result.Action.Params,
+		params: result.Action.Parameters,
 	}, nil
 }
 
@@ -181,8 +186,8 @@ func (st *State) Action(tag names.ActionTag) (*Action, error) {
 func (st *State) ActionFinish(tag names.ActionTag, status string, results map[string]interface{}, message string) error {
 	var outcome params.ErrorResults
 
-	args := params.ActionResults{
-		Results: []params.ActionResult{
+	args := params.ActionExecutionResults{
+		Results: []params.ActionExecutionResult{
 			{
 				ActionTag: tag.String(),
 				Status:    status,

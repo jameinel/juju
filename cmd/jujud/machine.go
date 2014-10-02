@@ -20,7 +20,7 @@ import (
 	"github.com/juju/utils"
 	"github.com/juju/utils/symlink"
 	"github.com/juju/utils/voyeur"
-	"gopkg.in/juju/charm.v3"
+	"gopkg.in/juju/charm.v4"
 	"gopkg.in/mgo.v2"
 	"launchpad.net/gnuflag"
 	"launchpad.net/tomb"
@@ -28,6 +28,7 @@ import (
 	"github.com/juju/juju/agent"
 	"github.com/juju/juju/api"
 	apiagent "github.com/juju/juju/api/agent"
+	"github.com/juju/juju/api/metricsmanager"
 	"github.com/juju/juju/apiserver"
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/container/kvm"
@@ -56,6 +57,7 @@ import (
 	workerlogger "github.com/juju/juju/worker/logger"
 	"github.com/juju/juju/worker/machineenvironmentworker"
 	"github.com/juju/juju/worker/machiner"
+	"github.com/juju/juju/worker/metricworker"
 	"github.com/juju/juju/worker/minunitsworker"
 	"github.com/juju/juju/worker/networker"
 	"github.com/juju/juju/worker/peergrouper"
@@ -98,7 +100,54 @@ var (
 	// reportOpenedAPI is exposed for tests to know when
 	// the API has been successfully opened.
 	reportOpenedAPI = func(eitherState) {}
+
+	getMetricAPI = metricAPI
 )
+
+// PrepareRestore will flag the agent to allow only one command:
+// Restore, this will ensure that we can do all the file movements
+// required for restore and no one will do changes while we do that.
+// it will return error if the machine is already in this state.
+func (a *MachineAgent) PrepareRestore() error {
+	if a.restoreMode {
+		return fmt.Errorf("already in restore mode")
+	}
+	a.restoreMode = true
+	return nil
+}
+
+// BeginRestore will flag the agent to disallow all commands since
+// restore should be running and therefore making changes that
+// would override anything done.
+func (a *MachineAgent) BeginRestore() error {
+	switch {
+	case !a.restoreMode:
+		return fmt.Errorf("not in restore mode, cannot begin restoration")
+	case a.restoring:
+		return fmt.Errorf("already restoring")
+	}
+	a.restoring = true
+	return nil
+}
+
+// FinishRestore will restart jujud and err if restore flag is not true
+func (a *MachineAgent) FinishRestore() error {
+	if !a.restoring {
+		return fmt.Errorf("restore is not in progress")
+	}
+	a.tomb.Kill(worker.ErrTerminateAgent)
+	return nil
+}
+
+// IsRestorePreparing returns bool representing if we are in restore mode
+// but not running restore
+func (a *MachineAgent) IsRestorePreparing() bool {
+	return a.restoreMode && !a.restoring
+}
+
+func (a *MachineAgent) IsRestoreRunning() bool {
+	return a.restoring
+}
 
 // MachineAgent is a cmd.Command responsible for running a machine agent.
 type MachineAgent struct {
@@ -110,6 +159,8 @@ type MachineAgent struct {
 	runner               worker.Runner
 	configChangedVal     voyeur.Value
 	upgradeWorkerContext *upgradeWorkerContext
+	restoreMode          bool
+	restoring            bool
 	workersStarted       chan struct{}
 	st                   *state.State
 
@@ -141,6 +192,7 @@ func (a *MachineAgent) Init(args []string) error {
 	a.runner = newRunner(isFatal, moreImportant)
 	a.workersStarted = make(chan struct{})
 	a.upgradeWorkerContext = NewUpgradeWorkerContext()
+
 	return nil
 }
 
@@ -153,6 +205,12 @@ func (a *MachineAgent) Wait() error {
 func (a *MachineAgent) Stop() error {
 	a.runner.Kill()
 	return a.tomb.Wait()
+}
+
+// Dying returns the channel that can be used to see if the machine
+// agent is terminating.
+func (a *MachineAgent) Dying() <-chan struct{} {
+	return a.tomb.Dying()
 }
 
 // Run runs a machine agent.
@@ -394,6 +452,14 @@ func (a *MachineAgent) APIWorker() (worker.Worker, error) {
 			a.startWorkerAfterUpgrade(singularRunner, "charm-revision-updater", func() (worker.Worker, error) {
 				return charmrevisionworker.NewRevisionUpdateWorker(st.CharmRevisionUpdater()), nil
 			})
+
+			logger.Infof("starting metric workers")
+			a.startWorkerAfterUpgrade(runner, "metriccleanupworker", func() (worker.Worker, error) {
+				return metricworker.NewCleanup(getMetricAPI(st)), nil
+			})
+			a.startWorkerAfterUpgrade(runner, "metricsenderworker", func() (worker.Worker, error) {
+				return metricworker.NewSender(getMetricAPI(st)), nil
+			})
 		case params.JobManageStateDeprecated:
 			// Legacy environments may set this, but we ignore it.
 		default:
@@ -494,6 +560,7 @@ func (a *MachineAgent) StateWorker() (worker.Worker, error) {
 		return nil, err
 	}
 	reportOpenedState(st)
+	registerSimplestreamsDataSource(st.Storage())
 
 	singularStateConn := singularStateConn{st.MongoSession(), m}
 	runner := newRunner(connectionIsFatal(st), moreImportant)
@@ -605,12 +672,54 @@ func init() {
 	}
 }
 
+// limitLogin is called by the API server for each login attempt.
+// it returns an error if upgrads or restore are running.
+func (a *MachineAgent) limitLogins(req params.LoginRequest) error {
+	err := a.limitLoginsDuringRestore(req)
+	if err != nil {
+		return err
+	}
+	err = a.limitLoginsDuringUpgrade(req)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (a *MachineAgent) limitLoginsDuringRestore(req params.LoginRequest) error {
+	var err error
+	switch {
+	case a.IsRestoreRunning():
+		err = apiserver.RestoreInProgressError
+	case a.IsRestorePreparing():
+		err = apiserver.AboutToRestoreError
+	}
+	if err != nil {
+		authTag, parseErr := names.ParseTag(req.AuthTag)
+		if parseErr != nil {
+			return errors.Annotate(err, "could not parse auth tag")
+		}
+		switch authTag := authTag.(type) {
+		case names.UserTag:
+			// use a restricted API mode
+			return err
+		case names.MachineTag:
+			if authTag == a.Tag() {
+				// allow logins from the local machine
+				return nil
+			}
+		}
+		return errors.Errorf("login for %q blocked because restore is in progress", authTag)
+	}
+	return nil
+}
+
 // limitLoginsDuringUpgrade is called by the API server for each login
 // attempt. It returns an error if upgrades are in progress unless the
 // login is for a user (i.e. a client) or the local machine.
-func (a *MachineAgent) limitLoginsDuringUpgrade(creds params.Creds) error {
+func (a *MachineAgent) limitLoginsDuringUpgrade(req params.LoginRequest) error {
 	if a.upgradeWorkerContext.IsUpgradeRunning() {
-		authTag, err := names.ParseTag(creds.AuthTag)
+		authTag, err := names.ParseTag(req.AuthTag)
 		if err != nil {
 			return errors.Annotate(err, "could not parse auth tag")
 		}
@@ -683,7 +792,8 @@ func (a *MachineAgent) ensureMongoServer(agentConfig agent.Config) (err error) {
 		if err != nil {
 			return err
 		}
-		if err := st.SetStateServingInfo(servingInfo); err != nil {
+		ssi := paramsStateServingInfoToStateStateServingInfo(servingInfo)
+		if err := st.SetStateServingInfo(ssi); err != nil {
 			st.Close()
 			return fmt.Errorf("cannot set state serving info: %v", err)
 		}
@@ -730,6 +840,17 @@ func (a *MachineAgent) ensureMongoServer(agentConfig agent.Config) (err error) {
 		return err
 	}
 	return nil
+}
+
+func paramsStateServingInfoToStateStateServingInfo(i params.StateServingInfo) state.StateServingInfo {
+	return state.StateServingInfo{
+		APIPort:        i.APIPort,
+		StatePort:      i.StatePort,
+		Cert:           i.Cert,
+		PrivateKey:     i.PrivateKey,
+		SharedSecret:   i.SharedSecret,
+		SystemIdentity: i.SystemIdentity,
+	}
 }
 
 func (a *MachineAgent) ensureMongoAdminUser(agentConfig agent.Config) (added bool, err error) {
@@ -922,4 +1043,8 @@ func (c singularStateConn) IsMaster() (bool, error) {
 
 func (c singularStateConn) Ping() error {
 	return c.session.Ping()
+}
+
+func metricAPI(st *api.State) metricsmanager.MetricsManagerClient {
+	return metricsmanager.NewClient(st)
 }

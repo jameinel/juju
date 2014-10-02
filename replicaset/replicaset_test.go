@@ -8,8 +8,8 @@ import (
 	gitjujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/utils"
+	gc "gopkg.in/check.v1"
 	"gopkg.in/mgo.v2"
-	gc "launchpad.net/gocheck"
 
 	coretesting "github.com/juju/juju/testing"
 )
@@ -159,6 +159,8 @@ type MongoIPV6Suite struct {
 var _ = gc.Suite(&MongoIPV6Suite{})
 
 func (s *MongoIPV6Suite) TestAddRemoveSetIPv6(c *gc.C) {
+	c.Skip("Skipping test until mgo issue 22 is fixed")
+
 	root := newServer(c)
 	defer root.Destroy()
 	// Note: we use the ::1:port format because mongo doesn't understand
