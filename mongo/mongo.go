@@ -328,7 +328,8 @@ func upstartService(namespace, dataDir, dbDir, mongoPath string, port, oplogSize
 	return svc, nil
 }
 
-const tokuTarballName = "tokumx-1.5.0-linux-x86_64-main.tar.gz"
+const TokuTarballName = "tokumx-1.5.0-linux-x86_64-main.tar.gz"
+const TokuTarballURL = "https://s3-eu-west-1.amazonaws.com/toku-test-eu/tokumx-1.5.0-linux-x86_64-main.tar.gz"
 
 func findExecutable(execFile string) (string, error) {
 	logger.Debugf("looking for: %s", execFile)
@@ -372,10 +373,10 @@ func LookForTokumxTarball() string {
 		logger.Debugf("couldn't find 'juju' executable: %s", err)
 		return ""
 	}
-	tokuLocation := filepath.Join(filepath.Dir(jujuLocation), tokuTarballName)
+	tokuLocation := filepath.Join(filepath.Dir(jujuLocation), TokuTarballName)
 	logger.Debugf("checking: %s", tokuLocation)
 	if _, err := os.Stat(tokuLocation); err != nil {
-		logger.Infof("couldn't find %s", tokuTarballName)
+		logger.Infof("couldn't find %s", TokuTarballName)
 		return ""
 	} else {
 		logger.Infof("found %s", tokuLocation)
@@ -399,7 +400,7 @@ func aptGetInstallMongod() error {
 		}
 	}
 	// XXX: TERRIBLE, DO NOT LET THIS LIVE
-	tmpTokuPath := "/tmp/" + tokuTarballName
+	tmpTokuPath := "/tmp/" + TokuTarballName
 	if _, err := os.Stat(tmpTokuPath); err == nil {
 		// We do this after the apt-get install so that we'll override
 		// mongo et al. We strip 1 component (the toku-1.5.0-linux-x86_64 prefix)

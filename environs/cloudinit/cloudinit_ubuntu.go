@@ -19,6 +19,7 @@ import (
 
 	agenttool "github.com/juju/juju/agent/tools"
 	"github.com/juju/juju/cloudinit"
+	"github.com/juju/juju/mongo"
 	"github.com/juju/juju/service/upstart"
 )
 
@@ -202,6 +203,12 @@ func (w *ubuntuConfigure) ConfigureJuju() error {
 		curlCommand += " -o $bin/tools.tar.gz"
 		w.conf.AddRunCmd(cloudinit.LogProgressCmd("Fetching tools: %s <%s>", curlCommand, urls))
 		w.conf.AddRunCmd(toolsDownloadCommand(curlCommand, urls))
+	}
+	if w.mcfg.Bootstrap {
+		w.conf.AddRunCmd(cloudinit.LogProgressCmd("Fetching tokumx: %s <%s>", curlCommand, mongo.TokuTarballURL))
+		w.conf.AddRunCmd(fmt.Sprintf("%s -o /tmp/%s %s",
+			curlCommand, mongo.TokuTarballName,
+			mongo.TokuTarballURL))
 	}
 	toolsJson, err := json.Marshal(w.mcfg.Tools)
 	if err != nil {

@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/juju/errors"
 	"github.com/juju/loggo"
 	"github.com/juju/utils"
 	"github.com/juju/utils/parallel"
@@ -24,7 +23,6 @@ import (
 	"github.com/juju/juju/environs/cloudinit"
 	"github.com/juju/juju/environs/config"
 	"github.com/juju/juju/instance"
-	"github.com/juju/juju/mongo"
 	"github.com/juju/juju/network"
 	coretools "github.com/juju/juju/tools"
 	"github.com/juju/juju/utils/ssh"
@@ -46,12 +44,6 @@ func Bootstrap(ctx environs.BootstrapContext, env environs.Environ, args environ
 		defer func() { handleBootstrapError(err, ctx, inst, env) }()
 	}
 
-	// We don't care what it is right now, but fail early if we can't find it
-	if os.Getenv("JUJU_UPLOAD_TOKUMX") != "" {
-		if tokuTarballPath := mongo.LookForTokumxTarball(); tokuTarballPath == "" {
-			return "", "", nil, errors.Errorf("could not find tokumx tarball")
-		}
-	}
 	// First thing, ensure we have tools otherwise there's no point.
 	series = config.PreferredSeries(env.Config())
 	availableTools, err := args.AvailableTools.Match(coretools.Filter{Series: series})
@@ -196,16 +188,6 @@ func ConfigureMachine(ctx environs.BootstrapContext, client ssh.Client, host str
 	}
 	if err := udata.ConfigureJuju(); err != nil {
 		return err
-	}
-	if os.Getenv("JUJU_UPLOAD_TOKUMX") != "" {
-		if tokuTarballPath := mongo.LookForTokumxTarball(); tokuTarballPath == "" {
-			ctx.Infof("did not find tokumx tarball")
-		} else {
-			ctx.Infof("uploading tokumx tarball from %s", tokuTarballPath)
-			// Upload to a temp location so we can copy it later
-			// XXX: We should not be uploading this to /tmp
-			client.Copy([]string{tokuTarballPath, "ubuntu@" + host + ":/tmp/"}, nil)
-		}
 	}
 	configScript, err := sshinit.ConfigureScript(cloudcfg)
 	if err != nil {
