@@ -4,21 +4,19 @@
 package profile_test
 
 import (
-//	"io"
+	//	"io"
 
 	"github.com/juju/errors"
 	"github.com/juju/names"
-	gc "gopkg.in/check.v1"
 	jc "github.com/juju/testing/checkers"
+	gc "gopkg.in/check.v1"
 
-	"github.com/juju/juju/apiserver/profile"
 	"github.com/juju/juju/apiserver/common"
+	"github.com/juju/juju/apiserver/profile"
 	apiservertesting "github.com/juju/juju/apiserver/testing"
-	"github.com/juju/juju/juju/testing"
 )
 
 type profileSuite struct {
-	testing.JujuConnSuite
 	resources  *common.Resources
 	authorizer *apiservertesting.FakeAuthorizer
 	api        *profile.API
@@ -27,13 +25,15 @@ type profileSuite struct {
 var _ = gc.Suite(&profileSuite{})
 
 func (s *profileSuite) SetUpTest(c *gc.C) {
-	s.JujuConnSuite.SetUpTest(c)
 	s.resources = common.NewResources()
 	tag := names.NewLocalUserTag("spam")
 	s.authorizer = &apiservertesting.FakeAuthorizer{Tag: tag}
 	var err error
-	s.api, err = profile.NewAPI(s.State, s.resources, s.authorizer)
+	s.api, err = profile.NewAPI(nil, s.resources, s.authorizer)
 	c.Assert(err, gc.IsNil)
+	// TODO: Consider setting up stubs for the real Start/StopCPUProfile so
+	// that we don't actually change global state while running this test
+	// suite
 }
 
 func (s *profileSuite) TestRegistered(c *gc.C) {
@@ -46,13 +46,33 @@ func (s *profileSuite) TestRegistered(c *gc.C) {
 
 func (s *profileSuite) TestNewAPINotAuthorized(c *gc.C) {
 	s.authorizer.Tag = names.NewServiceTag("eggs")
-	_, err := profile.NewAPI(s.State, s.resources, s.authorizer)
+	_, err := profile.NewAPI(nil, s.resources, s.authorizer)
 
 	c.Check(errors.Cause(err), gc.Equals, common.ErrPerm)
 }
 
 func (s *profileSuite) TestNewAPIOkay(c *gc.C) {
-	_, err := profile.NewAPI(s.State, s.resources, s.authorizer)
+	_, err := profile.NewAPI(nil, s.resources, s.authorizer)
 	c.Assert(err, gc.IsNil)
 }
 
+func (s *profileSuite) TestStartCPUProfile(c *gc.C) {
+	err := s.api.StartCPUProfile()
+	c.Assert(err, gc.IsNil)
+	result, err := s.api.StopCPUProfile()
+	c.Assert(err, gc.IsNil)
+	c.Check(len(result.Profile), jc.GreaterThan, 0)
+}
+
+func (s *profileSuite) TestStartCPUProfileAlreadyStarted(c *gc.C) {
+	err := s.api.StartCPUProfile()
+	c.Assert(err, gc.IsNil)
+	defer s.api.StopCPUProfile()
+	err = s.api.StartCPUProfile()
+	c.Assert(err, gc.ErrorMatches, "CPU profiling already active")
+}
+
+func (s *profileSuite) TestStopCPUProfileNotStarted(c *gc.C) {
+	_, err := s.api.StopCPUProfile()
+	c.Check(err, gc.ErrorMatches, "CPU profiling not active")
+}

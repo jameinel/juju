@@ -4,7 +4,9 @@
 package profile
 
 import (
+	"bytes"
 	"io"
+	"runtime/pprof"
 	"sync"
 
 	"github.com/juju/errors"
@@ -30,15 +32,18 @@ func NewAPI(st *state.State, resources *common.Resources, authorizer common.Auth
 		return nil, errors.Trace(common.ErrPerm)
 	}
 
-	b := API{
-	}
+	b := API{}
 	return &b, nil
 }
 
-
 var (
-	activeCPUProfile io.Writer
+	// TODO: We probably don't want to buffer all of this in memory, but
+	// create a temporary file on disk to buffer it until we are done with
+	// it
+	activeCPUProfile      *bytes.Buffer
 	activeCPUProfileMutex sync.Mutex
+	startCPUProfile       = pprof.StartCPUProfile
+	stopCPUProfile        = pprof.StopCPUProfile
 )
 
 // StartCPUProfile starts the golang CPU profiler into a temporary file.
@@ -47,7 +52,34 @@ func (a *API) StartCPUProfile() error {
 	activeCPUProfileMutex.Lock()
 	defer activeCPUProfileMutex.Unlock()
 	if activeCPUProfile != nil {
-		return errors.Errorf("CPU Profiling already active")
+		return errors.Errorf("CPU profiling already active")
 	}
-	return nil
+	// TODO: This should really be spooled to a local file
+	newBuff := &bytes.Buffer{}
+	if err := startCPUProfile(newBuff); err == nil {
+		activeCPUProfile = newBuff
+		return nil
+	} else {
+		return err
+	}
+
+}
+
+// ProfileResult contains a byte-stream of the cpu profiling results (base64 encoded?)
+type ProfileResult struct {
+	Profile string
+}
+
+// StopCPUProfile finishes the CPU profile and dumps the results to the user.
+func (a *API) StopCPUProfile() (ProfileResult, error) {
+	activeCPUProfileMutex.Lock()
+	defer activeCPUProfileMutex.Unlock()
+	if activeCPUProfile == nil {
+		return ProfileResult{}, errors.Errorf("CPU profiling not active")
+	}
+	// stopCPUProfile doesn't return a value
+	stopCPUProfile()
+	result := ProfileResult{Profile: activeCPUProfile.(*bytes.Buffer).String()}
+	activeCPUProfile = nil
+	return result, nil
 }
