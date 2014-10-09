@@ -892,3 +892,8 @@ type RebootActionResult struct {
 	Result RebootAction `json:result,omitempty`
 	Error  *Error       `json:error,omitempty`
 }
+
+// ProfileResult contains a byte-stream of the cpu profiling results (base64 encoded?)
+type ProfileResult struct {
+	Profile string
+}

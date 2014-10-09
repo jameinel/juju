@@ -21,6 +21,7 @@ import (
 	_ "github.com/juju/juju/apiserver/machine"
 	_ "github.com/juju/juju/apiserver/metricsmanager"
 	_ "github.com/juju/juju/apiserver/networker"
+	_ "github.com/juju/juju/apiserver/profile"
 	_ "github.com/juju/juju/apiserver/provisioner"
 	_ "github.com/juju/juju/apiserver/reboot"
 	_ "github.com/juju/juju/apiserver/rsyslog"

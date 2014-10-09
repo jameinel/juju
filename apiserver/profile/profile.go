@@ -12,6 +12,7 @@ import (
 	"github.com/juju/loggo"
 
 	"github.com/juju/juju/apiserver/common"
+	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/state"
 )
 
@@ -64,21 +65,16 @@ func (a *API) StartCPUProfile() error {
 
 }
 
-// ProfileResult contains a byte-stream of the cpu profiling results (base64 encoded?)
-type ProfileResult struct {
-	Profile string
-}
-
 // StopCPUProfile finishes the CPU profile and dumps the results to the user.
-func (a *API) StopCPUProfile() (ProfileResult, error) {
+func (a *API) StopCPUProfile() (params.ProfileResult, error) {
 	activeCPUProfileMutex.Lock()
 	defer activeCPUProfileMutex.Unlock()
 	if activeCPUProfile == nil {
-		return ProfileResult{}, errors.Errorf("CPU profiling not active")
+		return params.ProfileResult{}, errors.Errorf("CPU profiling not active")
 	}
 	// stopCPUProfile doesn't return a value
 	stopCPUProfile()
-	result := ProfileResult{Profile: activeCPUProfile.String()}
+	result := params.ProfileResult{Profile: activeCPUProfile.String()}
 	activeCPUProfile = nil
 	return result, nil
 }
