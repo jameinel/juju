@@ -5,7 +5,6 @@ package profile
 
 import (
 	"bytes"
-	"io"
 	"runtime/pprof"
 	"sync"
 
@@ -79,7 +78,7 @@ func (a *API) StopCPUProfile() (ProfileResult, error) {
 	}
 	// stopCPUProfile doesn't return a value
 	stopCPUProfile()
-	result := ProfileResult{Profile: activeCPUProfile.(*bytes.Buffer).String()}
+	result := ProfileResult{Profile: activeCPUProfile.String()}
 	activeCPUProfile = nil
 	return result, nil
 }

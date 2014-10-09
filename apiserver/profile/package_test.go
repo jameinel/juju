@@ -6,10 +6,10 @@ package profile_test
 import (
 	stdtesting "testing"
 
-	"github.com/juju/juju/testing"
+	"gopkg.in/check.v1"
 )
 
 // TestPackage integrates the tests into gotest.
 func TestPackage(t *stdtesting.T) {
-	testing.MgoTestPackage(t)
+	check.TestingT(t)
 }
