@@ -4,8 +4,8 @@
 package main
 
 import (
+	"bufio"
 	"os"
-	"os/signal"
 
 	"github.com/juju/cmd"
 	"github.com/juju/errors"
@@ -22,7 +22,7 @@ type ProfileServerCommand struct {
 
 var profileServerDoc = `
 This command will start a CPU profiler on the API server, when you want to stop
-profiling send a ^C to signal to the server to stop and download the profile
+profiling press [ENTER] to signal to the server to stop and download the profile
 into the named file.
 `
 
@@ -50,7 +50,7 @@ func (c *ProfileServerCommand) Init(args []string) error {
 	return nil
 }
 
-// NewProfileClient returns a keymanager client for the root api endpoint
+// NewProfileClient returns a profile client for the root api endpoint
 // that the environment command returns.
 func (c *ProfileServerCommand) NewProfileClient() (*profile.Client, error) {
 	root, err := c.NewAPIRoot()
@@ -77,11 +77,8 @@ func (c *ProfileServerCommand) Run(ctx *cmd.Context) error {
 	if err := client.StartCPUProfile(); err != nil {
 		return err
 	}
-	ctx.Stdout.Write([]byte("CPU profiling started. Press ^C to stop.\n"))
-	stopCH := make(chan os.Signal, 1)
-	signal.Notify(stopCH, os.Interrupt)
-	<-stopCH
-	signal.Stop(stopCH)
+	ctx.Stdout.Write([]byte("CPU profiling started. Press [ENTER] to stop.\n"))
+	bufio.NewReader(ctx.Stdin).ReadLine()
 	if result, err := client.StopCPUProfile(); err != nil {
 		// TODO: Do we want to delete the file if stop failed?
 		return err
