@@ -74,7 +74,7 @@ func (a *API) StopCPUProfile() (params.ProfileResult, error) {
 	}
 	// stopCPUProfile doesn't return a value
 	stopCPUProfile()
-	result := params.ProfileResult{Profile: activeCPUProfile.String()}
+	result := params.ProfileResult{Profile: activeCPUProfile.Bytes()}
 	activeCPUProfile = nil
 	return result, nil
 }

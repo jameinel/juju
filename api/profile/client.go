@@ -35,13 +35,13 @@ func (c *Client) StartCPUProfile() error {
 
 // StopCPUProfile sends a request to have the API server stop CPU profiling and
 // return the profile results
-func (c *Client) StopCPUProfile() (string, error) {
+func (c *Client) StopCPUProfile() ([]byte, error) {
 	if c.facade.BestAPIVersion() <= 0 {
-		return "", errors.NotImplementedf("API server is not new enough")
+		return nil, errors.NotImplementedf("API server is not new enough")
 	}
 	var result params.ProfileResult
 	if err := c.facade.FacadeCall("StopCPUProfile", nil, &result); err != nil {
-		return "", errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	return result.Profile, nil
 }

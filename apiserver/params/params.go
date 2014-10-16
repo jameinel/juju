@@ -895,5 +895,5 @@ type RebootActionResult struct {
 
 // ProfileResult contains a byte-stream of the cpu profiling results (base64 encoded?)
 type ProfileResult struct {
-	Profile string
+	Profile []byte
 }

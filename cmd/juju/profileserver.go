@@ -83,7 +83,7 @@ func (c *ProfileServerCommand) Run(ctx *cmd.Context) error {
 		// TODO: Do we want to delete the file if stop failed?
 		return err
 	} else {
-		outFile.WriteString(result)
+		outFile.Write(result)
 	}
 	return nil
 }
