@@ -27,6 +27,7 @@ import (
 	"github.com/juju/juju/agent"
 	"github.com/juju/juju/api"
 	apideployer "github.com/juju/juju/api/deployer"
+	apifirewaller "github.com/juju/juju/api/firewaller"
 	apimetricsmanager "github.com/juju/juju/api/metricsmanager"
 	apinetworker "github.com/juju/juju/api/networker"
 	apirsyslog "github.com/juju/juju/api/rsyslog"
@@ -394,7 +395,7 @@ func (s *commonMachineSuite) setFakeMachineAddresses(c *gc.C, machine *state.Mac
 func (s *MachineSuite) TestManageEnviron(c *gc.C) {
 	usefulVersion := version.Current
 	usefulVersion.Series = "quantal" // to match the charm created below
-	envtesting.AssertUploadFakeToolsVersions(c, s.DefaultToolsStorage, usefulVersion)
+	envtesting.AssertUploadFakeToolsVersions(c, s.DefaultToolsStorage, s.Environ.Config().AgentStream(), usefulVersion)
 	m, _, _ := s.primeAgent(c, version.Current, state.JobManageEnviron)
 	op := make(chan dummy.Operation, 200)
 	dummy.Listen(op)
@@ -459,11 +460,33 @@ func (s *MachineSuite) TestManageEnviron(c *gc.C) {
 	})
 }
 
+func (s *MachineSuite) TestManageEnvironDoesNotRunFirewallerWhenModeIsNone(c *gc.C) {
+	started := make(chan struct{}, 1)
+	s.agentSuite.PatchValue(&newFirewaller, func(st *apifirewaller.State) (worker.Worker, error) {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		return newDummyWorker(), nil
+	})
+	m, _, _ := s.primeAgent(c, version.Current, state.JobManageEnviron)
+	a := s.newAgent(c, m)
+	defer a.Stop()
+	go func() {
+		c.Check(a.Run(nil), gc.IsNil)
+	}()
+	select {
+	case <-started:
+		c.Fatalf("firewaller worker unexpectedly started")
+	case <-time.After(coretesting.ShortWait):
+	}
+}
+
 func (s *MachineSuite) TestManageEnvironRunsInstancePoller(c *gc.C) {
 	s.agentSuite.PatchValue(&instancepoller.ShortPoll, 500*time.Millisecond)
 	usefulVersion := version.Current
 	usefulVersion.Series = "quantal" // to match the charm created below
-	envtesting.AssertUploadFakeToolsVersions(c, s.DefaultToolsStorage, usefulVersion)
+	envtesting.AssertUploadFakeToolsVersions(c, s.DefaultToolsStorage, s.Environ.Config().AgentStream(), usefulVersion)
 	m, _, _ := s.primeAgent(c, version.Current, state.JobManageEnviron)
 	a := s.newAgent(c, m)
 	defer a.Stop()
@@ -526,7 +549,7 @@ func (s *MachineSuite) TestManageEnvironCallsUseMultipleCPUs(c *gc.C) {
 	// If it has been enabled, the JobManageEnviron agent should call utils.UseMultipleCPUs
 	usefulVersion := version.Current
 	usefulVersion.Series = "quantal"
-	envtesting.AssertUploadFakeToolsVersions(c, s.DefaultToolsStorage, usefulVersion)
+	envtesting.AssertUploadFakeToolsVersions(c, s.DefaultToolsStorage, s.Environ.Config().AgentStream(), usefulVersion)
 	m, _, _ := s.primeAgent(c, version.Current, state.JobManageEnviron)
 	calledChan := make(chan struct{}, 1)
 	s.agentSuite.PatchValue(&useMultipleCPUs, func() { calledChan <- struct{}{} })
@@ -592,7 +615,7 @@ func (s *MachineSuite) waitProvisioned(c *gc.C, unit *state.Unit) (*state.Machin
 func (s *MachineSuite) testUpgradeRequest(c *gc.C, agent runner, tag string, currentTools *tools.Tools) {
 	newVers := version.Current
 	newVers.Patch++
-	newTools := envtesting.AssertUploadFakeToolsVersions(c, s.DefaultToolsStorage, newVers)[0]
+	newTools := envtesting.AssertUploadFakeToolsVersions(c, s.DefaultToolsStorage, s.Environ.Config().AgentStream(), newVers)[0]
 	err := s.State.SetEnvironAgentVersion(newVers.Number)
 	c.Assert(err, gc.IsNil)
 	err = runWithTimeout(agent)

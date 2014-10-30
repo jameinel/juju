@@ -32,7 +32,9 @@ import (
 	"github.com/juju/juju/apiserver"
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/container/kvm"
+	"github.com/juju/juju/container/lxc"
 	"github.com/juju/juju/environs"
+	"github.com/juju/juju/environs/config"
 	"github.com/juju/juju/instance"
 	jujunames "github.com/juju/juju/juju/names"
 	"github.com/juju/juju/juju/paths"
@@ -91,6 +93,7 @@ var (
 	newSingularRunner        = singular.New
 	peergrouperNew           = peergrouper.New
 	newNetworker             = networker.NewNetworker
+	newFirewaller            = firewaller.NewFirewaller
 
 	// reportOpenedAPI is exposed for tests to know when
 	// the State has been successfully opened.
@@ -126,15 +129,6 @@ func (a *MachineAgent) BeginRestore() error {
 		return fmt.Errorf("already restoring")
 	}
 	a.restoring = true
-	return nil
-}
-
-// FinishRestore will restart jujud and err if restore flag is not true
-func (a *MachineAgent) FinishRestore() error {
-	if !a.restoring {
-		return fmt.Errorf("restore is not in progress")
-	}
-	a.tomb.Kill(worker.ErrTerminateAgent)
 	return nil
 }
 
@@ -264,6 +258,46 @@ func (a *MachineAgent) ChangeConfig(mutate AgentConfigMutator) error {
 	return nil
 }
 
+func (a *MachineAgent) newRestoreStateWatcher(st *state.State) (worker.Worker, error) {
+	rWorker := func(stopch <-chan struct{}) error {
+		return a.restoreStateWatcher(st, stopch)
+	}
+	return worker.NewSimpleWorker(rWorker), nil
+}
+
+func (a *MachineAgent) restoreChanged(st *state.State) error {
+	rinfo, err := st.EnsureRestoreInfo()
+	if err != nil {
+		return errors.Annotate(err, "cannot read restore state")
+	}
+	switch rinfo.Status() {
+	case state.RestorePending:
+		a.PrepareRestore()
+	case state.RestoreInProgress:
+		a.BeginRestore()
+	}
+	return nil
+}
+
+func (a *MachineAgent) restoreStateWatcher(st *state.State, stopch <-chan struct{}) error {
+	restoreWatch := st.WatchRestoreInfoChanges()
+	defer func() {
+		restoreWatch.Kill()
+		restoreWatch.Wait()
+	}()
+
+	for {
+		select {
+		case <-restoreWatch.Changes():
+			if err := a.restoreChanged(st); err != nil {
+				return err
+			}
+		case <-stopch:
+			return nil
+		}
+	}
+}
+
 // newStateStarterWorker wraps stateStarter in a simple worker for use in
 // a.runner.StartWorker.
 func (a *MachineAgent) newStateStarterWorker() (worker.Worker, error) {
@@ -325,6 +359,9 @@ func (a *MachineAgent) APIWorker() (worker.Worker, error) {
 	if disableNetworkManagement {
 		logger.Infof("network management is disabled")
 	}
+	// Check if firewall-mode is "none" to disable the firewaller.
+	firewallMode := envConfig.FirewallMode()
+	disableFirewaller := firewallMode == config.FwNone
 
 	// Refresh the configuration, since it may have been updated after opening state.
 	agentConfig = a.CurrentConfig()
@@ -447,9 +484,13 @@ func (a *MachineAgent) APIWorker() (worker.Worker, error) {
 			// Make another job to enable the firewaller. Not all
 			// environments are capable of managing ports
 			// centrally.
-			a.startWorkerAfterUpgrade(singularRunner, "firewaller", func() (worker.Worker, error) {
-				return firewaller.NewFirewaller(st.Firewaller())
-			})
+			if !disableFirewaller {
+				a.startWorkerAfterUpgrade(singularRunner, "firewaller", func() (worker.Worker, error) {
+					return newFirewaller(st.Firewaller())
+				})
+			} else {
+				logger.Debugf("not starting firewaller worker - firewall-mode is %q", config.FwNone)
+			}
 			a.startWorkerAfterUpgrade(singularRunner, "charm-revision-updater", func() (worker.Worker, error) {
 				return charmrevisionworker.NewRevisionUpdateWorker(st.CharmRevisionUpdater()), nil
 			})
@@ -475,10 +516,16 @@ func (a *MachineAgent) APIWorker() (worker.Worker, error) {
 // initialises suitable infrastructure to support such containers.
 func (a *MachineAgent) setupContainerSupport(runner worker.Runner, st *api.State, entity *apiagent.Entity, agentConfig agent.Config) error {
 	var supportedContainers []instance.ContainerType
-	// We don't yet support nested lxc containers but anything else can run an LXC container.
-	if entity.ContainerType() != instance.LXC {
+	// LXC containers are only supported on bare metal and fully virtualized linux systems
+	// Nested LXC containers and Windows machines cannot run LXC containers
+	supportsLXC, err := lxc.IsLXCSupported()
+	if err != nil {
+		logger.Warningf("no lxc containers possible: %v", err)
+	}
+	if err == nil && supportsLXC {
 		supportedContainers = append(supportedContainers, instance.LXC)
 	}
+
 	supportsKvm, err := kvm.IsKVMSupported()
 	if err != nil {
 		logger.Warningf("determining kvm support: %v\nno kvm containers possible", err)
@@ -593,6 +640,10 @@ func (a *MachineAgent) StateWorker() (worker.Worker, error) {
 			a.startWorkerAfterUpgrade(runner, "peergrouper", func() (worker.Worker, error) {
 				return peergrouperNew(st)
 			})
+			a.startWorkerAfterUpgrade(runner, "restore", func() (worker.Worker, error) {
+				return a.newRestoreStateWatcher(st)
+			})
+
 			runner.StartWorker("apiserver", func() (worker.Worker, error) {
 				// If the configuration does not have the required information,
 				// it is currently not a recoverable error, so we kill the whole
@@ -623,7 +674,7 @@ func (a *MachineAgent) StateWorker() (worker.Worker, error) {
 					Key:       key,
 					DataDir:   dataDir,
 					LogDir:    logDir,
-					Validator: a.limitLoginsDuringUpgrade,
+					Validator: a.limitLogins,
 				})
 			})
 			a.startWorkerAfterUpgrade(singularRunner, "cleaner", func() (worker.Worker, error) {

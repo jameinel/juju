@@ -174,7 +174,7 @@ func (s *localServerSuite) TearDownTest(c *gc.C) {
 }
 
 func bootstrapContext(c *gc.C) environs.BootstrapContext {
-	return coretesting.Context(c)
+	return envtesting.BootstrapContext(c)
 }
 
 // If the environment is configured not to require a public IP address for nodes,
@@ -409,4 +409,11 @@ func (s *localServerSuite) TestConstraintsValidatorVocab(c *gc.C) {
 	cons = constraints.MustParse("instance-type=foo")
 	_, err = validator.Validate(cons)
 	c.Assert(err, gc.ErrorMatches, "invalid constraint value: instance-type=foo\nvalid values are:.*")
+}
+
+func (t *localServerSuite) TestSupportAddressAllocation(c *gc.C) {
+	env := t.Prepare(c)
+	result, err := env.SupportAddressAllocation("")
+	c.Assert(result, jc.IsFalse)
+	c.Assert(err, gc.IsNil)
 }

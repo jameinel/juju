@@ -38,6 +38,14 @@ func (s *unitSuite) SetUpTest(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 }
 
+func (s *unitSuite) TestRequestReboot(c *gc.C) {
+	err := s.apiUnit.RequestReboot()
+	c.Assert(err, gc.IsNil)
+	rFlag, err := s.wordpressMachine.GetRebootFlag()
+	c.Assert(err, gc.IsNil)
+	c.Assert(rFlag, jc.IsTrue)
+}
+
 func (s *unitSuite) TestUnitAndUnitTag(c *gc.C) {
 	apiUnitFoo, err := s.uniter.Unit(names.NewUnitTag("foo/42"))
 	c.Assert(err, gc.ErrorMatches, "permission denied")
@@ -510,9 +518,9 @@ func (s *unitSuite) TestJoinedRelations(c *gc.C) {
 	rel2, _, _ := s.addRelatedService(c, "wordpress", "logging", s.wordpressUnit)
 	joinedRelations, err = s.apiUnit.JoinedRelations()
 	c.Assert(err, gc.IsNil)
-	c.Assert(joinedRelations, gc.DeepEquals, []names.RelationTag{
-		rel2.Tag().(names.RelationTag),
+	c.Assert(joinedRelations, jc.SameContents, []names.RelationTag{
 		rel1.Tag().(names.RelationTag),
+		rel2.Tag().(names.RelationTag),
 	})
 }
 

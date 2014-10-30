@@ -33,7 +33,6 @@ import (
 	"github.com/juju/juju/provider/local"
 	"github.com/juju/juju/service/common"
 	"github.com/juju/juju/service/upstart"
-	coretesting "github.com/juju/juju/testing"
 	coretools "github.com/juju/juju/tools"
 	"github.com/juju/juju/version"
 )
@@ -103,6 +102,16 @@ func (*environSuite) TestSupportNetworks(c *gc.C) {
 	c.Assert(environ.SupportNetworks(), jc.IsFalse)
 }
 
+func (*environSuite) TestSupportAddressAllocation(c *gc.C) {
+	testConfig := minimalConfig(c)
+	env, err := local.Provider.Open(testConfig)
+	c.Assert(err, gc.IsNil)
+
+	result, err := env.SupportAddressAllocation("")
+	c.Assert(result, jc.IsFalse)
+	c.Assert(err, gc.IsNil)
+}
+
 type localJujuTestSuite struct {
 	baseProviderSuite
 	jujutest.Tests
@@ -167,7 +176,7 @@ func (s *localJujuTestSuite) TestStartStop(c *gc.C) {
 }
 
 func (s *localJujuTestSuite) testBootstrap(c *gc.C, cfg *config.Config) environs.Environ {
-	ctx := coretesting.Context(c)
+	ctx := envtesting.BootstrapContext(c)
 	environ, err := local.Provider.Prepare(ctx, cfg)
 	c.Assert(err, gc.IsNil)
 	availableTools := coretools.List{&coretools.Tools{
@@ -350,7 +359,7 @@ func (s *localJujuTestSuite) TestBootstrapRemoveLeftovers(c *gc.C) {
 }
 
 func (s *localJujuTestSuite) TestConstraintsValidator(c *gc.C) {
-	ctx := coretesting.Context(c)
+	ctx := envtesting.BootstrapContext(c)
 	env, err := local.Provider.Prepare(ctx, minimalConfig(c))
 	c.Assert(err, gc.IsNil)
 	validator, err := env.ConstraintsValidator()

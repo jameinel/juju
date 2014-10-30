@@ -20,7 +20,6 @@ import (
 	envtools "github.com/juju/juju/environs/tools"
 	toolstesting "github.com/juju/juju/environs/tools/testing"
 	"github.com/juju/juju/provider/dummy"
-	"github.com/juju/juju/testing"
 	coretesting "github.com/juju/juju/testing"
 	coretools "github.com/juju/juju/tools"
 	"github.com/juju/juju/version"
@@ -62,8 +61,8 @@ func (s *SimpleStreamsToolsSuite) TearDownTest(c *gc.C) {
 
 func (s *SimpleStreamsToolsSuite) reset(c *gc.C, attrs map[string]interface{}) {
 	final := map[string]interface{}{
-		"tools-metadata-url": "file://" + s.customToolsDir,
-		"tools-stream":       "proposed",
+		"agent-metadata-url": "file://" + s.customToolsDir,
+		"agent-stream":       "proposed",
 	}
 	for k, v := range attrs {
 		final[k] = v
@@ -95,7 +94,7 @@ func (s *SimpleStreamsToolsSuite) resetEnv(c *gc.C, attrs map[string]interface{}
 	dummy.Reset()
 	cfg, err := config.New(config.NoDefaults, dummy.SampleConfig().Merge(attrs))
 	c.Assert(err, gc.IsNil)
-	env, err := environs.Prepare(cfg, testing.Context(c), configstore.NewMem())
+	env, err := environs.Prepare(cfg, envtesting.BootstrapContext(c), configstore.NewMem())
 	c.Assert(err, gc.IsNil)
 	s.env = env
 	s.removeTools(c)

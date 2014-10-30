@@ -24,10 +24,11 @@ var (
 	getDBDumper      = db.NewDumper
 	runCreate        = create
 	finishMeta       = func(meta *metadata.Metadata, result *createResult) error {
-		return meta.Finish(result.size, result.checksum, "", nil)
+		return meta.Finish(result.size, result.checksum)
 	}
 	storeArchive = func(stor filestorage.FileStorage, meta *metadata.Metadata, file io.Reader) error {
-		_, err := stor.Add(meta, file)
+		id, err := stor.Add(meta, file)
+		meta.SetID(id)
 		return err
 	}
 )
@@ -65,7 +66,12 @@ func (b *backups) Create(paths files.Paths, dbInfo db.ConnInfo, origin metadata.
 
 	// Prep the metadata.
 	meta := metadata.NewMetadata(origin, notes, nil)
-	metadataFile, err := meta.AsJSONBuffer() // ...unfinished.
+	// The metadata file will not contain the ID or the "finished" data.
+	// However, that information is not as critical.  The alternatives
+	// are either adding the metadata file to the archive after the fact
+	// or adding placeholders here for the finished data and filling
+	// them in afterward.  Neither is particularly trivial.
+	metadataFile, err := meta.AsJSONBuffer()
 	if err != nil {
 		return nil, errors.Annotate(err, "while preparing the metadata")
 	}

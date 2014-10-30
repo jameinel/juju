@@ -11,6 +11,7 @@ import (
 
 	"github.com/juju/juju/environs"
 	"github.com/juju/juju/environs/config"
+	envtesting "github.com/juju/juju/environs/testing"
 	"github.com/juju/juju/testing"
 )
 
@@ -396,6 +397,12 @@ var configTests = []configTest{
 		},
 		firewallMode: config.FwGlobal,
 	}, {
+		summary: "none firewall-mode",
+		config: attrs{
+			"firewall-mode": "none",
+		},
+		firewallMode: config.FwNone,
+	}, {
 		config: attrs{
 			"future": "hammerstein",
 		},
@@ -471,7 +478,7 @@ func (s *ConfigSuite) TestPrepareInsertsUniqueControlBucket(c *gc.C) {
 	cfg, err := config.New(config.NoDefaults, attrs)
 	c.Assert(err, gc.IsNil)
 
-	ctx := testing.Context(c)
+	ctx := envtesting.BootstrapContext(c)
 	env0, err := providerInstance.Prepare(ctx, cfg)
 	c.Assert(err, gc.IsNil)
 	bucket0 := env0.(*environ).ecfg().controlBucket()
@@ -494,7 +501,7 @@ func (s *ConfigSuite) TestPrepareDoesNotTouchExistingControlBucket(c *gc.C) {
 	cfg, err := config.New(config.NoDefaults, attrs)
 	c.Assert(err, gc.IsNil)
 
-	env, err := providerInstance.Prepare(testing.Context(c), cfg)
+	env, err := providerInstance.Prepare(envtesting.BootstrapContext(c), cfg)
 	c.Assert(err, gc.IsNil)
 	bucket := env.(*environ).ecfg().controlBucket()
 	c.Assert(bucket, gc.Equals, "burblefoo")

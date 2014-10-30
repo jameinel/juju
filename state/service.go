@@ -105,7 +105,7 @@ var errRefresh = stderrors.New("state seems inconsistent, refresh and try again"
 // some point; if the service has no units, and no relation involving the
 // service has any units in scope, they are all removed immediately.
 func (s *Service) Destroy() (err error) {
-	defer errors.Maskf(&err, "cannot destroy service %q", s)
+	defer errors.DeferredAnnotatef(&err, "cannot destroy service %q", s)
 	defer func() {
 		if err == nil {
 			// This is a white lie; the document might actually be removed.
@@ -159,7 +159,7 @@ func (s *Service) destroyOps() ([]txn.Op, error) {
 		if err == errAlreadyDying {
 			relOps = []txn.Op{{
 				C:      relationsC,
-				Id:     rel.doc.Key,
+				Id:     rel.doc.DocID,
 				Assert: bson.D{{"life", Dying}},
 			}}
 		} else if err != nil {
@@ -364,7 +364,7 @@ func (s *Service) checkRelationsOps(ch *Charm, relations []*Relation) ([]txn.Op,
 		}
 		asserts = append(asserts, txn.Op{
 			C:      relationsC,
-			Id:     rel.doc.Key,
+			Id:     rel.doc.DocID,
 			Assert: txn.DocExists,
 		})
 	}
@@ -640,7 +640,7 @@ func (s *Service) GetOwnerTag() string {
 
 // AddUnit adds a new principal unit to the service.
 func (s *Service) AddUnit() (unit *Unit, err error) {
-	defer errors.Maskf(&err, "cannot add unit to service %q", s)
+	defer errors.DeferredAnnotatef(&err, "cannot add unit to service %q", s)
 	name, ops, err := s.addUnitOps("", nil)
 	if err != nil {
 		return nil, err
@@ -747,11 +747,12 @@ func (s *Service) Relations() (relations []*Relation, err error) {
 }
 
 func serviceRelations(st *State, name string) (relations []*Relation, err error) {
-	defer errors.Maskf(&err, "can't get relations for service %q", name)
+	defer errors.DeferredAnnotatef(&err, "can't get relations for service %q", name)
 	relationsCollection, closer := st.getCollection(relationsC)
 	defer closer()
 
 	docs := []relationDoc{}
+	// TODO(mjs) - ENVUUID - filtering by environment required here
 	err = relationsCollection.Find(bson.D{{"endpoints.servicename", name}}).All(&docs)
 	if err != nil {
 		return nil, err
@@ -824,7 +825,7 @@ func (s *Service) SetConstraints(cons constraints.Value) (err error) {
 	if s.doc.Subordinate {
 		return ErrSubordinateConstraints
 	}
-	defer errors.Maskf(&err, "cannot set constraints")
+	defer errors.DeferredAnnotatef(&err, "cannot set constraints")
 	if s.doc.Life != Alive {
 		return errNotAlive
 	}

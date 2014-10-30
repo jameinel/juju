@@ -715,13 +715,21 @@ func (u *uniterBaseAPI) Actions(args params.Entities) (params.ActionsQueryResult
 	}
 
 	for i, arg := range args.Entities {
-		action, err := actionFn(arg.Tag)
+		actionTag, err := names.ParseActionTag(arg.Tag)
 		if err != nil {
 			results.Results[i].Error = common.ServerError(err)
 			continue
 		}
-		results.Results[i].Action.Name = action.Name()
-		results.Results[i].Action.Parameters = action.Parameters()
+
+		action, err := actionFn(actionTag)
+		if err != nil {
+			results.Results[i].Error = common.ServerError(err)
+			continue
+		}
+		results.Results[i].Action.Action = &params.Action{
+			Name:       action.Name(),
+			Parameters: action.Parameters(),
+		}
 	}
 
 	return results, nil
@@ -744,22 +752,13 @@ func (u *uniterBaseAPI) FinishActions(args params.ActionExecutionResults) (param
 			results.Results[i].Error = common.ServerError(err)
 			continue
 		}
-		var status state.ActionStatus
-		switch arg.Status {
-		case "complete":
-			status = state.ActionCompleted
-		case "fail":
-			status = state.ActionFailed
-		default:
-			results.Results[i].Error = common.ServerError(errors.Errorf("unrecognized action status '%s'", arg.Status))
+		actionResults, err := paramsActionExecutionResultsToStateActionResults(arg)
+		if err != nil {
+			results.Results[i].Error = common.ServerError(err)
 			continue
 		}
-		actionResults := state.ActionResults{
-			Status:  status,
-			Results: arg.Results,
-			Message: arg.Message,
-		}
-		err = action.Finish(actionResults)
+
+		_, err = action.Finish(actionResults)
 		if err != nil {
 			results.Results[i].Error = common.ServerError(err)
 			continue
@@ -767,6 +766,29 @@ func (u *uniterBaseAPI) FinishActions(args params.ActionExecutionResults) (param
 	}
 
 	return results, nil
+}
+
+// paramsActionExecutionResultsToStateActionResults does exactly what
+// the name implies.
+func paramsActionExecutionResultsToStateActionResults(arg params.ActionExecutionResult) (state.ActionResults, error) {
+	var status state.ActionStatus
+	switch arg.Status {
+	case params.ActionCancelled:
+		status = state.ActionCancelled
+	case params.ActionCompleted:
+		status = state.ActionCompleted
+	case params.ActionFailed:
+		status = state.ActionFailed
+	case params.ActionPending:
+		status = state.ActionPending
+	default:
+		return state.ActionResults{}, errors.Errorf("unrecognized action status '%s'", arg.Status)
+	}
+	return state.ActionResults{
+		Status:  status,
+		Results: arg.Results,
+		Message: arg.Message,
+	}, nil
 }
 
 // RelationById returns information about all given relations,
@@ -1373,7 +1395,7 @@ func (u *uniterBaseAPI) checkRemoteUnit(relUnit *state.RelationUnit, remoteUnitT
 // authAndActionFromTagFn first authenticates the request, and then returns
 // a function with which to authenticate and retrieve each action in the
 // request.
-func (u *uniterBaseAPI) authAndActionFromTagFn() (func(string) (*state.Action, error), error) {
+func (u *uniterBaseAPI) authAndActionFromTagFn() (func(names.ActionTag) (*state.Action, error), error) {
 	canAccess, err := u.accessUnit()
 	if err != nil {
 		return nil, err
@@ -1383,13 +1405,8 @@ func (u *uniterBaseAPI) authAndActionFromTagFn() (func(string) (*state.Action, e
 		return nil, fmt.Errorf("calling entity is not a unit")
 	}
 
-	return func(tag string) (*state.Action, error) {
-		actionTag, err := names.ParseActionTag(tag)
-		if err != nil {
-			return nil, err
-		}
-
-		unitTag := actionTag.PrefixTag()
+	return func(tag names.ActionTag) (*state.Action, error) {
+		unitTag := tag.PrefixTag()
 		if unitTag != unit {
 			return nil, common.ErrPerm
 		}
@@ -1398,7 +1415,7 @@ func (u *uniterBaseAPI) authAndActionFromTagFn() (func(string) (*state.Action, e
 			return nil, common.ErrPerm
 		}
 
-		return u.st.ActionByTag(actionTag)
+		return u.st.ActionByTag(tag)
 	}, nil
 }
 

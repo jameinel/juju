@@ -271,6 +271,168 @@ func (s *upgradesSuite) TestAddEnvUUIDToUnitsIdempotent(c *gc.C) {
 	s.checkAddEnvUUIDToCollectionIdempotent(c, AddEnvUUIDToUnits, unitsC)
 }
 
+func (s *upgradesSuite) TestAddEnvUUIDToMachines(c *gc.C) {
+	coll, closer, newIDs := s.checkAddEnvUUIDToCollection(c, AddEnvUUIDToMachines, machinesC,
+		bson.M{
+			"_id":    "0",
+			"series": "trusty",
+			"life":   Alive,
+		},
+		bson.M{
+			"_id":    "1",
+			"series": "utopic",
+			"life":   Dead,
+		},
+	)
+	defer closer()
+
+	var newDoc machineDoc
+	s.FindId(c, coll, newIDs[0], &newDoc)
+	c.Assert(newDoc.Id, gc.Equals, "0")
+	c.Assert(newDoc.Series, gc.Equals, "trusty")
+	c.Assert(newDoc.Life, gc.Equals, Alive)
+
+	s.FindId(c, coll, newIDs[1], &newDoc)
+	c.Assert(newDoc.Id, gc.Equals, "1")
+	c.Assert(newDoc.Series, gc.Equals, "utopic")
+	c.Assert(newDoc.Life, gc.Equals, Dead)
+}
+
+func (s *upgradesSuite) TestAddEnvUUIDToMachinesIdempotent(c *gc.C) {
+	s.checkAddEnvUUIDToCollectionIdempotent(c, AddEnvUUIDToMachines, machinesC)
+}
+
+func (s *upgradesSuite) TestAddEnvUUIDToReboots(c *gc.C) {
+	coll, closer, newIDs := s.checkAddEnvUUIDToCollection(c, AddEnvUUIDToReboots, rebootC,
+		bson.M{
+			"_id": "0",
+		},
+		bson.M{
+			"_id": "1",
+		},
+	)
+	defer closer()
+
+	var newDoc rebootDoc
+	s.FindId(c, coll, newIDs[0], &newDoc)
+	c.Assert(newDoc.Id, gc.Equals, "0")
+
+	s.FindId(c, coll, newIDs[1], &newDoc)
+	c.Assert(newDoc.Id, gc.Equals, "1")
+}
+
+func (s *upgradesSuite) TestAddEnvUUIDToRebootsIdempotent(c *gc.C) {
+	s.checkAddEnvUUIDToCollectionIdempotent(c, AddEnvUUIDToReboots, rebootC)
+}
+
+func (s *upgradesSuite) TestAddEnvUUIDToInstanceData(c *gc.C) {
+	coll, closer, newIDs := s.checkAddEnvUUIDToCollection(c, AddEnvUUIDToInstanceData, instanceDataC,
+		bson.M{
+			"_id":    "0",
+			"status": "alive",
+		},
+		bson.M{
+			"_id":    "1",
+			"status": "dead",
+		},
+	)
+	defer closer()
+
+	var newDoc instanceData
+	s.FindId(c, coll, newIDs[0], &newDoc)
+	c.Assert(newDoc.MachineId, gc.Equals, "0")
+	c.Assert(newDoc.Status, gc.Equals, "alive")
+
+	s.FindId(c, coll, newIDs[1], &newDoc)
+	c.Assert(newDoc.MachineId, gc.Equals, "1")
+	c.Assert(newDoc.Status, gc.Equals, "dead")
+}
+
+func (s *upgradesSuite) TestAddEnvUUIDToInstanceDatasIdempotent(c *gc.C) {
+	s.checkAddEnvUUIDToCollectionIdempotent(c, AddEnvUUIDToInstanceData, instanceDataC)
+}
+
+func (s *upgradesSuite) TestAddEnvUUIDToContainerRef(c *gc.C) {
+	coll, closer, newIDs := s.checkAddEnvUUIDToCollection(c, AddEnvUUIDToContainerRefs, containerRefsC,
+		bson.M{
+			"_id":      "0",
+			"children": []string{"1", "2"},
+		},
+		bson.M{
+			"_id":      "1",
+			"children": []string{"3", "4"},
+		},
+	)
+	defer closer()
+
+	var newDoc machineContainers
+	s.FindId(c, coll, newIDs[0], &newDoc)
+	c.Assert(newDoc.Id, gc.Equals, "0")
+	c.Assert(newDoc.Children, gc.DeepEquals, []string{"1", "2"})
+
+	s.FindId(c, coll, newIDs[1], &newDoc)
+	c.Assert(newDoc.Id, gc.Equals, "1")
+	c.Assert(newDoc.Children, gc.DeepEquals, []string{"3", "4"})
+}
+
+func (s *upgradesSuite) TestAddEnvUUIDToContainerRefsIdempotent(c *gc.C) {
+	s.checkAddEnvUUIDToCollectionIdempotent(c, AddEnvUUIDToContainerRefs, containerRefsC)
+}
+
+func (s *upgradesSuite) TestAddEnvUUIDToRelations(c *gc.C) {
+	coll, closer, newIDs := s.checkAddEnvUUIDToCollection(c, AddEnvUUIDToRelations, relationsC,
+		bson.M{
+			"_id": "foo:db bar:db",
+			"id":  1,
+		},
+		bson.M{
+			"_id": "foo:http bar:http",
+			"id":  3,
+		},
+	)
+	defer closer()
+
+	var newDoc relationDoc
+	s.FindId(c, coll, newIDs[0], &newDoc)
+	c.Assert(newDoc.Key, gc.Equals, "foo:db bar:db")
+	c.Assert(newDoc.Id, gc.Equals, 1)
+
+	s.FindId(c, coll, newIDs[1], &newDoc)
+	c.Assert(newDoc.Key, gc.Equals, "foo:http bar:http")
+	c.Assert(newDoc.Id, gc.Equals, 3)
+}
+
+func (s *upgradesSuite) TestAddEnvUUIDToRelationsIdempotent(c *gc.C) {
+	s.checkAddEnvUUIDToCollectionIdempotent(c, AddEnvUUIDToRelations, relationsC)
+}
+
+func (s *upgradesSuite) TestAddEnvUUIDToRelationScopes(c *gc.C) {
+	coll, closer, newIDs := s.checkAddEnvUUIDToCollection(c, AddEnvUUIDToRelationScopes, relationScopesC,
+		bson.M{
+			"_id":       "r#0#peer#foo/0",
+			"departing": false,
+		},
+		bson.M{
+			"_id":       "r#1#provider#bar/0",
+			"departing": true,
+		},
+	)
+	defer closer()
+
+	var newDoc relationScopeDoc
+	s.FindId(c, coll, newIDs[0], &newDoc)
+	c.Assert(newDoc.Key, gc.Equals, "r#0#peer#foo/0")
+	c.Assert(newDoc.Departing, gc.Equals, false)
+
+	s.FindId(c, coll, newIDs[1], &newDoc)
+	c.Assert(newDoc.Key, gc.Equals, "r#1#provider#bar/0")
+	c.Assert(newDoc.Departing, gc.Equals, true)
+}
+
+func (s *upgradesSuite) TestAddEnvUUIDToRelationScopesIdempotent(c *gc.C) {
+	s.checkAddEnvUUIDToCollectionIdempotent(c, AddEnvUUIDToRelationScopes, relationScopesC)
+}
+
 func (s *upgradesSuite) checkAddEnvUUIDToCollection(
 	c *gc.C,
 	upgradeStep func(*State) error,
@@ -857,4 +1019,155 @@ func (s *upgradesSuite) TestCreateMeterStatuses(c *gc.C) {
 		c.Assert(info, gc.Equals, "")
 	}
 
+}
+
+// setUpJobManageNetworking prepares the test environment for the JobManageNetworking tests.
+func (s *upgradesSuite) setUpJobManageNetworking(c *gc.C, provider string, manual bool) {
+	// Set provider type.
+	settings, err := readSettings(s.state, environGlobalKey)
+	c.Assert(err, gc.IsNil)
+	settings.Set("type", provider)
+	_, err = settings.Write()
+	c.Assert(err, gc.IsNil)
+	// Add machines.
+	machines, err := s.state.AddMachines([]MachineTemplate{
+		{Series: "quantal", Jobs: []MachineJob{JobHostUnits}},
+		{Series: "quantal", Jobs: []MachineJob{JobHostUnits}},
+		{Series: "quantal", Jobs: []MachineJob{JobHostUnits}},
+	}...)
+	c.Assert(err, gc.IsNil)
+	ops := []txn.Op{}
+	if manual {
+		mdoc := machines[2].doc
+		ops = append(ops, txn.Op{
+			C:      machinesC,
+			Id:     mdoc.DocID,
+			Update: bson.D{{"$set", bson.D{{"nonce", "manual:" + mdoc.Nonce}}}},
+		})
+	}
+	// Run transaction.
+	err = s.state.runTransaction(ops)
+	c.Assert(err, gc.IsNil)
+}
+
+// checkJobManageNetworking tests if the machine withe the given id has the
+// JobManageNetworking if hasJob shows that it should.
+func (s *upgradesSuite) checkJobManageNetworking(c *gc.C, id string, hasJob bool) {
+	machine, err := s.state.Machine(id)
+	c.Assert(err, gc.IsNil)
+	jobs := machine.Jobs()
+	foundJob := false
+	for _, job := range jobs {
+		if job == JobManageNetworking {
+			foundJob = true
+			break
+		}
+	}
+	c.Assert(foundJob, gc.Equals, hasJob)
+}
+
+// tearDownJobManageNetworking cleans the test environment for the following tests.
+func (s *upgradesSuite) tearDownJobManageNetworking(c *gc.C) {
+	// Remove machines.
+	machines, err := s.state.AllMachines()
+	c.Assert(err, gc.IsNil)
+	for _, machine := range machines {
+		err = machine.ForceDestroy()
+		c.Assert(err, gc.IsNil)
+		err = machine.EnsureDead()
+		c.Assert(err, gc.IsNil)
+		err = machine.Remove()
+		c.Assert(err, gc.IsNil)
+	}
+	// Reset machine sequence.
+	query := s.state.db.C("sequence").Find(bson.D{{"_id", "machine"}})
+	set := mgo.Change{
+		Update: bson.M{"$set": bson.M{"counter": 0}},
+		Upsert: true,
+	}
+	result := &sequenceDoc{}
+	_, err = query.Apply(set, result)
+	c.Assert(err, gc.IsNil)
+}
+
+func (s *upgradesSuite) TestJobManageNetworking(c *gc.C) {
+	tests := []struct {
+		description string
+		provider    string
+		manual      bool
+		hasJob      []bool
+	}{{
+		description: "azure provider, no manual provisioned machines",
+		provider:    "azure",
+		manual:      false,
+		hasJob:      []bool{true, true, true},
+	}, {
+		description: "azure provider, one manual provisioned machine",
+		provider:    "azure",
+		manual:      true,
+		hasJob:      []bool{true, true, false},
+	}, {
+		description: "ec2 provider, no manual provisioned machines",
+		provider:    "ec2",
+		manual:      false,
+		hasJob:      []bool{true, true, true},
+	}, {
+		description: "ec2 provider, one manual provisioned machine",
+		provider:    "ec2",
+		manual:      true,
+		hasJob:      []bool{true, true, false},
+	}, {
+		description: "joyent provider, no manual provisioned machines",
+		provider:    "joyent",
+		manual:      false,
+		hasJob:      []bool{true, true, true},
+	}, {
+		description: "joyent provider, one manual provisioned machine",
+		provider:    "joyent",
+		manual:      true,
+		hasJob:      []bool{true, true, false},
+	}, {
+		description: "local provider, no manual provisioned machines",
+		provider:    "local",
+		manual:      false,
+		hasJob:      []bool{false, true, true},
+	}, {
+		description: "maas provider, no manual provisioned machines",
+		provider:    "maas",
+		manual:      false,
+		hasJob:      []bool{false, false, false},
+	}, {
+		description: "maas provider, one manual provisioned machine",
+		provider:    "maas",
+		manual:      true,
+		hasJob:      []bool{false, false, false},
+	}, {
+		description: "manual provider, only manual provisioned machines",
+		provider:    "manual",
+		manual:      false,
+		hasJob:      []bool{false, false, false},
+	}, {
+		description: "openstack provider, no manual provisioned machines",
+		provider:    "openstack",
+		manual:      false,
+		hasJob:      []bool{true, true, true},
+	}, {
+		description: "openstack provider, one manual provisioned machine",
+		provider:    "openstack",
+		manual:      true,
+		hasJob:      []bool{true, true, false},
+	}}
+	for i, test := range tests {
+		c.Logf("test %d: %s", i, test.description)
+		s.setUpJobManageNetworking(c, test.provider, test.manual)
+
+		err := MigrateJobManageNetworking(s.state)
+		c.Assert(err, gc.IsNil)
+
+		s.checkJobManageNetworking(c, "0", test.hasJob[0])
+		s.checkJobManageNetworking(c, "1", test.hasJob[1])
+		s.checkJobManageNetworking(c, "2", test.hasJob[2])
+
+		s.tearDownJobManageNetworking(c)
+	}
 }

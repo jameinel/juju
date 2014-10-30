@@ -101,6 +101,11 @@ func (e *manualEnviron) SupportNetworks() bool {
 	return false
 }
 
+// SupportAddressAllocation is specified on the EnvironCapability interface.
+func (e *manualEnviron) SupportAddressAllocation(netId network.Id) (bool, error) {
+	return false, nil
+}
+
 func (e *manualEnviron) Bootstrap(ctx environs.BootstrapContext, args environs.BootstrapParams) (arch, series string, _ environs.BootstrapFinalizer, _ error) {
 	// Set "use-sshstorage" to false, so agents know not to use sshstorage.
 	cfg, err := e.Config().Apply(map[string]interface{}{"use-sshstorage": false})
@@ -247,11 +252,11 @@ func (e *manualEnviron) Instances(ids []instance.Id) (instances []instance.Insta
 	return instances, err
 }
 
-// AllocateAddress requests a new address to be allocated for the
+// AllocateAddress requests an address to be allocated for the
 // given instance on the given network. This is not supported on the
 // manual provider.
-func (*manualEnviron) AllocateAddress(_ instance.Id, _ network.Id) (network.Address, error) {
-	return network.Address{}, errors.NotSupportedf("AllocateAddress")
+func (*manualEnviron) AllocateAddress(_ instance.Id, _ network.Id, _ network.Address) error {
+	return errors.NotSupportedf("AllocateAddress")
 }
 
 // ListNetworks returns basic information about all networks known

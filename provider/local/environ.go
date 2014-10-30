@@ -75,6 +75,11 @@ func (*localEnviron) SupportNetworks() bool {
 	return false
 }
 
+// SupportAddressAllocation is specified on the EnvironCapability interface.
+func (e *localEnviron) SupportAddressAllocation(netId network.Id) (bool, error) {
+	return false, nil
+}
+
 func (*localEnviron) PrecheckInstance(series string, cons constraints.Value, placement string) error {
 	if placement != "" {
 		return fmt.Errorf("unknown placement directive: %s", placement)
@@ -169,9 +174,10 @@ func (env *localEnviron) finishBootstrap(ctx environs.BootstrapContext, mcfg *cl
 		mcfg.EnableOSUpgrade = val
 	}
 
-	// don't write proxy settings for local machine
+	// don't write proxy or mirror settings for local machine
 	mcfg.AptProxySettings = proxy.Settings{}
 	mcfg.ProxySettings = proxy.Settings{}
+	mcfg.AptMirror = ""
 
 	cloudcfg := coreCloudinit.New()
 	cloudcfg.SetAptUpdate(mcfg.EnableOSRefreshUpdate)
@@ -429,11 +435,11 @@ func (env *localEnviron) Instances(ids []instance.Id) ([]instance.Instance, erro
 	return insts, err
 }
 
-// AllocateAddress requests a new address to be allocated for the
+// AllocateAddress requests an address to be allocated for the
 // given instance on the given network. This is not supported on the
 // local provider.
-func (*localEnviron) AllocateAddress(_ instance.Id, _ network.Id) (network.Address, error) {
-	return network.Address{}, errors.NotSupportedf("AllocateAddress")
+func (*localEnviron) AllocateAddress(_ instance.Id, _ network.Id, _ network.Address) error {
+	return errors.NotSupportedf("AllocateAddress")
 }
 
 // ListNetworks returns basic information about all networks known

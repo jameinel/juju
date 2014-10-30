@@ -180,13 +180,20 @@ func (s *Service) WatchUnits() StringsWatcher {
 // WatchRelations returns a StringsWatcher that notifies of changes to the
 // lifecycles of relations involving s.
 func (s *Service) WatchRelations() StringsWatcher {
+	// TODO(mjs) - ENVUUID - filtering by env UUID needed here
 	members := bson.D{{"endpoints.servicename", s.doc.Name}}
+
 	prefix := s.doc.Name + ":"
 	infix := " " + prefix
-	filter := func(key interface{}) bool {
-		k := key.(string)
-		return strings.HasPrefix(k, prefix) || strings.Contains(k, infix)
+	filter := func(id interface{}) bool {
+		k, ok := s.st.strictLocalID(id.(string))
+		if !ok {
+			return false
+		}
+		out := strings.HasPrefix(k, prefix) || strings.Contains(k, infix)
+		return out
 	}
+
 	return newLifecycleWatcher(s.st, relationsC, members, filter)
 }
 
@@ -206,14 +213,14 @@ func (st *State) WatchEnvironMachines() StringsWatcher {
 // WatchContainers returns a StringsWatcher that notifies of changes to the
 // lifecycles of containers of the specified type on a machine.
 func (m *Machine) WatchContainers(ctype instance.ContainerType) StringsWatcher {
-	isChild := fmt.Sprintf("^%s/%s/%s$", m.doc.Id, ctype, names.NumberSnippet)
+	isChild := fmt.Sprintf("^%s/%s/%s$", m.doc.DocID, ctype, names.NumberSnippet)
 	return m.containersWatcher(isChild)
 }
 
 // WatchAllContainers returns a StringsWatcher that notifies of changes to the
 // lifecycles of all containers on a machine.
 func (m *Machine) WatchAllContainers() StringsWatcher {
-	isChild := fmt.Sprintf("^%s/%s/%s$", m.doc.Id, names.ContainerTypeSnippet, names.NumberSnippet)
+	isChild := fmt.Sprintf("^%s/%s/%s$", m.doc.DocID, names.ContainerTypeSnippet, names.NumberSnippet)
 	return m.containersWatcher(isChild)
 }
 
@@ -570,8 +577,9 @@ func (w *RelationScopeWatcher) initialInfo() (info *scopeInfo, err error) {
 	defer closer()
 
 	docs := []relationScopeDoc{}
+	// TODO(mjs) - ENVUUID - filtering by env UUID needed here
 	sel := bson.D{
-		{"_id", bson.D{{"$regex", "^" + w.prefix}}},
+		{"key", bson.D{{"$regex", "^" + w.prefix}}},
 		{"departing", bson.D{{"$ne", true}}},
 	}
 	if err = relationScopes.Find(sel).All(&docs); err != nil {
@@ -604,7 +612,7 @@ func (w *RelationScopeWatcher) mergeChanges(info *scopeInfo, ids map[interface{}
 			if exists {
 				existIds = append(existIds, id)
 			} else {
-				doc := &relationScopeDoc{Key: id}
+				doc := &relationScopeDoc{Key: w.st.localID(id)}
 				info.remove(doc.unitName())
 			}
 		default:
@@ -629,8 +637,9 @@ func (w *RelationScopeWatcher) mergeChanges(info *scopeInfo, ids map[interface{}
 
 func (w *RelationScopeWatcher) loop() error {
 	in := make(chan watcher.Change)
-	filter := func(key interface{}) bool {
-		return strings.HasPrefix(key.(string), w.prefix)
+	fullPrefix := w.st.docID(w.prefix)
+	filter := func(id interface{}) bool {
+		return strings.HasPrefix(id.(string), fullPrefix)
 	}
 	w.st.watcher.WatchCollectionWithFilter(relationScopesC, in, filter)
 	defer w.st.watcher.UnwatchCollection(relationScopesC, in)
@@ -859,7 +868,7 @@ func (m *Machine) WatchPrincipalUnits() StringsWatcher {
 		}
 		return m.doc.Principals, nil
 	}
-	return newUnitsWatcher(m.st, m.Tag(), getUnits, coll, m.doc.Id)
+	return newUnitsWatcher(m.st, m.Tag(), getUnits, coll, m.doc.DocID)
 }
 
 func newUnitsWatcher(st *State, tag names.Tag, getUnits func() ([]string, error), coll, id string) StringsWatcher {
@@ -1174,7 +1183,7 @@ var _ Watcher = (*entityWatcher)(nil)
 
 // WatchHardwareCharacteristics returns a watcher for observing changes to a machine's hardware characteristics.
 func (m *Machine) WatchHardwareCharacteristics() NotifyWatcher {
-	return newEntityWatcher(m.st, instanceDataC, m.doc.Id)
+	return newEntityWatcher(m.st, instanceDataC, m.doc.DocID)
 }
 
 // WatchStateServerInfo returns a NotifyWatcher for the stateServers collection
@@ -1184,7 +1193,7 @@ func (st *State) WatchStateServerInfo() NotifyWatcher {
 
 // Watch returns a watcher for observing changes to a machine.
 func (m *Machine) Watch() NotifyWatcher {
-	return newEntityWatcher(m.st, machinesC, m.doc.Id)
+	return newEntityWatcher(m.st, machinesC, m.doc.DocID)
 }
 
 // Watch returns a watcher for observing changes to a service.
@@ -1206,6 +1215,12 @@ func (e *Environment) Watch() NotifyWatcher {
 // synchronisation state.
 func (st *State) WatchUpgradeInfo() NotifyWatcher {
 	return newEntityWatcher(st, upgradeInfoC, currentUpgradeId)
+}
+
+// WatchRestoreInfoChanges returns a NotifyWatcher that will inform
+// when the restore status changes.
+func (st *State) WatchRestoreInfoChanges() NotifyWatcher {
+	return newEntityWatcher(st, restoreInfoC, currentRestoreId)
 }
 
 // WatchForEnvironConfigChanges returns a NotifyWatcher waiting for the Environ
@@ -1421,14 +1436,14 @@ func (w *machineUnitsWatcher) loop() error {
 	}()
 
 	machines, closer := w.st.getCollection(machinesC)
-	revno, err := getTxnRevno(machines, w.machine.doc.Id)
+	revno, err := getTxnRevno(machines, w.machine.doc.DocID)
 	closer()
 	if err != nil {
 		return err
 	}
 	machineCh := make(chan watcher.Change)
-	w.st.watcher.Watch(machinesC, w.machine.doc.Id, revno, machineCh)
-	defer w.st.watcher.Unwatch(machinesC, w.machine.doc.Id, machineCh)
+	w.st.watcher.Watch(machinesC, w.machine.doc.DocID, revno, machineCh)
+	defer w.st.watcher.Unwatch(machinesC, w.machine.doc.DocID, machineCh)
 	changes, err := w.updateMachine([]string(nil))
 	if err != nil {
 		return err
@@ -1502,14 +1517,14 @@ func (w *machineAddressesWatcher) Changes() <-chan struct{} {
 
 func (w *machineAddressesWatcher) loop() error {
 	machines, closer := w.st.getCollection(machinesC)
-	revno, err := getTxnRevno(machines, w.machine.doc.Id)
+	revno, err := getTxnRevno(machines, w.machine.doc.DocID)
 	closer()
 	if err != nil {
 		return err
 	}
 	machineCh := make(chan watcher.Change)
-	w.st.watcher.Watch(machinesC, w.machine.doc.Id, revno, machineCh)
-	defer w.st.watcher.Unwatch(machinesC, w.machine.doc.Id, machineCh)
+	w.st.watcher.Watch(machinesC, w.machine.doc.DocID, revno, machineCh)
+	defer w.st.watcher.Unwatch(machinesC, w.machine.doc.DocID, machineCh)
 	addresses := w.machine.Addresses()
 	out := w.out
 	for {

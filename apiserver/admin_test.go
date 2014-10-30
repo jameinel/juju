@@ -174,9 +174,7 @@ func (s *loginSuite) TestLoginAsDeactivatedUser(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	defer st.Close()
 	password := "password"
-	u := s.Factory.MakeUser(c, &factory.UserParams{Password: password})
-	err = u.Deactivate()
-	c.Assert(err, gc.IsNil)
+	u := s.Factory.MakeUser(c, &factory.UserParams{Password: password, Disabled: true})
 
 	_, err = st.Client().Status([]string{})
 	c.Assert(err, gc.ErrorMatches, `unknown object type "Client"`)
@@ -197,11 +195,12 @@ func (s *loginV0Suite) TestLoginSetsLogIdentifier(c *gc.C) {
 			`"Params":{"AuthTag":"machine-0","Password":"[^"]*","Nonce":"fake_nonce"}` +
 			`}`,
 		// Now that we are logged in, we see the entity's tag
-		// [0-9.umns] is to handle timestamps that are ns, us, ms, or s
+		// [0-9.µumns] is to handle timestamps that are ns, µs, ms, or s
 		// long, though we expect it to be in the 'ms' range.
-		`-> \[[0-9A-F]+\] machine-0 [0-9.]+[umn]?s {"RequestId":2,"Response":.*} Admin\[""\].Login`,
+		// Note: Go1.4 produces µs; Go1.3 produces us.
+		`-> \[[0-9A-F]+\] machine-0 [0-9.µumns]+ {"RequestId":2,"Response":.*} Admin\[""\].Login`,
 		`<- \[[0-9A-F]+\] machine-0 {"RequestId":3,"Type":"Machiner","Request":"Life","Params":{"Entities":\[{"Tag":"machine-0"}\]}}`,
-		`-> \[[0-9A-F]+\] machine-0 [0-9.umns]+ {"RequestId":3,"Response":{"Results":\[{"Life":"alive","Error":null}\]}} Machiner\[""\]\.Life`,
+		`-> \[[0-9A-F]+\] machine-0 [0-9.µumns]+ {"RequestId":3,"Response":{"Results":\[{"Life":"alive","Error":null}\]}} Machiner\[""\]\.Life`,
 	})
 }
 
