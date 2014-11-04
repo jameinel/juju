@@ -16,6 +16,7 @@ import (
 
 type FactorySuite struct {
 	HookContextSuite
+	paths      RealPaths
 	factory    context.Factory
 	membership map[int][]string
 }
@@ -25,7 +26,9 @@ var _ = gc.Suite(&FactorySuite{})
 func (s *FactorySuite) SetUpTest(c *gc.C) {
 	s.HookContextSuite.SetUpTest(c)
 	s.membership = map[int][]string{}
+	s.paths = NewRealPaths(c)
 	factory, err := context.NewFactory(
+		s.paths,
 		s.uniter,
 		s.unit.Tag().(names.UnitTag),
 		func() map[int]*context.RelationInfo {
