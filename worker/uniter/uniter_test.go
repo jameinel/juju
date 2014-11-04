@@ -1361,8 +1361,7 @@ var actionEventTests = []uniterTest{
 		waitHooks{"install", "config-changed", "start"},
 		verifyCharm{},
 		addAction{"action-log", nil},
-		waitHooks{"action-log"},
-		verifyActionResults{[]actionResult{{
+		waitActionResults{[]actionResult{{
 			name:    "action-log",
 			results: map[string]interface{}{},
 			status:  params.ActionCompleted,
@@ -1385,8 +1384,7 @@ var actionEventTests = []uniterTest{
 		waitHooks{"install", "config-changed", "start"},
 		verifyCharm{},
 		addAction{"action-log-fail", nil},
-		waitHooks{"action-log-fail"},
-		verifyActionResults{[]actionResult{{
+		waitActionResults{[]actionResult{{
 			name: "action-log-fail",
 			results: map[string]interface{}{
 				"foo": "still works",
@@ -1412,8 +1410,7 @@ var actionEventTests = []uniterTest{
 		waitHooks{"install", "config-changed", "start"},
 		verifyCharm{},
 		addAction{"action-log-fail-error", nil},
-		waitHooks{"action-log-fail-error"},
-		verifyActionResults{[]actionResult{{
+		waitActionResults{[]actionResult{{
 			name: "action-log-fail-error",
 			results: map[string]interface{}{
 				"foo": "still works",
@@ -1442,8 +1439,7 @@ var actionEventTests = []uniterTest{
 			name:   "snapshot",
 			params: map[string]interface{}{"outfile": "foo.bar"},
 		},
-		waitHooks{"snapshot"},
-		verifyActionResults{[]actionResult{{
+		waitActionResults{[]actionResult{{
 			name: "snapshot",
 			results: map[string]interface{}{
 				"outfile": map[string]interface{}{
@@ -1478,12 +1474,11 @@ var actionEventTests = []uniterTest{
 			name:   "snapshot",
 			params: map[string]interface{}{"outfile": 2},
 		},
-		waitHooks{"snapshot"},
-		verifyActionResults{[]actionResult{{
+		waitActionResults{[]actionResult{{
 			name:    "snapshot",
 			results: map[string]interface{}{},
 			status:  params.ActionFailed,
-			message: `action "snapshot" param validation failed: JSON validation failed: (root).outfile : must be of type string, given 2`,
+			message: `cannot run "snapshot" action: JSON validation failed: (root).outfile : must be of type string, given 2`,
 		}}},
 		waitUnit{status: params.StatusStarted},
 	), ut(
@@ -1502,12 +1497,11 @@ var actionEventTests = []uniterTest{
 		waitHooks{"install", "config-changed", "start"},
 		verifyCharm{},
 		addAction{"snapshot", map[string]interface{}{"outfile": "foo.bar"}},
-		waitHooks{"snapshot"},
-		verifyActionResults{[]actionResult{{
+		waitActionResults{[]actionResult{{
 			name:    "snapshot",
 			results: map[string]interface{}{},
 			status:  params.ActionFailed,
-			message: `action "snapshot" param validation failed: no spec was defined for action "snapshot"`,
+			message: `cannot run "snapshot" action: not defined`,
 		}}},
 		waitUnit{status: params.StatusStarted},
 	), ut(
@@ -1529,12 +1523,7 @@ var actionEventTests = []uniterTest{
 		waitUnit{status: params.StatusStarted},
 		waitHooks{"install", "config-changed", "start"},
 		verifyCharm{},
-		waitHooks{
-			"action-log",
-			"action-log",
-			"action-log",
-		},
-		verifyActionResults{[]actionResult{{
+		waitActionResults{[]actionResult{{
 			name:    "action-log",
 			results: map[string]interface{}{},
 			status:  params.ActionCompleted,
@@ -1564,8 +1553,7 @@ var actionEventTests = []uniterTest{
 		waitHooks{"install", "config-changed", "start"},
 		verifyCharm{},
 		addAction{"action-log", nil},
-		waitNoHooks{"action-log", "fail-action-log"},
-		verifyActionResults{[]actionResult{{
+		waitActionResults{[]actionResult{{
 			name:    "action-log",
 			results: map[string]interface{}{},
 			status:  params.ActionFailed,
@@ -1575,26 +1563,24 @@ var actionEventTests = []uniterTest{
 	), ut(
 		"actions are not attempted from ModeHookError and do not clear the error",
 		startupErrorWithCustomCharm{
-			badHook: "install",
+			badHook: "start",
 			customize: func(c *gc.C, ctx *context, path string) {
 				ctx.writeAction(c, path, "action-log")
 				ctx.writeActionsYaml(c, path, "action-log")
 			},
 		},
 		addAction{"action-log", nil},
-		waitNoHooks{"action-log", "fail-action-log"},
 		waitUnit{
 			status: params.StatusError,
-			info:   `hook failed: "install"`,
+			info:   `hook failed: "start"`,
 			data: map[string]interface{}{
-				"hook": "install",
+				"hook": "start",
 			},
 		},
-		fixHook{"install"},
+		verifyNoActionResults{},
 		resolveError{state.ResolvedNoHooks},
 		waitUnit{status: params.StatusStarted},
-		waitHooks{"config-changed", "start", "action-log"},
-		verifyActionResults{[]actionResult{{
+		waitActionResults{[]actionResult{{
 			name:    "action-log",
 			results: map[string]interface{}{},
 			status:  params.ActionCompleted,
@@ -2184,13 +2170,16 @@ type actionResult struct {
 	message string
 }
 
-type verifyActionResults struct {
+type waitActionResults struct {
 	expectedResults []actionResult
 }
 
-func (s verifyActionResults) step(c *gc.C, ctx *context) {
-	timeout := time.After(worstCase)
+func (s waitActionResults) step(c *gc.C, ctx *context) {
 	resultsWatcher := ctx.st.WatchActionResults()
+	defer func() {
+		c.Assert(resultsWatcher.Stop(), gc.IsNil)
+	}()
+	timeout := time.After(worstCase)
 	for {
 		ctx.s.BackingState.StartSync()
 		select {
@@ -2198,9 +2187,12 @@ func (s verifyActionResults) step(c *gc.C, ctx *context) {
 			continue
 		case <-timeout:
 			c.Fatalf("timed out waiting for action results")
-		case changes := <-resultsWatcher.Changes():
+		case changes, ok := <-resultsWatcher.Changes():
 			c.Logf("Got changes: %#v", changes)
-			c.Assert(len(changes), gc.Equals, len(s.expectedResults))
+			c.Assert(ok, jc.IsTrue)
+			if len(changes) != len(s.expectedResults) {
+				continue
+			}
 			actualResults := make([]actionResult, len(changes))
 			for i, change := range changes {
 				c.Logf("Change: %s", change)
@@ -2241,6 +2233,14 @@ findMatch:
 	}
 
 	c.Assert(matches, gc.Equals, desiredMatches)
+}
+
+type verifyNoActionResults struct{}
+
+func (s verifyNoActionResults) step(c *gc.C, ctx *context) {
+	result, err := ctx.unit.ActionResults()
+	c.Assert(err, gc.IsNil)
+	c.Assert(result, gc.HasLen, 0)
 }
 
 // make sure no hooks are run from the given slice

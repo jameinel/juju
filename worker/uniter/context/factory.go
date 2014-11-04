@@ -10,6 +10,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/juju/names"
+	"gopkg.in/juju/charm.v4"
 	"gopkg.in/juju/charm.v4/hooks"
 
 	"github.com/juju/juju/api/uniter"
@@ -32,8 +33,8 @@ type Factory interface {
 	NewHookContext(hookInfo hook.Info) (*HookContext, error)
 
 	// NewActionContext returns an execution context suitable for running the
-	// supplied action (which is assumed to be already validated).
-	NewActionContext(tag names.ActionTag, name string, params map[string]interface{}) (*HookContext, error)
+	// supplied action id, which will be throroughly validated.
+	NewActionContext(actionId string) (*HookContext, error)
 }
 
 // RelationsFunc is used to get snapshots of relation membership at context
@@ -43,7 +44,10 @@ type RelationsFunc func() map[int]*RelationInfo
 // NewFactory returns a Factory capable of creating execution contexts backed
 // by the supplied unit's supplied API connection.
 func NewFactory(
-	state *uniter.State, unitTag names.UnitTag, getRelationInfos RelationsFunc,
+	paths Paths,
+	state *uniter.State,
+	unitTag names.UnitTag,
+	getRelationInfos RelationsFunc,
 ) (
 	Factory, error,
 ) {
@@ -70,6 +74,7 @@ func NewFactory(
 	return &factory{
 		unit:             unit,
 		state:            state,
+		paths:            paths,
 		envUUID:          environment.UUID(),
 		envName:          environment.Name(),
 		machineTag:       machineTag,
@@ -86,6 +91,7 @@ type factory struct {
 	state *uniter.State
 
 	// Fields that shouldn't change in a factory's lifetime.
+	paths      Paths
 	envUUID    string
 	envName    string
 	machineTag names.MachineTag
@@ -141,12 +147,30 @@ func (f *factory) NewHookContext(hookInfo hook.Info) (*HookContext, error) {
 }
 
 // NewActionContext exists to satisfy the Factory interface.
-func (f *factory) NewActionContext(tag names.ActionTag, name string, params map[string]interface{}) (*HookContext, error) {
+func (f *factory) NewActionContext(actionId string) (*HookContext, error) {
+	ch, err := charm.ReadCharmDir(f.paths.GetCharmDir())
+	if err != nil {
+		return nil, errors.Annotatef(err, "cannot read charm actions")
+	}
+	tag := names.NewActionTag(actionId)
+	action, err := f.state.Action(tag)
+	if err != nil {
+		return nil, err
+	}
+	name := action.Name()
+	spec, ok := ch.Actions().ActionSpecs[name]
+	if !ok {
+		return nil, &badActionError{name, "not defined"}
+	}
+	params := action.Params()
+	if _, err = spec.ValidateParams(params); err != nil {
+		return nil, &badActionError{name, err.Error()}
+	}
 	ctx, err := f.coreContext()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	ctx.actionData = NewActionData(&tag, params)
+	ctx.actionData = newActionData(name, &tag, params)
 	ctx.id = f.newId(name)
 	return ctx, nil
 }

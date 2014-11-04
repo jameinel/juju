@@ -94,7 +94,9 @@ func (s *FactorySuite) AssertCoreContext(c *gc.C, ctx *context.HookContext) {
 }
 
 func (s *FactorySuite) AssertNotActionContext(c *gc.C, ctx *context.HookContext) {
-	c.Assert(ctx.ActionData(), gc.IsNil)
+	name, err := ctx.ActionName()
+	c.Assert(name, gc.Equals, "")
+	c.Assert(err, gc.ErrorMatches, "not running an action")
 }
 
 func (s *FactorySuite) AssertRelationContext(c *gc.C, ctx *context.HookContext, relId int) *context.ContextRelation {
@@ -289,13 +291,9 @@ func (s *FactorySuite) TestNewHookContextWithBadRelation(c *gc.C) {
 }
 
 func (s *FactorySuite) TestNewActionContext(c *gc.C) {
-	tag := names.NewActionTag("blah_a_1")
-	params := map[string]interface{}{"foo": "bar"}
-	ctx, err := s.factory.NewActionContext(tag, "blah", params)
+	ctx, err := s.factory.NewActionContext("blah")
 	c.Assert(err, gc.IsNil)
 	s.AssertCoreContext(c, ctx)
 	s.AssertNotRelationContext(c, ctx)
-	c.Assert(ctx.ActionData(), jc.DeepEquals, context.NewActionData(
-		&tag, params,
-	))
+	c.Fatalf("rewrite me")
 }
