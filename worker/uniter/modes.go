@@ -51,15 +51,6 @@ func ModeContinue(u *Uniter) (next Mode, err error) {
 		switch opState.Hook.Kind {
 		case hooks.Stop:
 			return ModeTerminating, nil
-		case hooks.UpgradeCharm:
-			return ModeConfigChanged, nil
-		case hooks.ConfigChanged:
-			if !opState.Started {
-				return ModeStarting, nil
-			}
-		}
-		if !u.ranConfigChanged {
-			return ModeConfigChanged, nil
 		}
 		return ModeAbide, nil
 	case operation.RunHook:
@@ -116,32 +107,6 @@ func ModeUpgrading(curl *charm.URL) Mode {
 		}
 		return ModeContinue, nil
 	}
-}
-
-// ModeConfigChanged runs the "config-changed" hook.
-func ModeConfigChanged(u *Uniter) (next Mode, err error) {
-	defer modeContext("ModeConfigChanged", &err)()
-	if !u.operationState().Started {
-		if err = u.unit.SetStatus(params.StatusInstalled, "", nil); err != nil {
-			return nil, err
-		}
-	}
-	u.f.DiscardConfigEvent()
-	err = u.runHook(hook.Info{Kind: hooks.ConfigChanged})
-	if err != nil {
-		return nil, err
-	}
-	return ModeContinue, nil
-}
-
-// ModeStarting runs the "start" hook.
-func ModeStarting(u *Uniter) (next Mode, err error) {
-	defer modeContext("ModeStarting", &err)()
-	err = u.runHook(hook.Info{Kind: hooks.Start})
-	if err != nil {
-		return nil, err
-	}
-	return ModeContinue, nil
 }
 
 // ModeStopping runs the "stop" hook.
@@ -213,6 +178,11 @@ func ModeAbide(u *Uniter) (next Mode, err error) {
 	}
 	if err = u.unit.SetStatus(params.StatusStarted, "", nil); err != nil {
 		return nil, err
+	}
+	if !u.ranConfigChanged {
+		if err := u.runHook(hook.Info{Kind: hooks.ConfigChanged}); err != nil {
+			return nil, err
+		}
 	}
 	u.f.WantUpgradeEvent(false)
 	u.relations.StartHooks()

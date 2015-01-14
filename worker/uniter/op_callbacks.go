@@ -49,6 +49,9 @@ func (opc *operationCallbacks) PrepareHook(hi hook.Info) (string, error) {
 	if hi.Kind.IsRelation() {
 		return opc.u.relations.PrepareHook(hi)
 	}
+	if hi.Kind == hooks.ConfigChanged {
+		opc.u.f.DiscardConfigEvent()
+	}
 	return string(hi.Kind), nil
 }
 
@@ -57,8 +60,13 @@ func (opc *operationCallbacks) CommitHook(hi hook.Info) error {
 	if hi.Kind.IsRelation() {
 		return opc.u.relations.CommitHook(hi)
 	}
-	if hi.Kind == hooks.ConfigChanged {
+	switch hi.Kind {
+	case hooks.ConfigChanged:
 		opc.u.ranConfigChanged = true
+	case hooks.Install:
+		if !opc.u.operationState().Started {
+			return opc.u.unit.SetStatus(params.StatusInstalled, "", nil)
+		}
 	}
 	return nil
 }
@@ -113,4 +121,14 @@ func (opc *operationCallbacks) GetArchiveInfo(charmURL *corecharm.URL) (charm.Bu
 // SetCurrentCharm is part of the operation.Callbacks interface.
 func (opc *operationCallbacks) SetCurrentCharm(charmURL *corecharm.URL) error {
 	return opc.u.f.SetCharm(charmURL)
+}
+
+// ClearResolvedFlag is part of the operation.Callbacks interface,
+func (opc *operationCallbacks) ClearResolvedFlag() error {
+	return opc.u.f.ClearResolved()
+}
+
+// InitializeMetricsCollector is part of the operation.Callbacks interface,
+func (opc *operationCallbacks) InitializeMetricsCollector() error {
+	return opc.u.initializeMetricsCollector()
 }

@@ -8,7 +8,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	utilexec "github.com/juju/utils/exec"
 	gc "gopkg.in/check.v1"
-	corecharm "gopkg.in/juju/charm.v4"
+	//corecharm "gopkg.in/juju/charm.v4"
 	"gopkg.in/juju/charm.v4/hooks"
 
 	"github.com/juju/juju/worker/uniter/hook"
@@ -32,22 +32,25 @@ func (s *FactorySuite) SetUpTest(c *gc.C) {
 }
 
 func (s *FactorySuite) TestNewDeploy(c *gc.C) {
-	op, err := s.factory.NewDeploy(nil, operation.Install)
-	c.Check(op, gc.IsNil)
-	c.Check(err, gc.ErrorMatches, "charm url required")
+	c.Fatalf("not finished")
+	/*
+	   op, err := s.factory.NewDeploy(nil, operation.Install)
+	   c.Check(op, gc.IsNil)
+	   c.Check(err, gc.ErrorMatches, "charm url required")
 
-	charmURL := corecharm.MustParseURL("cs:quantal/wordpress-1")
-	op, err = s.factory.NewDeploy(charmURL, operation.RunHook)
-	c.Check(op, gc.IsNil)
-	c.Check(err, gc.ErrorMatches, "unknown deploy kind: run-hook")
+	   charmURL := corecharm.MustParseURL("cs:quantal/wordpress-1")
+	   op, err = s.factory.NewDeploy(charmURL, operation.RunHook)
+	   c.Check(op, gc.IsNil)
+	   c.Check(err, gc.ErrorMatches, "unknown deploy kind: run-hook")
 
-	op, err = s.factory.NewDeploy(charmURL, operation.Install)
-	c.Check(err, jc.ErrorIsNil)
-	c.Check(op.String(), gc.Equals, "install cs:quantal/wordpress-1")
+	   op, err = s.factory.NewDeploy(charmURL, operation.Install)
+	   c.Check(err, jc.ErrorIsNil)
+	   c.Check(op.String(), gc.Equals, "install cs:quantal/wordpress-1")
 
-	op, err = s.factory.NewDeploy(charmURL, operation.Upgrade)
-	c.Check(err, jc.ErrorIsNil)
-	c.Check(op.String(), gc.Equals, "upgrade cs:quantal/wordpress-1")
+	   op, err = s.factory.NewDeploy(charmURL, operation.Upgrade)
+	   c.Check(err, jc.ErrorIsNil)
+	   c.Check(op.String(), gc.Equals, "upgrade cs:quantal/wordpress-1")
+	*/
 }
 
 func (s *FactorySuite) TestNewAction(c *gc.C) {
@@ -101,6 +104,7 @@ func (s *FactorySuite) TestNewCommands(c *gc.C) {
 }
 
 func (s *FactorySuite) TestNewHook(c *gc.C) {
+	c.Fatalf("not finished")
 	op, err := s.factory.NewHook(hook.Info{Kind: hooks.Kind("gibberish")})
 	c.Check(op, gc.IsNil)
 	c.Check(err, gc.ErrorMatches, `unknown hook kind "gibberish"`)
