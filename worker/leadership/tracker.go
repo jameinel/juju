@@ -148,7 +148,7 @@ func (t *tracker) setLeader(untilTime time.Time) {
 
 // setMinion arranges for lease acquisition when there's an opportunity.
 func (t *tracker) setMinion() {
-	logger.Infof("%s leadership for %s denied")
+	logger.Infof("%s leadership for %s denied", t.serviceName, t.unitName)
 	t.isMinion = true
 	t.renewLease = nil
 	if t.claimLease == nil {
