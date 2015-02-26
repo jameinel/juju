@@ -29,9 +29,13 @@ var _ = gc.Suite(&TrackerSuite{})
 const (
 	trackerDuration = coretesting.ShortWait
 	leaseDuration   = trackerDuration * 2
-	oneRefresh      = trackerDuration * 3 / 2
-	noRefresh       = trackerDuration / 2
 )
+
+func refreshes(count int) time.Duration {
+	halfRefreshes := (2 * count) + 1
+	twiceDuration := trackerDuration * time.Duration(halfRefreshes)
+	return twiceDuration / 2
+}
 
 func (s *TrackerSuite) SetUpTest(c *gc.C) {
 	s.unitTag = names.NewUnitTag("led-service/123")
@@ -56,6 +60,12 @@ func (s *TrackerSuite) unblockRelease(c *gc.C) {
 	default:
 		c.Fatalf("did nobody call BlockUntilLeadershipReleased?")
 	}
+}
+
+func (s *TrackerSuite) TestServiceName(c *gc.C) {
+	tracker := leadership.NewTrackerWorker(s.unitTag, s.manager, trackerDuration)
+	defer assertStop(c, tracker)
+	c.Assert(tracker.ServiceName(), gc.Equals, "led-service")
 }
 
 func (s *TrackerSuite) TestOnLeaderSuccess(c *gc.C) {
@@ -131,7 +141,7 @@ func (s *TrackerSuite) TestLoseLeadership(c *gc.C) {
 
 	// Wait long enough for a single refresh, to trigger ErrClaimDenied; then
 	// check the next ticket fails.
-	<-time.After(oneRefresh)
+	<-time.After(refreshes(1))
 	assertClaimLeader(c, tracker, false)
 
 	// Stop the tracker before trying to look at its stub.
@@ -170,7 +180,7 @@ func (s *TrackerSuite) TestGainLeadership(c *gc.C) {
 	s.unblockRelease(c)
 
 	// ...and, uh, voodoo sleep a bit, but not long enough to trigger a refresh...
-	<-time.After(noRefresh)
+	<-time.After(refreshes(0))
 
 	// ...then check the next ticket succeeds.
 	assertClaimLeader(c, tracker, true)
