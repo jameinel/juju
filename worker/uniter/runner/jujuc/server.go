@@ -44,6 +44,9 @@ var newCommands = map[string]func(Context) cmd.Command{
 	"owner-get" + cmdSuffix:     NewOwnerGetCommand,
 	"add-metric" + cmdSuffix:    NewAddMetricCommand,
 	"juju-reboot" + cmdSuffix:   NewJujuRebootCommand,
+	"is-leader" + cmdSuffix:     NewIsLeaderCommand,
+	"leader-get" + cmdSuffix:    NewLeaderGetCommand,
+	"leader-set" + cmdSuffix:    NewLeaderSetCommand,
 }
 
 var storageCommands = map[string]func(Context) cmd.Command{
