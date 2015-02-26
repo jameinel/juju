@@ -44,10 +44,13 @@ func (lsa *LeadershipSettingsAccessor) Merge(serviceId string, settings map[stri
 	}
 
 	results, err := lsa.bulkMerge(lsa.prepareMerge(serviceId, settings))
+	if err == nil && results.Results[0].Error != nil {
+		err = results.Results[0].Error
+	}
 	if err != nil {
 		return errors.Annotate(err, "could not merge settings")
 	}
-	return results.Results[0].Error
+	return nil
 }
 
 // Read retrieves the leadership settings for the given service
@@ -59,10 +62,13 @@ func (lsa *LeadershipSettingsAccessor) Read(serviceId string) (map[string]string
 	}
 
 	results, err := lsa.bulkRead(lsa.prepareRead(serviceId))
+	if err == nil && results.Results[0].Error != nil {
+		err = results.Results[0].Error
+	}
 	if err != nil {
 		return nil, errors.Annotate(err, "could not read leadership settings")
 	}
-	return results.Results[0].Settings, results.Results[0].Error
+	return results.Results[0].Settings, nil
 }
 
 // WatchLeadershipSettings returns a watcher which can be used to wait
