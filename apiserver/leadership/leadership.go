@@ -119,7 +119,9 @@ func (m *leadershipService) ClaimLeadership(args params.ClaimLeadershipBulkParam
 			continue
 		}
 
+		logger.Infof("claiming leadership on behalf of %s %s", serviceTag, unitTag)
 		err = m.LeadershipManager.ClaimLeadership(serviceTag.Id(), unitTag.Id(), duration)
+		logger.Infof("claimed leadership on behalf of %s %s; got %v", serviceTag, unitTag, err)
 		if err != nil {
 			result.Error = common.ServerError(err)
 		}

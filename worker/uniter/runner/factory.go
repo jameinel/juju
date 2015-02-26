@@ -15,6 +15,7 @@ import (
 
 	"github.com/juju/juju/api/uniter"
 	"github.com/juju/juju/apiserver/params"
+	"github.com/juju/juju/worker/leadership"
 	"github.com/juju/juju/worker/uniter/hook"
 )
 
@@ -54,6 +55,7 @@ type RelationsFunc func() map[int]*RelationInfo
 // by the supplied unit's supplied API connection.
 func NewFactory(
 	state *uniter.State,
+	tracker leadership.Tracker,
 	unitTag names.UnitTag,
 	getRelationInfos RelationsFunc,
 	paths Paths,
@@ -81,23 +83,25 @@ func NewFactory(
 		return nil, errors.Trace(err)
 	}
 	return &factory{
-		unit:             unit,
-		state:            state,
-		paths:            paths,
-		envUUID:          environment.UUID(),
-		envName:          environment.Name(),
-		machineTag:       machineTag,
-		ownerTag:         ownerTag,
-		getRelationInfos: getRelationInfos,
-		relationCaches:   map[int]*RelationCache{},
-		rand:             rand.New(rand.NewSource(time.Now().Unix())),
+		unit:              unit,
+		state:             state,
+		leadershipTracker: tracker,
+		paths:             paths,
+		envUUID:           environment.UUID(),
+		envName:           environment.Name(),
+		machineTag:        machineTag,
+		ownerTag:          ownerTag,
+		getRelationInfos:  getRelationInfos,
+		relationCaches:    map[int]*RelationCache{},
+		rand:              rand.New(rand.NewSource(time.Now().Unix())),
 	}, nil
 }
 
 type factory struct {
 	// API connection fields; unit should be deprecated, but isn't yet.
-	unit  *uniter.Unit
-	state *uniter.State
+	unit              *uniter.Unit
+	state             *uniter.State
+	leadershipTracker leadership.Tracker
 
 	// Fields that shouldn't change in a factory's lifetime.
 	paths      Paths

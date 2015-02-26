@@ -21,6 +21,7 @@ import (
 	"github.com/juju/juju/state/watcher"
 	"github.com/juju/juju/version"
 	"github.com/juju/juju/worker"
+	"github.com/juju/juju/worker/leadership"
 	"github.com/juju/juju/worker/uniter/charm"
 	"github.com/juju/juju/worker/uniter/filter"
 	"github.com/juju/juju/worker/uniter/operation"
@@ -43,12 +44,13 @@ type UniterExecutionObserver interface {
 // delegated to Mode values, which are expected to react to events and direct
 // the uniter's responses to them.
 type Uniter struct {
-	tomb      tomb.Tomb
-	st        *uniter.State
-	paths     Paths
-	f         filter.Filter
-	unit      *uniter.Unit
-	relations Relations
+	tomb              tomb.Tomb
+	st                *uniter.State
+	leadershipTracker leadership.Tracker
+	paths             Paths
+	f                 filter.Filter
+	unit              *uniter.Unit
+	relations         Relations
 
 	deployer          *deployerProxy
 	operationFactory  operation.Factory
@@ -71,15 +73,28 @@ type Uniter struct {
 // NewUniter creates a new Uniter which will install, run, and upgrade
 // a charm on behalf of the unit with the given unitTag, by executing
 // hooks and operations provoked by changes in st.
-func NewUniter(st *uniter.State, unitTag names.UnitTag, dataDir string, hookLock *fslock.Lock) *Uniter {
+func NewUniter(
+	st *uniter.State,
+	unitTag names.UnitTag,
+	dataDir string,
+	hookLock *fslock.Lock,
+	tracker leadership.TrackerWorker,
+) *Uniter {
 	u := &Uniter{
-		st:               st,
-		paths:            NewPaths(dataDir, unitTag),
-		hookLock:         hookLock,
-		collectMetricsAt: inactiveMetricsTimer,
+		st:                st,
+		paths:             NewPaths(dataDir, unitTag),
+		hookLock:          hookLock,
+		collectMetricsAt:  inactiveMetricsTimer,
+		leadershipTracker: tracker,
 	}
 	go func() {
 		defer u.tomb.Done()
+		go func() {
+			// We have to do this because the tracker worker could fail and
+			// render us subtly non-functional; now if it stops, we stop. We
+			// should do something more elegant.
+			u.tomb.Kill(tracker.Wait())
+		}()
 		u.tomb.Kill(u.loop(unitTag))
 	}()
 	return u
@@ -184,7 +199,7 @@ func (u *Uniter) init(unitTag names.UnitTag) (err error) {
 	}
 	u.deployer = &deployerProxy{deployer}
 	runnerFactory, err := runner.NewFactory(
-		u.st, unitTag, u.relations.GetInfo, u.paths,
+		u.st, u.leadershipTracker, unitTag, u.relations.GetInfo, u.paths,
 	)
 	if err != nil {
 		return err

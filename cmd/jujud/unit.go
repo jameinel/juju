@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/juju/cmd"
 	"github.com/juju/errors"
@@ -25,6 +26,7 @@ import (
 	"github.com/juju/juju/version"
 	"github.com/juju/juju/worker"
 	"github.com/juju/juju/worker/apiaddressupdater"
+	"github.com/juju/juju/worker/leadership"
 	workerlogger "github.com/juju/juju/worker/logger"
 	"github.com/juju/juju/worker/proxyupdater"
 	"github.com/juju/juju/worker/rsyslog"
@@ -170,12 +172,26 @@ func (a *UnitAgent) APIWorkers() (worker.Worker, error) {
 	runner.StartWorker("logger", func() (worker.Worker, error) {
 		return workerlogger.NewLogger(st.Logger(), agentConfig), nil
 	})
+
+	// TODO(fwereade): add a persistent wrapper for TrackerWorker so that uniter
+	// can just use Tracker and trust the restarting behaviour, rather than using
+	// TrackerWorker and having a self.tomb.Kill(tracker.Wait()) goroutine.
+	// TODO(fwereade): there's got to be a better way to get this where it needs
+	// to be anyway...
+	trapdoor := make(chan leadership.TrackerWorker)
+	runner.StartWorker("leadership-tracker", func() (worker.Worker, error) {
+		client := st.LeadershipManager()
+		tracker := leadership.NewTrackerWorker(unitTag, client, 30*time.Second)
+		trapdoor <- tracker
+		return tracker, nil
+	})
 	runner.StartWorker("uniter", func() (worker.Worker, error) {
 		uniterFacade, err := st.Uniter()
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		return uniter.NewUniter(uniterFacade, unitTag, dataDir, hookLock), nil
+		tracker := <-trapdoor
+		return uniter.NewUniter(uniterFacade, unitTag, dataDir, hookLock, tracker), nil
 	})
 
 	runner.StartWorker("apiaddressupdater", func() (worker.Worker, error) {
