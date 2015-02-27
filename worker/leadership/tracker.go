@@ -102,11 +102,13 @@ func (t *tracker) loop() error {
 			return tomb.ErrDying
 		case <-t.claimLease:
 			logger.Infof("%s claiming lease for %s leadership", t.unitName, t.serviceName)
+			t.claimLease = nil
 			if err := t.refresh(); err != nil {
 				return errors.Trace(err)
 			}
 		case <-t.renewLease:
 			logger.Infof("%s renewing lease for %s leadership", t.unitName, t.serviceName)
+			t.renewLease = nil
 			if err := t.refresh(); err != nil {
 				return errors.Trace(err)
 			}
