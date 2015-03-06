@@ -61,16 +61,17 @@ bootcmd:
   auto eth0
   iface eth0 inet static
       address 0.1.2.3
-      netmask 0.1.2.0/24
+      netmask 255.255.255.255
       dns-nameservers ns1.invalid ns2.invalid
-      pre-up ip route add 0.1.2.1 dev eth0
-      pre-up ip route add default via 0.1.2.1
+      post-up ip route add 0.1.2.1 dev eth0
+      post-up ip route add default via 0.1.2.1
       post-down ip route del default via 0.1.2.1
       post-down ip route del 0.1.2.1 dev eth0
 
   # interface "eth1"
   iface eth1 inet dhcp
   ' > '` + s.networkInterfacesFile + `'
+- ifdown --force eth0 ; ifup --force --verbose eth0
 `
 	assertUserData(c, cloudConf, expected)
 }

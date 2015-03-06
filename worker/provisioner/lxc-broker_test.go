@@ -700,6 +700,7 @@ func (s *lxcBrokerSuite) TestMaybeAllocateStaticIP(c *gc.C) {
 		CIDR:           "0.1.2.0/24",
 		ConfigType:     network.ConfigStatic,
 		InterfaceName:  "eth0", // generated from the device index.
+		MACAddress:     provisioner.MACAddressTemplate,
 		DNSServers:     network.NewAddresses("ns1.dummy"),
 		Address:        network.NewAddress("0.1.2.3", network.ScopeUnknown),
 		GatewayAddress: network.NewAddress("0.1.2.1", network.ScopeUnknown),
@@ -865,6 +866,7 @@ func (f *fakeAPI) PrepareContainerInterfaceInfo(tag names.MachineTag) ([]network
 	}
 	return []network.InterfaceInfo{{
 		DeviceIndex:    0,
+		MACAddress:     "aa:bb:cc:dd:ee:ff",
 		CIDR:           "0.1.2.0/24",
 		InterfaceName:  "dummy0",
 		Address:        network.NewAddress("0.1.2.3", network.ScopeUnknown),

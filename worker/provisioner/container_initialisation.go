@@ -242,7 +242,7 @@ func containerManagerConfig(
 	managerConfig := container.ManagerConfig(managerConfigResult.ManagerConfig)
 
 	// Enable IP and ARP forwarding if needed.
-	if _, ok := managerConfig[container.ConfigIPForwarding]; ok {
+	if ipfwd := managerConfig.PopValue(container.ConfigIPForwarding); ipfwd != "" {
 		if err := setIPAndARPForwarding(true); err != nil {
 			return nil, errors.Trace(err)
 		}

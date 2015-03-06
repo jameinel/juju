@@ -5,6 +5,7 @@ package container
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"text/template"
@@ -58,10 +59,10 @@ iface lo inet loopback{{define "static"}}
 auto {{.InterfaceName}}{{end}}
 iface {{.InterfaceName}} inet static
     address {{.Address.Value}}
-    netmask {{.CIDR}}{{if gt (len .DNSServers) 0}}
+    netmask 255.255.255.255{{if gt (len .DNSServers) 0}}
     dns-nameservers{{range $dns := .DNSServers}} {{$dns.Value}}{{end}}{{end}}
-    pre-up ip route add {{.GatewayAddress.Value}} dev {{.InterfaceName}}
-    pre-up ip route add default via {{.GatewayAddress.Value}}
+    post-up ip route add {{.GatewayAddress.Value}} dev {{.InterfaceName}}
+    post-up ip route add default via {{.GatewayAddress.Value}}
     post-down ip route del default via {{.GatewayAddress.Value}}
     post-down ip route del {{.GatewayAddress.Value}} dev {{.InterfaceName}}
 {{end}}{{define "dhcp"}}
@@ -97,6 +98,16 @@ func newCloudInitConfigWithNetworks(networkConfig *NetworkConfig) (*coreCloudini
 
 	// Now add it to cloud-init as a file created early in the boot process.
 	cloudConfig.AddBootTextFile(networkInterfacesFile, buf.String(), 0644)
+	// And restart each interface (if enabled) to work around the LXC
+	// package limitation of totally ignoring /etc/network/interfaces.
+	for _, iface := range networkConfig.Interfaces {
+		if iface.Disabled || iface.NoAutoStart {
+			continue
+		}
+		n := iface.InterfaceName
+		script := fmt.Sprintf("ifdown --force %s ; ifup --force --verbose %s", n, n)
+		cloudConfig.AddBootCmd(script)
+	}
 	return cloudConfig, nil
 }
 
