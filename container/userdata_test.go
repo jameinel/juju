@@ -71,7 +71,7 @@ bootcmd:
   # interface "eth1"
   iface eth1 inet dhcp
   ' > '` + s.networkInterfacesFile + `'
-- ifdown --force eth0 ; ifup --force --verbose eth0
+- ifdown --force eth0 ; ifup --verbose eth0
 `
 	assertUserData(c, cloudConf, expected)
 }

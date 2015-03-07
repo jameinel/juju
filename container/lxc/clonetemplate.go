@@ -43,8 +43,18 @@ func templateUserData(
 	aptMirror string,
 	enablePackageUpdates bool,
 	enableOSUpgrades bool,
+	networkConfig *container.NetworkConfig,
 ) ([]byte, error) {
-	config := corecloudinit.New()
+	var config *corecloudinit.Config
+	if networkConfig != nil {
+		var err error
+		config, err = container.NewCloudInitConfigWithNetworks(networkConfig)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	} else {
+		config = corecloudinit.New()
+	}
 	config.AddScripts(
 		"set -xe", // ensure we run all the scripts or abort.
 	)
@@ -174,6 +184,7 @@ func EnsureCloneTemplate(
 		aptMirror,
 		enablePackageUpdates,
 		enableOSUpgrades,
+		networkConfig,
 	)
 	if err != nil {
 		logger.Tracef("failed to create template user data for template: %v", err)

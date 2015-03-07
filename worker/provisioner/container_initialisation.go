@@ -4,10 +4,16 @@
 package provisioner
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
+	"io/ioutil"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 
 	"github.com/juju/errors"
+	"github.com/juju/utils"
 	"github.com/juju/utils/exec"
 	"github.com/juju/utils/fslock"
 
@@ -20,7 +26,10 @@ import (
 	"github.com/juju/juju/container/lxc"
 	"github.com/juju/juju/environs"
 	"github.com/juju/juju/instance"
+	"github.com/juju/juju/service"
+	"github.com/juju/juju/service/common"
 	"github.com/juju/juju/state"
+	"github.com/juju/juju/version"
 	"github.com/juju/juju/worker"
 )
 
@@ -28,13 +37,14 @@ import (
 // are created on the given machine. It will set up the machine to be able
 // to create containers and start a suitable provisioner.
 type ContainerSetup struct {
-	runner              worker.Runner
-	supportedContainers []instance.ContainerType
-	imageURLGetter      container.ImageURLGetter
-	provisioner         *apiprovisioner.State
-	machine             *apiprovisioner.Machine
-	config              agent.Config
-	initLock            *fslock.Lock
+	runner                worker.Runner
+	supportedContainers   []instance.ContainerType
+	imageURLGetter        container.ImageURLGetter
+	provisioner           *apiprovisioner.State
+	machine               *apiprovisioner.Machine
+	config                agent.Config
+	initLock              *fslock.Lock
+	addressableContainers bool
 
 	// Save the workerName so the worker thread can be stopped.
 	workerName string
@@ -155,7 +165,24 @@ func (cs *ContainerSetup) runInitialiser(containerType instance.ContainerType, i
 		return errors.Annotate(err, "failed to acquire initialization lock")
 	}
 	defer cs.initLock.Unlock()
-	return initialiser.Initialise()
+
+	if err := initialiser.Initialise(); err != nil {
+		return errors.Trace(err)
+	}
+
+	// In order to guarantee stable statically assigned IP
+	// addresses for LXC containers, we need to stop and disable
+	// the dnsmasq service the LXC package runs on the 10.0.3.0/24
+	// range. If that is not done, statically assigned IPs for
+	// containers will be overridden with 10.0.3.x addresses
+	// periodically as DHCP leases expire.
+	if cs.addressableContainers && containerType == instance.LXC {
+		if err := disableLXCDNSMasq(); err != nil {
+			return errors.Trace(err)
+		}
+		logger.Infof("disabled dnsmasq for LXC containers")
+	}
+	return nil
 }
 
 // TearDown is defined on the StringsWatchHandler interface.
@@ -183,6 +210,15 @@ func (cs *ContainerSetup) getContainerArtifacts(
 	managerConfig, err := containerManagerConfig(containerType, cs.provisioner, cs.config)
 	if err != nil {
 		return nil, nil, nil, err
+	}
+
+	// Enable IP forwarding and ARP proxying if needed.
+	if ipfwd := managerConfig.PopValue(container.ConfigIPForwarding); ipfwd != "" {
+		if err := setIPAndARPForwarding(true); err != nil {
+			return nil, nil, nil, errors.Trace(err)
+		}
+		cs.addressableContainers = true
+		logger.Infof("enabled IP forwarding and ARP proxying for containers")
 	}
 
 	switch containerType {
@@ -241,13 +277,6 @@ func containerManagerConfig(
 	}
 	managerConfig := container.ManagerConfig(managerConfigResult.ManagerConfig)
 
-	// Enable IP and ARP forwarding if needed.
-	if ipfwd := managerConfig.PopValue(container.ConfigIPForwarding); ipfwd != "" {
-		if err := setIPAndARPForwarding(true); err != nil {
-			return nil, errors.Trace(err)
-		}
-		logger.Infof("enabled IP forwarding for containers")
-	}
 	return managerConfig, nil
 }
 
@@ -324,4 +353,128 @@ var setIPAndARPForwarding = func(enabled bool) error {
 		return err
 	}
 	return runCmds(fmt.Sprintf("%s=%s", arpProxySysctlKey, val))
+}
+
+// disableLXCDNSMasq discovers the location of the init job "lxc-net"
+// installed by the LXC package and modifies the config to disable
+// launching dnsmasq for the default DHCP range for LXC containers
+// (10.0.3.0/24). It also stops the lxc-net service if running and
+// restarts it after disabling dnsmasq.
+func disableLXCDNSMasq() (err error) {
+	logger.Tracef("trying to discover lxc-net init job")
+	var svc service.Service
+	svc, err = service.DiscoverService("lxc-net", common.Conf{})
+	if err != nil {
+		return errors.Annotate(err, "cannot find lxc-net init job")
+	}
+	logger.Tracef("found service %q (running: %v, installed: %v)", svc.Name(), svc.Running(), svc.Installed())
+
+	defer func() {
+		// If we modified the config successfully, make sure we
+		// restart the service.
+		if err != nil {
+			return
+		}
+		// Restart the service for the new config to take effect. For
+		// various reasons the init system may take a short time to
+		// realise that the service has been updated then stopped, so
+		// retry a few times until Start() succeeds.
+		var errStart error
+		for attempt := service.InstallStartRetryAttempts.Start(); attempt.Next(); {
+			// Stop it first - it should be running, so if not - ignore
+			// the error.
+			if err0 := svc.Stop(); err0 != nil {
+				logger.Tracef("cannot stop service %q: %v (ignoring)", svc.Name(), err0)
+			}
+			if errStart = svc.Start(); errStart == nil {
+				break
+			} else {
+				logger.Tracef("trying to start service %q: %v (retrying)", svc.Name(), errStart)
+			}
+		}
+		if errStart != nil {
+			err = errors.Annotatef(errStart,
+				"cannot restart service %q after disabling dnsmasq", svc.Name(),
+			)
+			return
+		}
+		logger.Tracef("service %q restarted", svc.Name())
+	}()
+
+	// Find out the config file location.
+	initName, ok := service.VersionInitSystem(version.Current)
+	if !ok {
+		return errors.NotFoundf("init system on local host")
+	}
+	if initName != service.InitSystemUpstart {
+		// TODO(dimitern): Handle systemd here as well in a follow-up.
+		logger.Tracef("init system is %q, not changing lxc-net service", initName)
+		return nil
+	}
+	ext := ".conf" // for upstart
+	confFile := filepath.Join(svc.Conf().InitDir, svc.Name()+ext)
+
+	// Scan the config file to discover the line starting dnsmasq.
+	var data []byte
+	data, err = ioutil.ReadFile(confFile)
+	if err != nil {
+		return errors.Annotatef(err, "cannot read config from %q", confFile)
+	}
+	input := bytes.NewBuffer(data)
+	var output bytes.Buffer
+	scanner := bufio.NewScanner(input)
+	changed := false
+	for scanner.Scan() {
+		originalLine := scanner.Text()
+		line := strings.TrimSpace(originalLine)
+
+		if changed {
+			// We already changed the line we needed, just ignore the
+			// rest.
+			output.WriteString(originalLine + "\n")
+			continue
+		}
+
+		// Skip all lines except those which contain the expected
+		// command and arguments. Skipped lines go unchanged into
+		// output.
+		if !strings.HasPrefix(line, "dnsmasq ") {
+			output.WriteString(originalLine + "\n")
+			continue
+		}
+		if !strings.Contains(line, "--bind-interfaces") {
+			output.WriteString(originalLine + "\n")
+			continue
+		}
+		if !strings.Contains(line, "--dhcp-range") {
+			output.WriteString(originalLine + "\n")
+			continue
+		}
+		if !strings.Contains(line, "LXC_DHCP_RANGE") {
+			output.WriteString(originalLine + "\n")
+			continue
+		}
+		// We found it, replace "dnsmasq" in the beginning with
+		// "true", which effectively disables the command in the least
+		// intrusive way.
+		cmd := strings.Replace(originalLine, "dnsmasq ", "true ", 1)
+		output.WriteString("\t# dnsmasq for $LXC_DHCP_RANGE disabled by Juju.\n")
+		output.WriteString(cmd + "\n")
+		changed = true
+	}
+	if err = scanner.Err(); err != nil {
+		return errors.Annotatef(err, "cannot process config from %q", confFile)
+	}
+
+	if !changed {
+		logger.Tracef("dnsmasq not found and not disabled in %q", confFile)
+		return nil
+	}
+
+	// Reset the original file and overwrite it atomically.
+	if err = utils.AtomicWriteFile(confFile, output.Bytes(), 0644); err != nil {
+		return errors.Annotatef(err, "cannot write new config %q for service %q", confFile, svc.Name())
+	}
+	logger.Tracef("successfully disabled dnsmasq in %q", confFile)
+	return nil
 }

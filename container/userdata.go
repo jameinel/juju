@@ -74,10 +74,10 @@ iface {{.InterfaceName}} inet dhcp
 
 var networkInterfacesFile = "/etc/network/interfaces"
 
-// newCloudInitConfigWithNetworks creates a cloud-init config which
+// NewCloudInitConfigWithNetworks creates a cloud-init config which
 // might include per-interface networking config if
 // networkConfig.Interfaces is not empty.
-func newCloudInitConfigWithNetworks(networkConfig *NetworkConfig) (*coreCloudinit.Config, error) {
+func NewCloudInitConfigWithNetworks(networkConfig *NetworkConfig) (*coreCloudinit.Config, error) {
 	cloudConfig := coreCloudinit.New()
 	if networkConfig == nil || len(networkConfig.Interfaces) == 0 {
 		// Don't generate networking config.
@@ -98,14 +98,14 @@ func newCloudInitConfigWithNetworks(networkConfig *NetworkConfig) (*coreCloudini
 
 	// Now add it to cloud-init as a file created early in the boot process.
 	cloudConfig.AddBootTextFile(networkInterfacesFile, buf.String(), 0644)
-	// And restart each interface (if enabled) to work around the LXC
+	// And ensure all auto-start interfaces are up, to work around the LXC
 	// package limitation of totally ignoring /etc/network/interfaces.
 	for _, iface := range networkConfig.Interfaces {
 		if iface.Disabled || iface.NoAutoStart {
 			continue
 		}
 		n := iface.InterfaceName
-		script := fmt.Sprintf("ifdown --force %s ; ifup --force --verbose %s", n, n)
+		script := fmt.Sprintf("ifdown --force %s ; ifup --verbose %s", n, n)
 		cloudConfig.AddBootCmd(script)
 	}
 	return cloudConfig, nil
@@ -115,7 +115,7 @@ func cloudInitUserData(
 	machineConfig *cloudinit.MachineConfig,
 	networkConfig *NetworkConfig,
 ) ([]byte, error) {
-	cloudConfig, err := newCloudInitConfigWithNetworks(networkConfig)
+	cloudConfig, err := NewCloudInitConfigWithNetworks(networkConfig)
 	udata, err := cloudinit.NewUserdataConfig(machineConfig, cloudConfig)
 	if err != nil {
 		return nil, err
