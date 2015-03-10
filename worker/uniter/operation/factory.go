@@ -176,3 +176,11 @@ func (f *factory) NewUpdateStorage(tags []names.StorageTag) (Operation, error) {
 		storageUpdater: f.storageUpdater,
 	}, nil
 }
+
+func (f *factory) NewResignLeadership() (Operation, error) {
+	return &resignLeadership{}, nil
+}
+
+func (f *factory) NewAcceptLeadership() (Operation, error) {
+	return &acceptLeadership{}, nil
+}

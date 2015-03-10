@@ -93,6 +93,12 @@ func (t *tracker) WaitLeader() Ticket {
 	return t.submit(t.waitTickets)
 }
 
+// WaitMinion is part of the Tracker interface.
+func (t *tracker) WaitMinion() Ticket {
+	logger.Errorf("WaitMinion not implemented")
+	return nil
+}
+
 func (t *tracker) loop() error {
 	logger.Infof("%s making initial claim for %s leadership", t.unitName, t.serviceName)
 	if err := t.refresh(); err != nil {

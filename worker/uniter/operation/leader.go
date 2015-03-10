@@ -4,14 +4,9 @@
 package operation
 
 import (
-	"fmt"
-	"time"
-
-	"github.com/juju/errors"
 	"gopkg.in/juju/charm.v4/hooks"
 
 	"github.com/juju/juju/worker/uniter/hook"
-	"github.com/juju/juju/worker/uniter/runner"
 )
 
 type acceptLeadership struct {
@@ -42,7 +37,7 @@ func (al *acceptLeadership) Commit(state State) (*State, error) {
 	newState := stateChange{
 		Kind: RunHook,
 		Step: Queued,
-		Hook: hook.Info{Kind: "leader-elected"},
+		Hook: &hook.Info{Kind: hooks.Kind("leader-elected")},
 	}.apply(state)
 	newState.Leader = true
 	return newState, nil
@@ -66,15 +61,15 @@ func (rl *resignLeadership) String() string {
 func (rl *resignLeadership) Prepare(state State) (*State, error) {
 	if !state.Leader {
 		// Nothing needs to be done -- state.Leader should only be set to
-		// false when committing the leader-deposed hook.
+		// false when committing the leader-deposed hook. This code is not
+		// helpful while Execute is a no-op, but it will become so.
 		return nil, ErrSkipExecute
 	}
 	return nil, nil
 }
 
 func (rl *resignLeadership) Execute(state State) (*State, error) {
-	logger.Warningf("we should run a leader-deposed hook here, but we can't yet")
-	// TODO(fwereade): this hits a lot of intersecting problems.
+	// TODO(fwereade): this hits a lot of interestingly intersecting problems.
 	//
 	// 1) we can't yet create a sufficiently dumbed-down hook context for a
 	//    leader-deposed hook to run as specced. (This is the proximate issue,
@@ -93,6 +88,14 @@ func (rl *resignLeadership) Execute(state State) (*State, error) {
 	// implies that we need to take care not to allow the implementations to
 	// diverge, but implementing them both as "uniters" is probably the best
 	// way to encourage logic-sharing and prevent that problem.
+	//
+	// In the short term, though, we can just run leader-deposed as soon as we
+	// can build the right environment. Not sure whether this particular type
+	// will still be justified, or whether it'll just be a plain old RunHook --
+	// I *think* it will stay, because the state-writing behaviour will stay
+	// very different (ie just write `.Leader = false` and don't step on pre-
+	// queued hooks).
+	logger.Warningf("we should run a leader-deposed hook here, but we can't yet")
 	return nil, nil
 }
 

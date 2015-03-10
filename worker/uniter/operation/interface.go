@@ -103,6 +103,9 @@ type Factory interface {
 	// NewUpdateStorage creates an operation to ensure the supplied storage
 	// tags are known and tracked.
 	NewUpdateStorage(tags []names.StorageTag) (Operation, error)
+
+	NewAcceptLeadership() (Operation, error)
+	NewResignLeadership() (Operation, error)
 }
 
 // CommandArgs stores the arguments for a Command operation.

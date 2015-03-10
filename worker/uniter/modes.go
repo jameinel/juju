@@ -53,7 +53,7 @@ func ModeContinue(u *Uniter) (next Mode, err error) {
 	// NOTE: the wait looks scary, but a ClaimLeadership ticket should always
 	// complete quickly; worst-case is API latency time, but it's designed that
 	// it should be vanishingly rare to hit that code path. (Make it impossible?)
-	isLeader := u.leadershipTracker.ClaimLeadership().Wait()
+	isLeader := u.leadershipTracker.ClaimLeader().Wait()
 	if isLeader != opState.Leader {
 		creator := newResignLeadershipOp()
 		if isLeader {
@@ -64,7 +64,7 @@ func ModeContinue(u *Uniter) (next Mode, err error) {
 		case nil, operation.ErrCannotAcceptLeadership:
 			// We can continue -- nbd if we failed to accept leadership.
 		default:
-			return errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 	}
 
@@ -196,7 +196,7 @@ func ModeAbide(u *Uniter) (next Mode, err error) {
 	if err = u.unit.SetAgentStatus(params.StatusActive, "", nil); err != nil {
 		return nil, errors.Trace(err)
 	}
-	u.f.WantLeaderSettingsEvent()
+	u.f.WantLeaderSettingsEvents(!opState.Leader)
 	u.f.WantUpgradeEvent(false)
 	u.relations.StartHooks()
 	defer func() {
@@ -317,14 +317,10 @@ func ModeHookError(u *Uniter) (next Mode, err error) {
 	statusData["hook"] = hookName
 	statusMessage := fmt.Sprintf("hook failed: %q", hookName)
 
-	var leaderDeposed <-chan struct{}
-	if opState.Leader {
-		leaderDeposed = u.leadershipTracker.WaitMinion().Ready()
-	}
-
 	// Run the loop.
 	u.f.WantResolvedEvent()
 	u.f.WantUpgradeEvent(true)
+	_, leaderDeposed = leaderEvents(opState.Leader, u.leadershipTracker)
 	for {
 		// We only set status now so we can be sure we *reset* status after a failed re-execute of
 		// the current hook (which will set Active while rerunning it). See `continue` below.
@@ -334,12 +330,14 @@ func ModeHookError(u *Uniter) (next Mode, err error) {
 		select {
 		case <-u.tomb.Dying():
 			return nil, tomb.ErrDying
-		case <-leaderDeposed:
-			if err := u.runOperation(newLeaderDeposedOp); err != nil {
-				return nil, errors.Trace(err)
-			}
 		case curl := <-u.f.UpgradeEvents():
 			return ModeUpgrading(curl), nil
+		case <-leaderDeposed:
+			// This should trigger at most once -- we can't reaccept leadership while in an error state.
+			leaaderDeposed = nil
+			if err := u.runOperation(newResignLeadershipOp); err != nil {
+				return nil, errors.Trace(err)
+			}
 		case rm := <-u.f.ResolvedEvents():
 			var creator creator
 			switch rm {
@@ -359,6 +357,15 @@ func ModeHookError(u *Uniter) (next Mode, err error) {
 			return ModeContinue, nil
 		}
 	}
+}
+
+func leaderEvents(isLeader bool, tracker leadership.Tracker) (elected chan<- struct{}, deposed chan<- struct{}) {
+	if isLeader {
+		deposed = tracker.WaitMinion().Ready()
+	} else {
+		elected = tracker.WaitLeader().Ready()
+	}
+	return
 }
 
 // ModeConflicted is responsible for watching and responding to:
