@@ -139,6 +139,11 @@ func (st State) validate() (err error) {
 		return errors.Errorf("unknown operation step %q", st.Step)
 	}
 	if hasHook {
+		switch string(st.Hook.Kind) {
+		case "leader-deposed", "leader-elected", "leader-settings-changed":
+			// TODO(fwereade) this is evident nonsense
+			return nil
+		}
 		return st.Hook.Validate()
 	}
 	return nil

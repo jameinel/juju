@@ -15,6 +15,7 @@ import (
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/state/watcher"
 	"github.com/juju/juju/worker"
+	"github.com/juju/juju/worker/leadership"
 	"github.com/juju/juju/worker/uniter/operation"
 )
 
@@ -60,10 +61,9 @@ func ModeContinue(u *Uniter) (next Mode, err error) {
 			creator = newAcceptLeadershipOp()
 		}
 		err := u.runOperation(creator)
-		switch errors.Cause(err) {
-		case nil, operation.ErrCannotAcceptLeadership:
-			// We can continue -- nbd if we failed to accept leadership.
-		default:
+		if err == nil {
+			return ModeContinue, nil
+		} else if errors.Cause(err) != operation.ErrCannotAcceptLeadership {
 			return nil, errors.Trace(err)
 		}
 	}
@@ -320,7 +320,7 @@ func ModeHookError(u *Uniter) (next Mode, err error) {
 	// Run the loop.
 	u.f.WantResolvedEvent()
 	u.f.WantUpgradeEvent(true)
-	_, leaderDeposed = leaderEvents(opState.Leader, u.leadershipTracker)
+	_, leaderDeposed := leaderEvents(opState.Leader, u.leadershipTracker)
 	for {
 		// We only set status now so we can be sure we *reset* status after a failed re-execute of
 		// the current hook (which will set Active while rerunning it). See `continue` below.
@@ -334,8 +334,8 @@ func ModeHookError(u *Uniter) (next Mode, err error) {
 			return ModeUpgrading(curl), nil
 		case <-leaderDeposed:
 			// This should trigger at most once -- we can't reaccept leadership while in an error state.
-			leaaderDeposed = nil
-			if err := u.runOperation(newResignLeadershipOp); err != nil {
+			leaderDeposed = nil
+			if err := u.runOperation(newResignLeadershipOp()); err != nil {
 				return nil, errors.Trace(err)
 			}
 		case rm := <-u.f.ResolvedEvents():
@@ -359,7 +359,7 @@ func ModeHookError(u *Uniter) (next Mode, err error) {
 	}
 }
 
-func leaderEvents(isLeader bool, tracker leadership.Tracker) (elected chan<- struct{}, deposed chan<- struct{}) {
+func leaderEvents(isLeader bool, tracker leadership.Tracker) (elected <-chan struct{}, deposed <-chan struct{}) {
 	if isLeader {
 		deposed = tracker.WaitMinion().Ready()
 	} else {

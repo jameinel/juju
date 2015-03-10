@@ -72,7 +72,7 @@ func (opc *operationCallbacks) PrepareHook(hi hook.Info) (string, error) {
 	case hi.Kind == hooks.ConfigChanged:
 		opc.u.f.DiscardConfigEvent()
 	case hi.Kind == hooks.Kind("leader-settings-changed"):
-		opc.u.f.DiscardLeaderSettingsEvent()()
+		opc.u.f.DiscardLeaderSettingsEvent()
 	}
 	if status == params.StatusActive {
 		if !opc.u.operationState().Started {

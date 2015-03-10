@@ -45,6 +45,8 @@ func (hi Info) Validate() error {
 		fallthrough
 	case hooks.Install, hooks.Start, hooks.ConfigChanged, hooks.UpgradeCharm, hooks.Stop, hooks.RelationBroken, hooks.CollectMetrics, hooks.MeterStatusChanged:
 		return nil
+	case hooks.Kind("leader-elected"), hooks.Kind("leader-deposed"), hooks.Kind("leader-settings-changed"):
+		return nil
 	case hooks.Action:
 		return fmt.Errorf("hooks.Kind Action is deprecated")
 	case hooks.StorageAttached, hooks.StorageDetached:
