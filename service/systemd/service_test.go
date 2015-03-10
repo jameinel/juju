@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/coreos/go-systemd/unit"
@@ -239,6 +240,21 @@ func (s *initSystemSuite) TestNewServiceLogfile(c *gc.C) {
 	})
 }
 
+func (s *initSystemSuite) TestNewServiceEmptyConf(c *gc.C) {
+	service, err := systemd.NewService(s.name, common.Conf{})
+	c.Assert(err, jc.ErrorIsNil)
+
+	c.Check(service, jc.DeepEquals, &systemd.Service{
+		Service: common.Service{
+			Name: s.name,
+		},
+		ConfName: s.name + ".service",
+		UnitName: s.name + ".service",
+		Dirname:  fmt.Sprintf("%s/init/%s", s.dataDir, s.name),
+	})
+	s.stub.CheckCalls(c, nil)
+}
+
 func (s *initSystemSuite) TestUpdateConfig(c *gc.C) {
 	s.conf.ExecStart = "/path/to/some/other/command"
 	c.Assert(s.service.Service.Conf.ExecStart, gc.Equals, jujud+" machine-0")
@@ -315,6 +331,20 @@ func (s *initSystemSuite) TestUpdateConfigLogfile(c *gc.C) {
 	})
 }
 
+func (s *initSystemSuite) TestUpdateConfigEmpty(c *gc.C) {
+	s.service.UpdateConfig(common.Conf{})
+
+	c.Check(s.service, jc.DeepEquals, &systemd.Service{
+		Service: common.Service{
+			Name: s.name,
+		},
+		ConfName: s.name + ".service",
+		UnitName: s.name + ".service",
+		Dirname:  fmt.Sprintf("%s/init/%s", s.dataDir, s.name),
+	})
+	s.stub.CheckCalls(c, nil)
+}
+
 func (s *initSystemSuite) TestInstalledTrue(c *gc.C) {
 	s.addService("jujud-machine-0", "active")
 	s.addService("something-else", "error")
@@ -365,6 +395,9 @@ func (s *initSystemSuite) TestExistsTrue(c *gc.C) {
 }
 
 func (s *initSystemSuite) TestExistsFalse(c *gc.C) {
+	// We force the systemd API to return a slightly different conf.
+	// In this case we simply set Conf.Env, which s.conf does not set.
+	// This causes Service.Exists to return false.
 	s.setConf(c, common.Conf{
 		Desc:      s.conf.Desc,
 		ExecStart: s.conf.ExecStart,
@@ -387,6 +420,15 @@ func (s *initSystemSuite) TestExistsError(c *gc.C) {
 
 	c.Check(exists, jc.IsFalse)
 	s.stub.CheckCallNames(c, "RunCommand")
+}
+
+func (s *initSystemSuite) TestExistsEmptyConf(c *gc.C) {
+	s.service.Service.Conf = common.Conf{}
+
+	_, err := s.service.Exists()
+
+	c.Check(err, gc.ErrorMatches, `.*no conf expected.*`)
+	s.stub.CheckCalls(c, nil)
 }
 
 func (s *initSystemSuite) TestRunningTrue(c *gc.C) {
@@ -637,6 +679,9 @@ func (s *initSystemSuite) TestInstallAlreadyInstalled(c *gc.C) {
 func (s *initSystemSuite) TestInstallZombie(c *gc.C) {
 	s.addService("jujud-machine-0", "active")
 	s.addListResponse()
+	// We force the systemd API to return a slightly different conf.
+	// In this case we simply set Conf.Env, which s.conf does not set.
+	// This causes Service.Exists to return false.
 	s.setConf(c, common.Conf{
 		Desc:      s.conf.Desc,
 		ExecStart: s.conf.ExecStart,
@@ -692,6 +737,15 @@ func (s *initSystemSuite) TestInstallMultiline(c *gc.C) {
 	s.checkCreateFileCall(c, 3, filename, content, 0644)
 }
 
+func (s *initSystemSuite) TestInstallEmptyConf(c *gc.C) {
+	s.service.Service.Conf = common.Conf{}
+
+	err := s.service.Install()
+
+	c.Check(err, gc.ErrorMatches, `.*missing conf.*`)
+	s.stub.CheckCalls(c, nil)
+}
+
 func (s *initSystemSuite) TestInstallCommands(c *gc.C) {
 	commands, err := s.service.InstallCommands()
 	c.Assert(err, jc.ErrorIsNil)
@@ -717,7 +771,36 @@ func (s *initSystemSuite) TestInstallCommands(c *gc.C) {
 	})
 }
 
+// parseConfSections is a poor man's ini parser.
+func parseConfSections(lines []string) map[string][]string {
+	sections := make(map[string][]string)
+
+	var section string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			if section != "" {
+				sort.Strings(sections[section])
+			}
+			section = line[1 : len(line)-1]
+			sections[section] = nil
+		} else {
+			sections[section] = append(sections[section], line)
+		}
+	}
+	if section != "" {
+		sort.Strings(sections[section])
+	}
+
+	return sections
+}
+
 func (s *initSystemSuite) TestInstallCommandsShutdown(c *gc.C) {
+	// This test  must be done without regard to map order.
+
 	name := "juju-shutdown-job"
 	conf, err := service.ShutdownAfterConf("cloud-final")
 	c.Assert(err, jc.ErrorIsNil)
@@ -726,7 +809,22 @@ func (s *initSystemSuite) TestInstallCommandsShutdown(c *gc.C) {
 	commands, err := svc.InstallCommands()
 	c.Assert(err, jc.ErrorIsNil)
 
-	content := `[Unit]
+	c.Assert(commands, gc.HasLen, 3)
+
+	// Parse the first command.
+	cmd := strings.TrimSpace(commands[0])
+	lines := strings.Split(cmd, "\n")
+	header := lines[0]
+	footer := lines[len(lines)-1]
+	sections := parseConfSections(lines[1 : len(lines)-1])
+
+	// Check the cat portion.
+	c.Check(header, gc.Equals, "cat >> /tmp/juju-shutdown-job.service << 'EOF'")
+	c.Check(footer, gc.Equals, "EOF")
+
+	// Check the conf portion.
+	content := `
+[Unit]
 Description=juju shutdown job
 After=syslog.target
 After=network.target
@@ -736,23 +834,25 @@ Conflicts=cloud-final
 
 [Service]
 ExecStart=/sbin/shutdown -h now
-ExecStopPost=/bin/systemctl disable juju-shutdown-job.service`
-	header := "cat >> /tmp/juju-shutdown-job.service << 'EOF'\n"
-	footer := "EOF"
-	expectedString := commands[0][len(header) : len(commands[0])-len(footer)]
-	expected, err := unit.Deserialize(strings.NewReader(expectedString))
-	c.Assert(err, jc.ErrorIsNil)
-	cfg, err := unit.Deserialize(strings.NewReader(content))
-	c.Assert(err, jc.ErrorIsNil)
-	c.Check(cfg, jc.SameContents, expected)
+ExecStopPost=/bin/systemctl disable juju-shutdown-job.service
+`
+	expected := parseConfSections(strings.Split(content[1:], "\n"))
+	c.Check(sections, jc.DeepEquals, expected)
 
-	cmd := commands[0]
-	c.Check(cmd, jc.HasPrefix, header)
-	c.Check(cmd, jc.HasSuffix, footer)
+	// Check the remaining commands.
 	c.Check(commands[1:], jc.DeepEquals, []string{
 		"/bin/systemctl link /tmp/juju-shutdown-job.service",
 		"/bin/systemctl enable juju-shutdown-job.service",
 	})
+}
+
+func (s *initSystemSuite) TestInstallCommandsEmptyConf(c *gc.C) {
+	s.service.Service.Conf = common.Conf{}
+
+	_, err := s.service.InstallCommands()
+
+	c.Check(err, gc.ErrorMatches, `.*missing conf.*`)
+	s.stub.CheckCalls(c, nil)
 }
 
 func (s *initSystemSuite) TestStartCommands(c *gc.C) {

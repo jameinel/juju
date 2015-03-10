@@ -21,6 +21,7 @@ import (
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/juju/osenv"
 	"github.com/juju/juju/state"
+	"github.com/juju/juju/storage"
 	"github.com/juju/juju/testcharms"
 	"github.com/juju/juju/worker/leadership"
 	"github.com/juju/juju/worker/uniter/hook"
@@ -55,6 +56,7 @@ func (s *FactorySuite) SetUpTest(c *gc.C) {
 		s.unit.Tag().(names.UnitTag),
 		fakeTracker{},
 		s.getRelationInfos,
+		s.storage,
 		s.paths,
 	)
 	c.Assert(err, jc.ErrorIsNil)
@@ -141,15 +143,18 @@ func (s *FactorySuite) AssertNotActionContext(c *gc.C, ctx runner.Context) {
 }
 
 func (s *FactorySuite) AssertNotStorageContext(c *gc.C, ctx runner.Context) {
-	storageAttachment, ok := ctx.HookStorageAttachment()
+	storageAttachment, ok := ctx.HookStorage()
 	c.Assert(storageAttachment, gc.IsNil)
 	c.Assert(ok, jc.IsFalse)
 }
 
-func (s *FactorySuite) AssertStorageContext(c *gc.C, ctx runner.Context, attachment params.StorageAttachment) {
-	fromCache, ok := ctx.HookStorageAttachment()
+func (s *FactorySuite) AssertStorageContext(c *gc.C, ctx runner.Context, id string, attachment storage.StorageAttachmentInfo) {
+	fromCache, ok := ctx.HookStorage()
 	c.Assert(ok, jc.IsTrue)
-	c.Assert(attachment, jc.DeepEquals, *fromCache)
+	c.Assert(fromCache, gc.NotNil)
+	c.Assert(fromCache.Tag().Id(), gc.Equals, id)
+	c.Assert(fromCache.Kind(), gc.Equals, attachment.Kind)
+	c.Assert(fromCache.Location(), gc.Equals, attachment.Location)
 }
 
 func (s *FactorySuite) AssertRelationContext(c *gc.C, ctx runner.Context, relId int, remoteUnit string) *runner.ContextRelation {
@@ -285,16 +290,32 @@ func (s *FactorySuite) TestNewHookRunnerWithStorage(c *gc.C) {
 		"data": {Pool: "", Size: 1024, Count: 1},
 	}
 	service := s.AddTestingServiceWithStorage(c, "storage-block", ch, sCons)
+	s.machine = nil // allocate a new machine
 	unit := s.AddUnit(c, service)
 
 	storageAttachments, err := s.State.StorageAttachments(unit.UnitTag())
 	c.Assert(err, jc.ErrorIsNil)
 	c.Assert(storageAttachments, gc.HasLen, 1)
-	err = s.State.SetStorageAttachmentInfo(
-		storageAttachments[0].StorageInstance(),
-		unit.UnitTag(),
-		state.StorageAttachmentInfo{Location: "outerspace"},
+	storageTag := storageAttachments[0].StorageInstance()
+
+	volume, err := s.State.StorageInstanceVolume(storageTag)
+	c.Assert(err, jc.ErrorIsNil)
+	volumeTag := volume.VolumeTag()
+	machineTag := s.machine.MachineTag()
+
+	err = s.State.SetVolumeInfo(
+		volumeTag, state.VolumeInfo{
+			VolumeId: "vol-123",
+			Size:     456,
+		},
 	)
+	c.Assert(err, jc.ErrorIsNil)
+	err = s.State.SetVolumeAttachmentInfo(
+		machineTag, volumeTag, state.VolumeAttachmentInfo{
+			DeviceName: "sdb",
+		},
+	)
+	c.Assert(err, jc.ErrorIsNil)
 
 	password, err := utils.RandomPassword()
 	err = unit.SetPassword(password)
@@ -308,6 +329,7 @@ func (s *FactorySuite) TestNewHookRunnerWithStorage(c *gc.C) {
 		unit.Tag().(names.UnitTag),
 		fakeTracker{},
 		s.getRelationInfos,
+		s.storage,
 		s.paths,
 	)
 	c.Assert(err, jc.ErrorIsNil)
@@ -322,13 +344,9 @@ func (s *FactorySuite) TestNewHookRunnerWithStorage(c *gc.C) {
 	s.AssertPaths(c, rnr)
 	ctx := rnr.Context()
 	c.Assert(ctx.UnitName(), gc.Equals, "storage-block/0")
-	s.AssertStorageContext(c, ctx, params.StorageAttachment{
-		StorageTag: "storage-data-0",
-		OwnerTag:   unit.Tag().String(),
-		UnitTag:    unit.Tag().String(),
-		Kind:       params.StorageKindBlock,
-		Location:   "outerspace",
-		Life:       "alive",
+	s.AssertStorageContext(c, ctx, "data/0", storage.StorageAttachmentInfo{
+		Kind:     storage.StorageKindBlock,
+		Location: "/dev/sdb",
 	})
 	s.AssertNotActionContext(c, ctx)
 	s.AssertNotRelationContext(c, ctx)

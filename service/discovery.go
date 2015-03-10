@@ -54,6 +54,10 @@ func VersionInitSystem(vers version.Binary) (string, bool) {
 		switch vers.Series {
 		case "precise", "quantal", "raring", "saucy", "trusty", "utopic":
 			return InitSystemUpstart, true
+		// TODO(ericsnow) Remove the vivid special-case once it starts
+		// booting with systemd.
+		case "vivid":
+			return InitSystemUpstart, true
 		case "":
 			return "", false
 		default:
@@ -88,10 +92,10 @@ func discoverLocalInitSystem() (string, error) {
 
 	data, err := ioutil.ReadFile(pid1File)
 	if os.IsNotExist(err) {
-		return "", errors.NotFoundf("init system")
+		return "", errors.NotFoundf("init system (via %q)", pid1File)
 	}
 	if err != nil {
-		return "", errors.Trace(err)
+		return "", errors.Annotatef(err, "failed to identify init system (via %q)", pid1File)
 	}
 	executable := strings.Split(string(data), "\x00")[0]
 
@@ -111,6 +115,9 @@ func identifyInitSystem(executable string) (string, bool) {
 
 	if _, err := os.Stat(executable); os.IsNotExist(err) {
 		return "", false
+	} else if err != nil {
+		logger.Errorf("failed to find %q: %v", executable, err)
+		// The stat check is just an optimization so we go on anyway.
 	}
 
 	// TODO(ericsnow) First fall back to following symlinks?
