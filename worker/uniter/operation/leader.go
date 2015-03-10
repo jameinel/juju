@@ -25,25 +25,21 @@ func (al *acceptLeadership) Prepare(state State) (*State, error) {
 }
 
 func (al *acceptLeadership) Commit(state State) (*State, error) {
-	logger.Infof("\n\n\nXXXXXXXXXXXXXXXXXXXXXXXXXXx\n\n\n")
 	if err := al.checkState(state); err != nil {
 		return nil, err
 	}
-	logger.Infof("\n\n\nXXXXXXXXXXXXXXXXXXXXXXXXXXx\n\n\n")
 	if state.Leader {
 		// Nothing needs to be done -- leader is only set when queueing a
 		// leader-elected hook. Therefore, if leader is true, the appropriate
 		// hook is either queued or already run.
 		return nil, nil
 	}
-	logger.Infof("\n\n\nXXXXXXXXXXXXXXXXXXXXXXXXXXx\n\n\n")
 	newState := stateChange{
 		Kind: RunHook,
 		Step: Queued,
 		Hook: &hook.Info{Kind: hooks.Kind("leader-elected")},
 	}.apply(state)
 	newState.Leader = true
-	logger.Infof("\n\n\n%v\n\n\n", newState)
 	return newState, nil
 }
 

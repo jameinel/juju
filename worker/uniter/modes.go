@@ -66,6 +66,7 @@ func ModeContinue(u *Uniter) (next Mode, err error) {
 		} else if errors.Cause(err) != operation.ErrCannotAcceptLeadership {
 			return nil, errors.Trace(err)
 		}
+		logger.Infof("cannot accept leadership yet, skipping past it")
 	}
 
 	var creator creator
