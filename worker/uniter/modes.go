@@ -43,6 +43,31 @@ func ModeContinue(u *Uniter) (next Mode, err error) {
 		return nil, errors.Trace(err)
 	}
 
+	// Check for any leadership change, and enact it if possible. (This may
+	// fail if we attempt to become leader while we should be in a hook error
+	// mode); this is mildly inconvenient, but not a problem, because we'll
+	// be watching for leader election(and deposition) in all the loop modes
+	// that can handle them anyway.
+	logger.Infof("checking leadership status")
+
+	// NOTE: the wait looks scary, but a ClaimLeadership ticket should always
+	// complete quickly; worst-case is API latency time, but it's designed that
+	// it should be vanishingly rare to hit that code path. (Make it impossible?)
+	isLeader := u.leadershipTracker.ClaimLeadership().Wait()
+	if isLeader != opState.Leader {
+		creator := newResignLeadershipOp()
+		if isLeader {
+			creator = newAcceptLeadershipOp()
+		}
+		err := u.runOperation(creator)
+		switch errors.Cause(err) {
+		case nil, operation.ErrCannotAcceptLeadership:
+			// We can continue -- nbd if we failed to accept leadership.
+		default:
+			return errors.Trace(err)
+		}
+	}
+
 	var creator creator
 	switch opState.Kind {
 	case operation.RunAction:
@@ -171,6 +196,7 @@ func ModeAbide(u *Uniter) (next Mode, err error) {
 	if err = u.unit.SetAgentStatus(params.StatusActive, "", nil); err != nil {
 		return nil, errors.Trace(err)
 	}
+	u.f.WantLeaderSettingsEvent()
 	u.f.WantUpgradeEvent(false)
 	u.relations.StartHooks()
 	defer func() {
@@ -268,6 +294,7 @@ func ModeHookError(u *Uniter) (next Mode, err error) {
 	if opState.Kind != operation.RunHook || opState.Step != operation.Pending {
 		return nil, errors.Errorf("insane uniter state: %#v", u.operationState())
 	}
+
 	// Create error information for status.
 	hookInfo := *opState.Hook
 	hookName := string(hookInfo.Kind)
@@ -285,15 +312,28 @@ func ModeHookError(u *Uniter) (next Mode, err error) {
 	}
 	statusData["hook"] = hookName
 	statusMessage := fmt.Sprintf("hook failed: %q", hookName)
+
+	var leaderDeposed <-chan struct{}
+	if opState.Leader {
+		leaderDeposed = u.leadershipTracker.WaitMinion().Ready()
+	}
+
+	// Run the loop.
 	u.f.WantResolvedEvent()
 	u.f.WantUpgradeEvent(true)
 	for {
+		// We only set status now so we can be sure we *reset* status after a failed re-execute of
+		// the current hook (which will set Active while rerunning it). See `continue` below.
 		if err = u.unit.SetAgentStatus(params.StatusError, statusMessage, statusData); err != nil {
 			return nil, errors.Trace(err)
 		}
 		select {
 		case <-u.tomb.Dying():
 			return nil, tomb.ErrDying
+		case <-leaderDeposed:
+			if err := u.runOperation(newLeaderDeposedOp); err != nil {
+				return nil, errors.Trace(err)
+			}
 		case curl := <-u.f.UpgradeEvents():
 			return ModeUpgrading(curl), nil
 		case rm := <-u.f.ResolvedEvents():
