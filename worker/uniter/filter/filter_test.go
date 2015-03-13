@@ -633,22 +633,23 @@ func (s *FilterSuite) TestStorageEvents(c *gc.C) {
 
 func (s *FilterSuite) setLeaderSetting(c *gc.C, key, value string) {
 	// s.wordpress is the service object
-	/// currentSettings, err := s.State.ReadLeadershipSettings(s.wordpress.Tag().Id())
-	/// c.Assert(err, jc.ErrorIsNil)
-	/// currentSettings.Update(map[string]interface{}{key: value})
-	/// _, err = currentSettings.Write()
-	/// c.Assert(err, jc.ErrorIsNil)
-	// This is how we would set LeadershipSettings if we are the Leader,
-	// but as we are not guaranteed to be leader and we just want to test
-	// them getting changed, we poke directly into state
-	err := s.uniter.LeadershipSettings.Merge(
-		s.wordpress.Tag().Id(),
-		map[string]string{key: value},
-		)
+	currentSettings, err := s.State.ReadLeadershipSettings(s.wordpress.Tag().Id())
 	c.Assert(err, jc.ErrorIsNil)
+	currentSettings.Update(map[string]interface{}{key: value})
+	_, err = currentSettings.Write()
+	c.Assert(err, jc.ErrorIsNil)
+	// This is how we would set LeadershipSettings if we are the Leader,
+	// but as we are not guaranteed to be leader and the API is properly
+	// running. But we just want to test them getting changed, we poke
+	// directly into state
+	/// err := s.uniter.LeadershipSettings.Merge(
+	/// 	s.wordpress.Tag().Id(),
+	/// 	map[string]string{key: value},
+	/// 	)
+	/// c.Assert(err, jc.ErrorIsNil)
 }
 
-func (s *FilterSuite) TestLeaderSettingsEventsSendsInitialChange(c *gc.C) {
+func (s *FilterSuite) TestLeaderSettingsEventsSendsChanges(c *gc.C) {
 	f, err := filter.NewFilter(s.uniter, s.unit.Tag().(names.UnitTag))
 	c.Assert(err, jc.ErrorIsNil)
 	defer statetesting.AssertStop(c, f)
@@ -678,13 +679,17 @@ func (s *FilterSuite) TestWantLeaderSettingsEvents(c *gc.C) {
 	// Supress the initial event
 	f.WantLeaderSettingsEvents(false)
 	leaderSettingsC.AssertNoReceive()
+	c.Logf("no receive after WantLeaderSettingsEvents(false)")
 	// Also suppresses actual changes
 	s.setLeaderSetting(c, "foo", "baz-1")
+	time.Sleep(200*time.Millisecond)
 	leaderSettingsC.AssertNoReceive()
+	c.Logf("no receive after applying changes with want=false")
 
 	// Reenabling the settings gives us an immediate change
 	f.WantLeaderSettingsEvents(true)
 	leaderSettingsC.AssertOneReceive()
+	c.Logf("receive after applying want=true")
 	// And also gives changes when actual changes are made
 	s.setLeaderSetting(c, "foo", "baz-2")
 	leaderSettingsC.AssertOneReceive()
@@ -703,6 +708,7 @@ func (s *FilterSuite) TestDiscardLeaderSettingsEvent(c *gc.C) {
 	// Discard the initial event
 	f.DiscardLeaderSettingsEvent()
 	leaderSettingsC.AssertNoReceive()
+
 	// However, it has not permanently disabled change events, another
 	// change still shows up
 	s.setLeaderSetting(c, "foo", "bing-1")
