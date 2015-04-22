@@ -1,11 +1,11 @@
 // Copyright 2015 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
+// This package exists to attempt to codify the workers run only on machine
+// agents. It should eventually come to resemble cmd/jujud/unit, in that it
+// will be (as close as possible to...) a single point of truth for what gets
+// run when; but that's only one possible step towards a single-agent world.
 package machine
-
-import (
-	"github.com/juju/juju/worker/dependency"
-)
 
 // These define the names of the dependency.Manifolds we use in a machine agent.
 // This block of manifold names define the workers we want to run once per machine
@@ -52,6 +52,7 @@ var (
 // *and* the state-connection-leader worker is available; they use the state
 // connection directly but *absolutely* should not do so.
 var (
+	JESAddressProvisioner = "jes-address-provisioner" //                          worker/addresser
 	JESInstancePoller     = "jes-instance-poller"     //                          worker/instancepoller
 	JESStateCleaner       = "jes-state-cleaner"       //                          worker/cleaner
 	JESServiceScaler      = "jes-service-scaler"      //                          worker/minunitsworker
@@ -104,9 +105,3 @@ var (
 	// and clean it up manually, instead of triggering this terrifying suicide path.
 	TerrifyinglyExtremeSuiciderName = "termination-worker" //                     worker/terminationworker
 )
-
-func Manifolds() dependency.Manifolds {
-	return dependency.Manifolds{
-	// ...erk.
-	}
-}
