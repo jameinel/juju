@@ -18,8 +18,8 @@ import (
 	"launchpad.net/gnuflag"
 	"launchpad.net/tomb"
 
-	"github.com/juju/juju/agent"
 	agentcmd "github.com/juju/juju/cmd/jujud/agent"
+	"github.com/juju/juju/cmd/jujud/common"
 	"github.com/juju/juju/cmd/jujud/unit"
 	cmdutil "github.com/juju/juju/cmd/jujud/util"
 	"github.com/juju/juju/network"
@@ -35,10 +35,9 @@ type UnitAgent struct {
 	cmd.CommandBase
 	tomb tomb.Tomb
 	agentcmd.AgentConf
-	UnitName     string
-	runner       worker.Runner
-	setupLogging func(agent.Config) error
-	logToStdErr  bool
+	UnitName    string
+	runner      worker.Runner
+	logToStdErr bool
 }
 
 // Info returns usage information for the command.
@@ -110,12 +109,14 @@ func (a *UnitAgent) Run(ctx *cmd.Context) error {
 }
 
 func (a *UnitAgent) APIWorkers() (_ worker.Worker, err error) {
-	manifolds := unit.AgentManifolds(a)
 	engine := dependency.NewEngine(cmdutil.IsFatal, 3*time.Second, 10*time.Millisecond)
-	for name, manifold := range manifolds {
-		if err := engine.Install(name, manifold); err != nil {
+	for _, manifolds := range []dependency.Manifolds{
+		common.AgentManifolds(a),
+		unit.Manifolds(),
+	} {
+		if err := dependency.Install(engine, manifolds); err != nil {
 			if e := worker.Stop(engine); e != nil {
-				logger.Errorf("failure while stopping engine after error: %v", e)
+				logger.Errorf("failure while stopping invalid dependency engine: %v", err)
 			}
 			return nil, errors.Trace(err)
 		}
