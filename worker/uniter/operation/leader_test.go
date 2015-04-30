@@ -158,6 +158,23 @@ func (s *LeaderSuite) TestResignLeadership_Commit_ClearLeader(c *gc.C) {
 	c.Check(err, jc.ErrorIsNil)
 }
 
+func (s *LeaderSuite) TestResignLeadership_Commit_DropQueuedLeaderElected(c *gc.C) {
+	factory := operation.NewFactory(nil, nil, nil, nil, nil)
+	op, err := factory.NewResignLeadership()
+	c.Assert(err, jc.ErrorIsNil)
+
+	newState, err := op.Commit(operation.State{
+		Kind: operation.RunHook,
+		Step: operation.Queued,
+		Hook: &hook.Info{Kind: hook.LeaderElected},
+	})
+	c.Check(newState, gc.DeepEquals, &operation.State{
+		Kind: operation.Continue,
+		Step: operation.Pending,
+	})
+	c.Check(err, jc.ErrorIsNil)
+}
+
 func (s *LeaderSuite) TestResignLeadership_Commit_PreserveOthers(c *gc.C) {
 	factory := operation.NewFactory(nil, nil, nil, nil, nil)
 	op, err := factory.NewResignLeadership()

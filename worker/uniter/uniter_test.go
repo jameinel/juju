@@ -24,6 +24,7 @@ import (
 	"github.com/juju/juju/state"
 	"github.com/juju/juju/testcharms"
 	coretesting "github.com/juju/juju/testing"
+	"github.com/juju/juju/worker"
 	"github.com/juju/juju/worker/uniter"
 )
 
@@ -131,6 +132,13 @@ func (s *UniterSuite) TestUniterStartup(c *gc.C) {
 			createCharm{},
 			createServiceAndUnit{serviceName: "w"},
 			startUniter{"unit-u-0"},
+			custom{func(c *gc.C, ctx *context) {
+				if ctx.eventFilter != nil {
+					err := ctx.eventFilter.Stop()
+					c.Check(err, gc.Equals, worker.ErrTerminateAgent)
+					ctx.eventFilter = nil
+				}
+			}},
 			waitUniterDead{`failed to initialize uniter for "unit-u-0": permission denied`},
 		),
 	})
@@ -419,12 +427,6 @@ func (s *UniterSuite) TestUniterDyingReaction(c *gc.C) {
 			waitHooks{"stop"},
 			waitUniterDead{},
 		), ut(
-			"steady state unit dead",
-			quickStart{},
-			unitDead,
-			waitUniterDead{},
-			waitHooks{},
-		), ut(
 			"hook error service dying",
 			startupError{"start"},
 			serviceDying,
@@ -442,12 +444,6 @@ func (s *UniterSuite) TestUniterDyingReaction(c *gc.C) {
 			resolveError{state.ResolvedRetryHooks},
 			waitHooks{"start", "config-changed", "stop"},
 			waitUniterDead{},
-		), ut(
-			"hook error unit dead",
-			startupError{"start"},
-			unitDead,
-			waitUniterDead{},
-			waitHooks{},
 		),
 	})
 }
@@ -934,13 +930,6 @@ func (s *UniterSuite) TestUniterUpgradeConflicts(c *gc.C) {
 			resolveError{state.ResolvedNoHooks},
 			waitHooks{"upgrade-charm", "config-changed", "stop"},
 			waitUniterDead{},
-		), ut(
-			"upgrade conflict unit dead",
-			startUpgradeError{},
-			unitDead,
-			waitUniterDead{},
-			waitHooks{},
-			fixUpgradeError{},
 		),
 	})
 }
@@ -1079,12 +1068,6 @@ func (s *UniterSuite) TestUniterUpgradeGitConflicts(c *gc.C) {
 			resolveError{state.ResolvedNoHooks},
 			waitHooks{"upgrade-charm", "config-changed", "stop"},
 			waitUniterDead{},
-		), ugt(
-			"upgrade conflict unit dead",
-			startGitUpgradeError{},
-			unitDead,
-			waitUniterDead{},
-			waitHooks{},
 		),
 	})
 }
@@ -1184,17 +1167,6 @@ func (s *UniterSuite) TestUniterRelations(c *gc.C) {
 			relationState{life: state.Alive},
 			removeRelationUnit{"mysql/0"},
 			relationState{life: state.Alive},
-		), ut(
-			"unit becomes dead while in a relation",
-			quickStartRelation{},
-			unitDead,
-			waitUniterDead{},
-			waitHooks{},
-			// TODO BUG(?): the unit doesn't leave the scope, leaving the relation
-			// unkillable without direct intervention. I'm pretty sure it's not a
-			// uniter bug -- it should be the responsibility of `juju remove-unit
-			// --force` to cause the unit to leave any relation scopes it may be
-			// in -- but it's worth noting here all the same.
 		), ut(
 			"unknown local relation dir is removed",
 			quickStartRelation{},
@@ -1977,14 +1949,16 @@ func (s *UniterSuite) TestLeadership(c *gc.C) {
 }
 
 func (s *UniterSuite) TestLeadershipUnexpectedDepose(c *gc.C) {
-	s.PatchValue(uniter.LeadershipGuarantee, coretesting.ShortWait)
 	s.runUniterTests(c, []uniterTest{
 		ut(
-			// NOTE: this is a strange and ugly test, intended to detect what
-			// *would* happen if the uniter suddenly failed to renew its lease;
-			// it depends on an artificially shortened tracker refresh time to
-			// run in a reasonable amount of time.
 			"leader-settings-changed triggers when deposed (while running)",
+			custom{func(c *gc.C, ctx *context) {
+				// NOTE: this is a strange and ugly test, intended to detect what
+				// *would* happen if the tracker suddenly failed to renew its lease;
+				// it depends on an artificially shortened tracker refresh time to
+				// run in a reasonable amount of time.
+				ctx.leadershipGuarantee = coretesting.ShortWait
+			}},
 			quickStart{},
 			forceMinion{},
 			waitHooks{"leader-settings-changed"},

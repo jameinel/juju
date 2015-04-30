@@ -58,6 +58,9 @@ func (s *AgentManifoldsSuite) TestOutput(c *gc.C) {
 func (s *AgentManifoldsSuite) TestSanity(c *gc.C) {
 	manifolds := common.AgentManifolds(&dummyAgent{})
 	for name, manifold := range manifolds {
+		if name == "" {
+			c.Errorf("unnamed manifold exists")
+		}
 		if manifold.Start == nil {
 			c.Errorf("manifold %q lacks a Start func", name)
 		}

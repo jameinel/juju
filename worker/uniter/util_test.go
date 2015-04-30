@@ -34,7 +34,7 @@ import (
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/juju/sockets"
 	"github.com/juju/juju/juju/testing"
-	"github.com/juju/juju/leadership"
+	coreleadership "github.com/juju/juju/leadership"
 	"github.com/juju/juju/lease"
 	"github.com/juju/juju/network"
 	"github.com/juju/juju/state"
@@ -42,8 +42,10 @@ import (
 	"github.com/juju/juju/testcharms"
 	coretesting "github.com/juju/juju/testing"
 	"github.com/juju/juju/worker"
+	"github.com/juju/juju/worker/leadership"
 	"github.com/juju/juju/worker/uniter"
 	"github.com/juju/juju/worker/uniter/charm"
+	"github.com/juju/juju/worker/uniter/filter"
 )
 
 // worstCase is used for timeouts when timing out
@@ -75,24 +77,28 @@ func assertAssignUnit(c *gc.C, st *state.State, u *state.Unit) {
 }
 
 type context struct {
-	uuid          string
-	path          string
-	dataDir       string
-	s             *UniterSuite
-	st            *state.State
-	api           *apiuniter.State
-	leader        leadership.LeadershipManager
-	charms        map[string][]byte
-	hooks         []string
-	sch           *state.Charm
-	svc           *state.Service
-	unit          *state.Unit
-	uniter        *uniter.Uniter
+	uuid                string
+	path                string
+	dataDir             string
+	s                   *UniterSuite
+	st                  *state.State
+	api                 *apiuniter.State
+	charms              map[string][]byte
+	hooks               []string
+	sch                 *state.Charm
+	svc                 *state.Service
+	unit                *state.Unit
+	uniter              *uniter.Uniter
+	leadershipGuarantee time.Duration
+	leadershipTracker   leadership.TrackerWorker
+	leadershipManager   coreleadership.LeadershipManager
+	eventFilter         filter.Filter
+	ticker              *uniter.ManualTicker
+
 	relatedSvc    *state.Service
 	relation      *state.Relation
 	relationUnits map[string]*state.RelationUnit
 	subordinate   *state.Unit
-	ticker        *uniter.ManualTicker
 
 	wg             sync.WaitGroup
 	mu             sync.Mutex
@@ -114,15 +120,9 @@ func (ctx *context) HookFailed(hookName string) {
 }
 
 func (ctx *context) run(c *gc.C, steps []stepper) {
-	// We need this lest leadership calls block forever.
-	workerLoop := lease.WorkerLoop(ctx.st)
-	leaseWorker := worker.NewSimpleWorker(workerLoop)
-	defer func() {
-		c.Assert(worker.Stop(leaseWorker), jc.ErrorIsNil)
-	}()
-
 	defer func() {
 		if ctx.uniter != nil {
+			destroyWorkers(c, ctx)
 			err := ctx.uniter.Stop()
 			c.Assert(err, jc.ErrorIsNil)
 		}
@@ -144,7 +144,7 @@ func (ctx *context) apiLogin(c *gc.C) {
 	ctx.api, err = st.Uniter()
 	c.Assert(err, jc.ErrorIsNil)
 	c.Assert(ctx.api, gc.NotNil)
-	ctx.leader = leadership.NewLeadershipManager(lease.Manager())
+	ctx.leadershipManager = coreleadership.NewLeadershipManager(lease.Manager())
 }
 
 func (ctx *context) writeExplicitHook(c *gc.C, path string, contents string) {
@@ -447,7 +447,17 @@ func (s startUniter) step(c *gc.C, ctx *context) {
 	locksDir := filepath.Join(ctx.dataDir, "locks")
 	lock, err := fslock.NewLock(locksDir, "uniter-hook-execution")
 	c.Assert(err, jc.ErrorIsNil)
-	ctx.uniter = uniter.NewUniter(ctx.api, tag, ctx.leader, ctx.dataDir, lock)
+
+	leadershipGuarantee := 30 * time.Second // default to usual value
+	if ctx.leadershipGuarantee != 0 {
+		leadershipGuarantee = ctx.leadershipGuarantee
+	}
+	ctx.leadershipTracker = leadership.NewTrackerWorker(tag, ctx.leadershipManager, leadershipGuarantee)
+
+	ctx.eventFilter, err = filter.NewFilter(ctx.api, tag)
+	c.Assert(err, jc.ErrorIsNil)
+
+	ctx.uniter = uniter.NewUniter(ctx.api, tag, ctx.leadershipTracker, ctx.eventFilter, ctx.dataDir, lock)
 	uniter.SetUniterObserver(ctx.uniter, ctx)
 }
 
@@ -456,6 +466,7 @@ type waitUniterDead struct {
 }
 
 func (s waitUniterDead) step(c *gc.C, ctx *context) {
+	defer destroyWorkers(c, ctx)
 	if s.err != "" {
 		err := s.waitDead(c, ctx)
 		c.Assert(err, gc.ErrorMatches, s.err)
@@ -483,15 +494,8 @@ func (s waitUniterDead) waitDead(c *gc.C, ctx *context) error {
 	u := ctx.uniter
 	ctx.uniter = nil
 	timeout := time.After(worstCase)
+	ctx.s.BackingState.StartSync()
 	for {
-		// The repeated StartSync is to ensure timely completion of this method
-		// in the case(s) where a state change causes a uniter action which
-		// causes a state change which causes a uniter action, in which case we
-		// need more than one sync. At the moment there's only one situation
-		// that causes this -- setting the unit's service to Dying -- but it's
-		// not an intrinsically insane pattern of action (and helps to simplify
-		// the filter code) so this test seems like a small price to pay.
-		ctx.s.BackingState.StartSync()
 		select {
 		case <-u.Dead():
 			return u.Wait()
@@ -508,6 +512,7 @@ type stopUniter struct {
 }
 
 func (s stopUniter) step(c *gc.C, ctx *context) {
+	defer destroyWorkers(c, ctx)
 	u := ctx.uniter
 	if u == nil {
 		c.Logf("uniter not started, skipping stopUniter{}")
@@ -516,9 +521,22 @@ func (s stopUniter) step(c *gc.C, ctx *context) {
 	ctx.uniter = nil
 	err := u.Stop()
 	if s.err == "" {
-		c.Assert(err, jc.ErrorIsNil)
+		c.Check(err, jc.ErrorIsNil)
 	} else {
-		c.Assert(err, gc.ErrorMatches, s.err)
+		c.Check(err, gc.ErrorMatches, s.err)
+	}
+}
+
+func destroyWorkers(c *gc.C, ctx *context) {
+	if ctx.eventFilter != nil {
+		ctx.eventFilter.Kill()
+		c.Check(ctx.eventFilter.Wait(), jc.ErrorIsNil)
+		ctx.eventFilter = nil
+	}
+	if ctx.leadershipTracker != nil {
+		ctx.leadershipTracker.Kill()
+		c.Check(ctx.leadershipTracker.Wait(), jc.ErrorIsNil)
+		ctx.leadershipTracker = nil
 	}
 }
 
@@ -1411,15 +1429,20 @@ func (forceMinion) step(c *gc.C, ctx *context) {
 	// that the uniter's tracker *will* see the problem when it fails to renew.
 	// This lets us test the uniter's behaviour under bizarre/adverse conditions
 	// (in addition to working just fine when the uniter's not running).
+	// NOTE(fwereade) 2015-04-26: it might be better to use a mocked leadership
+	// tracker to construct the uniter, but I'm trying to maintain stability in
+	// this change.
 	for i := 0; i < 3; i++ {
 		c.Logf("deposing local unit (attempt %d)", i)
-		err := ctx.leader.ReleaseLeadership(ctx.svc.Name(), ctx.unit.Name())
-		c.Assert(err, jc.ErrorIsNil)
+		err := ctx.leadershipManager.ReleaseLeadership(ctx.svc.Name(), ctx.unit.Name())
+		if err != nil {
+			c.Logf("failed to depose: %v", err)
+		}
 		c.Logf("promoting other unit (attempt %d)", i)
-		err = ctx.leader.ClaimLeadership(ctx.svc.Name(), otherLeader, coretesting.LongWait)
+		err = ctx.leadershipManager.ClaimLeadership(ctx.svc.Name(), otherLeader, coretesting.LongWait)
 		if err == nil {
 			return
-		} else if err != leadership.ErrClaimDenied {
+		} else if err != coreleadership.ErrClaimDenied {
 			c.Assert(err, jc.ErrorIsNil)
 		}
 	}
@@ -1430,10 +1453,10 @@ type forceLeader struct{}
 
 func (forceLeader) step(c *gc.C, ctx *context) {
 	c.Logf("deposing other unit")
-	err := ctx.leader.ReleaseLeadership(ctx.svc.Name(), otherLeader)
+	err := ctx.leadershipManager.ReleaseLeadership(ctx.svc.Name(), otherLeader)
 	c.Assert(err, jc.ErrorIsNil)
 	c.Logf("promoting local unit")
-	err = ctx.leader.ClaimLeadership(ctx.svc.Name(), ctx.unit.Name(), coretesting.LongWait)
+	err = ctx.leadershipManager.ClaimLeadership(ctx.svc.Name(), ctx.unit.Name(), coretesting.LongWait)
 	c.Assert(err, jc.ErrorIsNil)
 }
 

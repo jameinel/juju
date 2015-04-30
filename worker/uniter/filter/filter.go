@@ -517,6 +517,7 @@ func (f *filter) loop(unitTag names.UnitTag) (err error) {
 			if sendLeaderSettings {
 				// only send the leader settings changed event
 				// if it hasn't been explicitly disabled
+				filterLogger.Debugf("sending leader settings change (want=true)")
 				f.outLeaderSettings = f.outLeaderSettingsOn
 			} else {
 				filterLogger.Debugf("not sending leader settings change (want=false)")

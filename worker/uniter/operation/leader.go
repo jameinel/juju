@@ -115,5 +115,11 @@ func (rl *resignLeadership) Execute(state State) (*State, error) {
 // Commit is part of the Operation interface.
 func (rl *resignLeadership) Commit(state State) (*State, error) {
 	state.Leader = false
+	if state.Kind == RunHook && state.Step == Queued && state.Hook.Kind == hook.LeaderElected {
+		// Unqueue leader-elected hook from remarkably-swiftly-deposed leadership.
+		state.Kind = Continue
+		state.Step = Pending
+		state.Hook = nil
+	}
 	return &state, nil
 }

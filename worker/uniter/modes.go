@@ -104,9 +104,10 @@ func ModeContinue(u *Uniter) (next Mode, err error) {
 		creator = newResignLeadershipOp()
 	}
 	if creator != nil {
+		logger.Infof("changing leadership status to %v...", isLeader)
 		return continueAfter(u, creator)
 	}
-	logger.Infof("leadership status is up-to-date")
+	logger.Infof("leadership status is up-to-date (%v)", isLeader)
 
 	switch opState.Kind {
 	case operation.RunAction:
