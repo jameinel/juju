@@ -72,6 +72,50 @@ func (c *baseCommand) init(name string) error {
 	return nil
 }
 
+func (c *baseCommand) defsFromCharm(ctx *cmd.Context) (map[string]charm.Process, error) {
+	filename := filepath.Join(ctx.Dir, "metadata.yaml")
+	meta, err := c.ReadMetadata(filename)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defMap := make(map[string]charm.Process)
+	for _, definition := range meta.Processes {
+		// In the case of collision, use the first one.
+		if _, ok := defMap[definition.Name]; ok {
+			continue
+		}
+		defMap[definition.Name] = definition
+	}
+	return defMap, nil
+}
+
+func (c *baseCommand) registeredProcs(ids ...string) ([]process.Info, error) {
+	if len(ids) == 0 {
+		registered, err := c.compCtx.List()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if len(registered) == 0 {
+			return nil, nil
+		}
+		ids = registered
+	}
+
+	var procs []process.Info
+	for _, id := range ids {
+		proc, err := c.compCtx.Get(id)
+		if errors.IsNotFound(err) {
+			// This is an inconsequential race so we ignore it.
+			continue
+		}
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		procs = append(procs, *proc)
+	}
+	return procs, nil
+}
+
 // registeringCommand is the base for commands that register a process
 // that has been launched.
 type registeringCommand struct {
@@ -167,12 +211,15 @@ func (c *registeringCommand) findValidInfo(ctx *cmd.Context) (*process.Info, err
 
 	var definition charm.Process
 	if c.Definition.Path == "" {
-		filename := filepath.Join(ctx.Dir, "metadata.yaml")
-		charmDef, err := c.defFromMetadata(c.Name, filename)
+		defs, err := c.defsFromCharm(ctx)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		definition = *charmDef
+		charmDef, ok := defs[c.Name]
+		if !ok {
+			return nil, errors.NotFoundf(c.Name)
+		}
+		definition = charmDef
 	} else {
 		// c.info must be nil at this point.
 		data, err := c.Definition.Read(ctx)
@@ -196,19 +243,6 @@ func (c *registeringCommand) findValidInfo(ctx *cmd.Context) (*process.Info, err
 		return nil, errors.Errorf("already registered")
 	}
 	return info, nil
-}
-
-func (c *registeringCommand) defFromMetadata(name, filename string) (*charm.Process, error) {
-	meta, err := c.ReadMetadata(filename)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	for _, definition := range meta.Processes {
-		if name == definition.Name {
-			return &definition, nil
-		}
-	}
-	return nil, errors.NotFoundf(name)
 }
 
 // checkSpace ensures that the requested network space is available
