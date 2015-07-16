@@ -11,7 +11,7 @@ import (
 	"github.com/juju/cmd"
 	"github.com/juju/errors"
 	"gopkg.in/juju/charm.v5"
-	"gopkg.in/yaml.v1"
+	goyaml "gopkg.in/yaml.v1"
 	"launchpad.net/gnuflag"
 
 	"github.com/juju/juju/process"
@@ -33,6 +33,8 @@ type baseCommand struct {
 	Name string
 	// info is the process info for the named workload process.
 	info *process.Info
+	// ReadMetadata extracts charm metadata from the given file.
+	ReadMetadata func(filename string) (*charm.Meta, error)
 }
 
 func newCommand(ctx HookContext) (*baseCommand, error) {
@@ -42,9 +44,25 @@ func newCommand(ctx HookContext) (*baseCommand, error) {
 		return nil, errors.Trace(err)
 	}
 	return &baseCommand{
-		ctx:     ctx,
-		compCtx: compCtx,
+		ctx:          ctx,
+		compCtx:      compCtx,
+		ReadMetadata: readMetadata,
 	}, nil
+}
+
+func readMetadata(filename string) (*charm.Meta, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer file.Close()
+
+	meta, err := charm.ReadMeta(file)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return meta, nil
 }
 
 // Init implements cmd.Command.
@@ -60,6 +78,8 @@ func (c *baseCommand) init(name string) error {
 		return errors.Errorf("got empty name")
 	}
 	c.Name = name
+
+	// TODO(ericsnow) Pull the definitions from the metadata here...
 
 	pInfo, err := c.compCtx.Get(c.Name)
 	if err != nil && !errors.IsNotFound(err) {
@@ -89,9 +109,6 @@ type registeringCommand struct {
 
 	// Definition is the file definition of the process.
 	Definition cmd.FileVar
-
-	// ReadMetadata extracts charm metadata from the given file.
-	ReadMetadata func(filename string) (*charm.Meta, error)
 }
 
 func newRegisteringCommand(ctx HookContext) (*registeringCommand, error) {
@@ -100,24 +117,8 @@ func newRegisteringCommand(ctx HookContext) (*registeringCommand, error) {
 		return nil, errors.Trace(err)
 	}
 	return &registeringCommand{
-		baseCommand:  *base,
-		ReadMetadata: readMetadata,
+		baseCommand: *base,
 	}, nil
-}
-
-func readMetadata(filename string) (*charm.Meta, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	defer file.Close()
-
-	meta, err := charm.ReadMeta(file)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return meta, nil
 }
 
 // SetFlags implements cmd.Command.
@@ -230,7 +231,7 @@ func (c *registeringCommand) defFromMetadata(name, filename string) (*charm.Proc
 
 func parseDefinition(name string, data []byte) (*charm.Process, error) {
 	raw := make(map[interface{}]interface{})
-	if err := yaml.Unmarshal(data, raw); err != nil {
+	if err := goyaml.Unmarshal(data, raw); err != nil {
 		return nil, errors.Trace(err)
 	}
 	definition, err := charm.ParseProcess(name, raw)
