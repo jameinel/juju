@@ -4,14 +4,11 @@
 package context
 
 import (
-	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/juju/cmd"
 	"github.com/juju/errors"
 	"gopkg.in/juju/charm.v5"
-	goyaml "gopkg.in/yaml.v1"
 	"launchpad.net/gnuflag"
 
 	"github.com/juju/juju/process"
@@ -48,21 +45,6 @@ func newCommand(ctx HookContext) (*baseCommand, error) {
 		compCtx:      compCtx,
 		ReadMetadata: readMetadata,
 	}, nil
-}
-
-func readMetadata(filename string) (*charm.Meta, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	defer file.Close()
-
-	meta, err := charm.ReadMeta(file)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return meta, nil
 }
 
 // Init implements cmd.Command.
@@ -229,23 +211,6 @@ func (c *registeringCommand) defFromMetadata(name, filename string) (*charm.Proc
 	return nil, errors.NotFoundf(name)
 }
 
-func parseDefinition(name string, data []byte) (*charm.Process, error) {
-	raw := make(map[interface{}]interface{})
-	if err := goyaml.Unmarshal(data, raw); err != nil {
-		return nil, errors.Trace(err)
-	}
-	definition, err := charm.ParseProcess(name, raw)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if definition.Name == "" {
-		definition.Name = name
-	} else if definition.Name != name {
-		return nil, errors.Errorf("process name mismatch; %q != %q", definition.Name, name)
-	}
-	return definition, nil
-}
-
 // checkSpace ensures that the requested network space is available
 // to the hook.
 func (c *registeringCommand) checkSpace() error {
@@ -270,43 +235,4 @@ func (c *registeringCommand) parseUpdates(definition charm.Process) (*charm.Proc
 	}
 
 	return newDefinition, nil
-}
-
-// parseUpdate builds a charm.ProcessFieldValue from an update string.
-func parseUpdate(update string) (charm.ProcessFieldValue, error) {
-	var pfv charm.ProcessFieldValue
-
-	parts := strings.SplitN(update, ":", 2)
-	if len(parts) == 1 {
-		return pfv, errors.Errorf("missing value")
-	}
-	pfv.Field, pfv.Value = parts[0], parts[1]
-
-	if pfv.Field == "" {
-		return pfv, errors.Errorf("missing field")
-	}
-	if pfv.Value == "" {
-		return pfv, errors.Errorf("missing value")
-	}
-
-	fieldParts := strings.SplitN(pfv.Field, "/", 2)
-	if len(fieldParts) == 2 {
-		pfv.Field = fieldParts[0]
-		pfv.Subfield = fieldParts[1]
-	}
-
-	return pfv, nil
-}
-
-// parseUpdates parses the updates list in to a charm.ProcessFieldValue list.
-func parseUpdates(updates []string) ([]charm.ProcessFieldValue, error) {
-	var results []charm.ProcessFieldValue
-	for _, update := range updates {
-		pfv, err := parseUpdate(update)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		results = append(results, pfv)
-	}
-	return results, nil
 }
