@@ -4,9 +4,11 @@
 package context
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
+	"github.com/juju/cmd"
 	"github.com/juju/errors"
 	"gopkg.in/juju/charm.v5"
 	goyaml "gopkg.in/yaml.v1"
@@ -25,6 +27,36 @@ func readMetadata(filename string) (*charm.Meta, error) {
 	}
 
 	return meta, nil
+}
+
+func dumpAll(ctx *cmd.Context, values ...interface{}) error {
+	if len(values) == 0 {
+		return nil
+	}
+	if err := dump(ctx, values[0]); err != nil {
+		return errors.Trace(err)
+	}
+	for _, value := range values[1:] {
+		// TODO(ericsnow) Use a different separator or dump as a YAML list?
+		fmt.Fprintln(ctx.Stdout, "")
+		if err := dump(ctx, value); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
+func dump(ctx *cmd.Context, value interface{}) error {
+	// TODO(ericsnow) support passing in an indent size?
+
+	data, err := goyaml.Marshal(value)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if _, err := fmt.Fprintln(ctx.Stdout, string(data)); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 func parseDefinition(name string, data []byte) (*charm.Process, error) {
