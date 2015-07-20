@@ -52,13 +52,13 @@ func SetProcessesComponent(upFunc newUnitProcessesFunc) {
 
 // UnitProcesses exposes interaction with workload processes in state
 // for a the given unit.
-func (st *State) UnitProcesses(unit *Unit) (UnitProcesses, error) {
+func (st *State) UnitProcesses(unitTag names.UnitTag) (UnitProcesses, error) {
 	if newUnitProcesses == nil {
 		return nil, errors.Errorf("workload processes not supported")
 	}
 
 	persist := st.newPersistence()
-	unitProcs, err := newUnitProcesses(persist, unit.UnitTag())
+	unitProcs, err := newUnitProcesses(persist, unitTag)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
