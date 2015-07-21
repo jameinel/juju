@@ -33,6 +33,8 @@ type Component interface {
 	Set(procName string, info *process.Info) error
 	// List returns the list of registered process IDs.
 	List() ([]string, error)
+	// Flush pushes the hook context data out to state.
+	Flush() error
 }
 
 // Context is the workload process portion of the hook context.
