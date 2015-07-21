@@ -7,10 +7,13 @@ import (
 	"sort"
 
 	"github.com/juju/errors"
+	"github.com/juju/loggo"
 	"github.com/juju/utils/set"
 
 	"github.com/juju/juju/process"
 )
+
+var logger = loggo.GetLogger("juju.process.context")
 
 // APIClient represents the API needs of a Context.
 type APIClient interface {
