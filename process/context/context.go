@@ -145,6 +145,8 @@ func mergeProcMaps(procs, updates map[string]*process.Info) map[string]*process.
 
 // Get returns the process info corresponding to the given ID.
 func (c *Context) Get(procName string) (*process.Info, error) {
+	logger.Debugf("getting %q from hook context", procName)
+
 	actual, ok := c.updates[procName]
 	if !ok {
 		actual, ok = c.processes[procName]
@@ -165,6 +167,8 @@ func (c *Context) Get(procName string) (*process.Info, error) {
 
 // List returns the names of all registered processes.
 func (c *Context) List() ([]string, error) {
+	logger.Debugf("listing all procs in hook context")
+
 	ids := make([]string, len(c.ids))
 	copy(ids, c.ids.Values())
 	sort.Strings(ids)
@@ -173,6 +177,8 @@ func (c *Context) List() ([]string, error) {
 
 // Set records the process info in the hook context.
 func (c *Context) Set(procName string, info *process.Info) error {
+	logger.Debugf("adding %q to hook context: %#v", procName, info)
+
 	if procName != info.Name {
 		return errors.Errorf("mismatch on name: %s != %s", procName, info.Name)
 	}
@@ -198,6 +204,8 @@ func (c *Context) set(id string, pInfo *process.Info) {
 // added and updated process.Info in the hook context are pushed to
 // Juju state via the API.
 func (c *Context) Flush() error {
+	logger.Debugf("flushing from hook context to state")
+
 	if len(c.updates) == 0 {
 		return nil
 	}
