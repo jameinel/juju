@@ -1,0 +1,7 @@
+#!/bin/bash
+
+export PATH=$PWD/plugin:$PATH
+unitstatus=$(status-get)
+
+status-set $unitstatus "noop: doing nothing"
+# do nothing

@@ -4,10 +4,16 @@
 package context
 
 import (
+	"sort"
+
 	"github.com/juju/errors"
+	"github.com/juju/loggo"
+	"github.com/juju/utils/set"
 
 	"github.com/juju/juju/process"
 )
+
+var logger = loggo.GetLogger("juju.process.context")
 
 // APIClient represents the API needs of a Context.
 type APIClient interface {
@@ -25,6 +31,10 @@ type Component interface {
 	Get(procName string) (*process.Info, error)
 	// Set records the process info in the hook context.
 	Set(procName string, info *process.Info) error
+	// List returns the list of registered process IDs.
+	List() ([]string, error)
+	// Flush pushes the hook context data out to state.
+	Flush() error
 }
 
 // Context is the workload process portion of the hook context.
@@ -32,6 +42,7 @@ type Context struct {
 	api       APIClient
 	processes map[string]*process.Info
 	updates   map[string]*process.Info
+	ids       set.Strings
 }
 
 // NewContext returns a new jujuc.ContextComponent for workload processes.
@@ -43,6 +54,7 @@ func NewContext(api APIClient, procs ...*process.Info) *Context {
 	return &Context{
 		processes: processes,
 		api:       api,
+		ids:       set.NewStrings(),
 	}
 }
 
@@ -56,6 +68,7 @@ func NewContextAPI(api APIClient) (*Context, error) {
 	ctx := NewContext(api)
 	for _, id := range ids {
 		ctx.processes[id] = nil
+		ctx.ids.Add(id)
 	}
 	return ctx, nil
 }
@@ -130,8 +143,12 @@ func mergeProcMaps(procs, updates map[string]*process.Info) map[string]*process.
 	return result
 }
 
+// TODO(ericsnow) Should be build in refreshes?
+
 // Get returns the process info corresponding to the given ID.
 func (c *Context) Get(procName string) (*process.Info, error) {
+	logger.Debugf("getting %q from hook context", procName)
+
 	actual, ok := c.updates[procName]
 	if !ok {
 		actual, ok = c.processes[procName]
@@ -150,8 +167,20 @@ func (c *Context) Get(procName string) (*process.Info, error) {
 	return actual, nil
 }
 
+// List returns the names of all registered processes.
+func (c *Context) List() ([]string, error) {
+	logger.Debugf("listing all procs in hook context")
+
+	ids := make([]string, len(c.ids))
+	copy(ids, c.ids.Values())
+	sort.Strings(ids)
+	return ids, nil
+}
+
 // Set records the process info in the hook context.
 func (c *Context) Set(procName string, info *process.Info) error {
+	logger.Debugf("adding %q to hook context: %#v", procName, info)
+
 	if procName != info.Name {
 		return errors.Errorf("mismatch on name: %s != %s", procName, info.Name)
 	}
@@ -168,6 +197,7 @@ func (c *Context) set(id string, pInfo *process.Info) {
 	var info process.Info
 	info = *pInfo
 	c.updates[id] = &info
+	c.ids.Add(id)
 }
 
 // TODO(ericsnow) The context machinery is not actually using this yet.
@@ -176,6 +206,8 @@ func (c *Context) set(id string, pInfo *process.Info) {
 // added and updated process.Info in the hook context are pushed to
 // Juju state via the API.
 func (c *Context) Flush() error {
+	logger.Debugf("flushing from hook context to state")
+
 	if len(c.updates) == 0 {
 		return nil
 	}

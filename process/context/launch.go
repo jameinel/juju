@@ -77,6 +77,7 @@ func (c *ProcLaunchCommand) init(name string) error {
 
 // Run implements cmd.Command.
 func (c *ProcLaunchCommand) Run(ctx *cmd.Context) error {
+	logger.Debugf("running launch command")
 
 	info, err := c.findValidInfo(ctx)
 	if err != nil {
