@@ -303,7 +303,7 @@ func (s *registerSuite) TestRunOkay(c *gc.C) {
 	context.SetComponent(s.cmd, newStubContextComponent(s.Stub))
 
 	s.checkRun(c, "", "")
-	s.Stub.CheckCallNames(c, "Set")
+	s.Stub.CheckCallNames(c, "Set", "Flush")
 }
 
 func (s *registerSuite) TestRunUpdatedProcess(c *gc.C) {
@@ -320,5 +320,8 @@ func (s *registerSuite) TestRunUpdatedProcess(c *gc.C) {
 	s.Stub.CheckCalls(c, []testing.StubCall{{
 		FuncName: "Set",
 		Args:     []interface{}{s.proc.Name, s.proc},
+	}, {
+		FuncName: "Flush",
+		Args:     nil,
 	}})
 }

@@ -29,6 +29,7 @@ type workloadProcesses struct{}
 func (c workloadProcesses) registerForServer() error {
 	c.registerHookContext()
 	c.registerState()
+	c.registerStatusAPI()
 	return nil
 }
 
