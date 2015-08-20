@@ -79,11 +79,11 @@ func (s *ManifoldsSuite) TestManifoldNames(c *gc.C) {
 	}
 
 	manifolds := unit.Manifolds(config)
-	c.Assert(manifolds, gc.HasLen, 12)
 	expectedKeys := []string{
 		unit.AgentName,
 		unit.APIAdddressUpdaterName,
 		unit.APICallerName,
+		unit.APIInfoGateName,
 		unit.LeadershipTrackerName,
 		unit.LoggingConfigUpdaterName,
 		unit.LogSenderName,
@@ -94,13 +94,15 @@ func (s *ManifoldsSuite) TestManifoldNames(c *gc.C) {
 		unit.UpgraderName,
 		unit.MetricSpoolName,
 	}
+	c.Check(manifolds, gc.HasLen, len(expectedKeys))
+
 	keys := make([]string, len(manifolds))
 	i := 0
 	for k, _ := range manifolds {
 		keys[i] = k
 		i++
 	}
-	c.Assert(expectedKeys, jc.SameContents, keys)
+	c.Check(keys, jc.SameContents, expectedKeys)
 }
 
 type fakeAgent struct {
