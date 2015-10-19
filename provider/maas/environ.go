@@ -1171,28 +1171,243 @@ fi`
 
 const bridgeConfigTemplate = `
 # In case we already created the bridge, don't do it again.
-grep -q "iface {{.Bridge}} inet dhcp" {{.Config}} && exit 0
+grep -q "iface {{.Bridge}} inet" {{.Config}} && exit 0
 
-# Discover primary interface at run-time using the default route (if set)
-PRIMARY_IFACE=$(ip route list exact 0/0 | egrep -o 'dev [^ ]+' | cut -b5-)
+# Minimize the debugging output of this script (turned on for runcmds
+# in cloud-init userdata by default), as it's already too verbose.
+# Debug logging is re-enabled before exiting this script.
+set +x
 
-# If $PRIMARY_IFACE is empty, there's nothing to do.
-[ -z "$PRIMARY_IFACE" ] && exit 0
+# Discover the needed IPv4/IPv6 configuration for {{.Bridge}} (if any).
+# Arguments:
+#   $1: the iproute2 command prefix to use (e.g. "ip -6" or "ip -4")
+# Outputs the discovered default gateway and primary NIC, separated
+# with a space, if they could be discovered. The output is empty otherwise.
+get_gateway_and_primary_nic() {
+  IP_CMD="$1"
+  # Expected format: "default via <GATEWAY_IP> dev <PRIMARY_NIC> ..."
+  # (there could be more tokens, but we just need the 3rd and 5th).
+  echo "$($IP_CMD route list exact default | cut -d' ' -f3,5)"
+}
 
-# Log the contents of /etc/network/interfaces prior to modifying
-echo "Contents of /etc/network/interfaces before changes"
-cat /etc/network/interfaces
-{{.Script}}
-# Log the contents of /etc/network/interfaces after modifying
-echo "Contents of /etc/network/interfaces after changes"
-cat /etc/network/interfaces
-# Stop $PRIMARY_IFACE and start the bridge instead.
-ifdown -v ${PRIMARY_IFACE} ; ifup -v {{.Bridge}}
+# Display route table contents (IPv4 and IPv6), network devices,
+# all configured IPv4 and IPv6 addresses, and the contents
+# of {{.Config}} for diagnosing connectivity issues.
+dump_network_config() {
+  echo "Current networking configuration:"
+  echo "-------------------------------------------------------"
 
-# Finally, remove the route using $PRIMARY_IFACE (if any) so it won't
-# clash with the same automatically added route for juju-br0 (except
-# for the device name).
-ip route flush dev $PRIMARY_IFACE scope link proto kernel || true
+  echo "Route table contents:"
+  # Using -B here shows both IPv4 and IPv6 routes.
+  ip -B route show
+  echo "-------------------------------------------------------"
+
+  echo "Network devices:"
+  # Using 'ifconfig -a' instead of 'ip -B link show' formats better.
+  ifconfig -a
+  echo "-------------------------------------------------------"
+
+  echo "Configured IPv4 addresses:"
+  ip -4 address show
+  echo "-------------------------------------------------------"
+
+  echo "Configured IPv6 addresses:"
+  ip -6 address show
+  echo "-------------------------------------------------------"
+
+  echo "Contents of {{.Config}}:"
+  cat {{.Config}}
+  echo "-------------------------------------------------------"
+}
+
+# Make the following changes to {{.Config}} and brings up {{.Bridge}}:
+# 1. Replaces $PRIMARY_NIC's name with {{.Bridge}} ("auto" and "iface" stanzas).
+# 2. Adds "bridge_ports $PRIMARY_NIC" to the section for {{.Bridge}}.
+# 3. Adds "iface $PRIMARY_NIC $AF_NAME manual" before the same section.
+# 4. Any existing aliases of the primary NIC are moved over to the bridge.
+# The original {{.Config}} is saved as {{.Config}}.original.
+# Finally, the {{.Bridge}} device is added and activated. If this fails,
+# the modifications are retained in {{.Config}}.juju and the original config
+# is restored to ensure connectivity (for debugging) is preserved.
+# Arguments:
+#   $1: address family to use (e.g. "inet" for IPv4, "inet6" for IPv6)
+#   $2: primary NIC device name (as discovered from the default route)
+# On failure, returns a non-zero exit code.
+setup_bridge_config() {
+  AF_NAME="$1"
+  PRIMARY_NIC="$2"
+
+  if [ "$AF_NAME" != "inet" -a "$AF_NAME" != "inet6" ]; then
+    echo "ERROR: address family $AF_NAME not supported: expected inet or inet6!"
+    return 1
+  fi
+  if [ -z "$PRIMARY_NIC" ]; then
+    echo "ERROR: primary NIC cannot be empty!"
+    return 1
+  fi
+  if [ ! -f "{{.Config}}" ]; then
+    echo "ERROR: {{.Config}} not found - cannot modify!"
+    return 1
+  fi
+
+  echo "Modifying {{.Config}} to replace $PRIMARY_NIC with {{.Bridge}} for AF $AF_NAME"
+  echo "Saving original to {{.Config}}.original"
+  cp -f "{{.Config}}" "{{.Config}}.original"
+
+  sed -ri "s/^\s*iface\s+${PRIMARY_NIC}\s+${AF_NAME}\s+(.*)$/iface {{.Bridge}} $AF_NAME \1/" {{.Config}}
+  sed -ri "s/^\s*auto\s+${PRIMARY_NIC}\s*$/auto {{.Bridge}}/" {{.Config}}
+  sed -i "/iface {{.Bridge}} ${AF_NAME} /a\    bridge_ports ${PRIMARY_NIC}" {{.Config}}
+  sed -i "/auto {{.Bridge}}/i\iface ${PRIMARY_NIC} ${AF_NAME} manual\n" {{.Config}}
+  # Any existing aliases of the primary NIC (e.g. like eth0:0, eth0:1) must also
+  # be moved over as aliases of {{.Bridge}}, otherwise they'll stop working.
+  sed -ri "s/^\s*auto\s+${PRIMARY_NIC}(:.+)\s*$/auto {{.Bridge}}\1/" {{.Config}}
+  sed -ri "s/^\s*iface\s+${PRIMARY_NIC}(:.+)\s+${AF_NAME}\s+(.*)$/iface {{.Bridge}}\1 $AF_NAME \2/" {{.Config}}
+  echo "{{.Config}} updated successfully!"
+
+  BRIDGE_ADDED=0
+  ip link add dev ${PRIMARY_NIC} name {{.Bridge}} type bridge
+  if [ "$?" != "0" ]; then
+    echo "ERROR: cannot add {{.Bridge}} bridge!"
+  else
+    echo "{{.Bridge}} created successfully, bringing it up."
+
+    # NOTE: We need to bring up the bridge and any possible
+    # new aliases it "acquired" from the primary NIC, so the
+    # easiest way is just ifup -a, which takes care of setting
+    # the addresses and routes as well.
+    ifup -a -v
+    if [ "$?" != "0" ]; then
+      echo "ERROR: cannot bring {{.Bridge}} device up!"
+    else
+      echo "{{.Bridge}} activated, about to verify connectivity."
+      BRIDGE_ADDED=1
+    fi
+  fi
+
+  if [ "$BRIDGE_ADDED" = "0" ]; then
+    echo "Reverting changes to {{.Config}} to restore connectivity."
+    echo "Modified config saved to {{.Config}}.juju"
+    cp -f "{{.Config}}" "{{.Config}}.juju"
+    cp -f "{{.Config}}.original" "{{.Config}}"
+    return 1
+  fi
+}
+
+# Because the bridge can take some time to come up, waiting for
+# the primary NIC to enter forwarding state, wait up to 60s, pinging
+# the default gateway via {{.Bridge}} each second, bailing out early
+# on success. This ensures the tools downloading (happening soon after
+# this script) will work.
+# Arguments:
+#   $1: default gateway (IPv4/IPv6) address to ping
+#   $2: ping command to use (e.g. "ping" or "ping6")
+# On failure, returns a non-zero exit code.
+ensure_bridge_connectivity() {
+  DEFAULT_GATEWAY="$1"
+  PING_CMD="$2"
+  # Find out the first of the primary, globally-scoped addresses
+  # for {{.Bridge}} to use it in $PING_CMD below (using -I <IP>
+  # rather than -I <NIC> works better for both IPv4 and IPv6).
+  BRIDGE_ADDRS="$(ip -o address show dev {{.Bridge}} primary scope global | head -n1)"
+  FIRST_BRIDGE_IP="$(echo $BRIDGE_ADDRS | sed -r "s/.*inet6? ([^\/]+)\/.*/\1/")"
+  TOTAL_TIMEOUT=60
+  FAILURES_SO_FAR=0
+  echo "Waiting up to ${TOTAL_TIMEOUT}s for {{.Bridge}} to successfully ping $DEFAULT_GATEWAY from $FIRST_BRIDGE_IP"
+  for ATTEMPT in $(seq 1 $TOTAL_TIMEOUT);
+  do
+    # We ping once for one second, as we expect the default gateway
+    # to be at most a single hop away and accessible in less than 1s.
+    $PING_CMD -q -c 1 -w 1 -I $FIRST_BRIDGE_IP $DEFAULT_GATEWAY > /dev/null
+    PING_RESULT="$?"
+    case $PING_RESULT in
+      0) # Success!
+         echo "{{.Bridge}} can access $DEFAULT_GATEWAY successfully!"
+         return 0
+         ;;
+      2) # Unexpected error (e.g. bad arguments, etc.)
+         # Turn on verbose logging for easier debugging.
+         set -x
+         continue
+         ;;
+    esac
+
+    # Don't spam the logs with too many failures, only every 10 failures.
+    FAILURES_SO_FAR=$(($FAILURES_SO_FAR+1))
+    if [ $FAILURES_SO_FAR -ge 10 ]; then
+        echo "{{.Bridge}} cannot access $DEFAULT_GATEWAY (retrying: attempt $ATTEMPT of $TOTAL_TIMEOUT)"
+        FAILURES_SO_FAR=0
+    fi
+  done
+  echo "ERROR: {{.Bridge}} cannot access $DEFAULT_GATEWAY (giving up after ${TOTAL_TIMEOUT}s)!"
+  dump_network_config
+  echo "Reverting all changes: removing {{.Bridge}}, restoring original {{.Config}}."
+
+  # Any of these can fail, hence || true at the end.
+  ip link del dev {{.Bridge}} || true
+  cp -f "{{.Config}}" "{{.Config}}.juju" || true
+  cp -f "{{.Config}}.original" "{{.Config}}" || true
+  ifup -a -v --force || true
+  return 1
+}
+
+# Determine whether to configure {{.Bridge}} for IPv4, IPv6, or both.
+IPV4_CONFIG="$(get_gateway_and_primary_nic 'ip -4')"
+IPV6_CONFIG="$(get_gateway_and_primary_nic 'ip -6')"
+
+# Exit codes returned by this script:
+#  0: all OK! In all other cases the modifications are reverted.
+#  1: neither IPv4 nor IPv6 config found.
+#  2: bridge config for IPv6 failed.
+#  3: bridge configured for IPv6, but the default gateway not accessible from the bridge.
+#  4: bridge config for IPv4 failed.
+#  5: bridge configured for IPv4, but the default gateway not accessible from the bridge.
+
+if [ -z "$IPV4_CONFIG" -a -z "$IPV6_CONFIG" ]; then
+    echo "FATAL: Cannot discover neither IPv4 nor IPv6 config for {{.Bridge}}!"
+    dump_network_config
+    set -x && exit 1
+fi
+
+if [ -n "$IPV6_CONFIG" ]; then
+    echo "Configuring {{.Bridge}} for IPv6."
+
+    DEFAULT_GATEWAY="$(echo $IPV6_CONFIG | cut -d' ' -f1)"
+    echo "Default gateway: $DEFAULT_GATEWAY"
+    PRIMARY_NIC="$(echo $IPV6_CONFIG | cut -d' ' -f2)"
+    echo "Primary NIC: $PRIMARY_NIC"
+
+    $(setup_bridge_config inet6 $PRIMARY_NIC)
+    if [ "$?" != 0 ]; then
+      set -x && exit 2
+    else
+      $(ensure_bridge_connectivity $DEFAULT_GATEWAY ping6)
+      if [ "$?" != "0" ]; then
+        set -x && exit 3
+      fi
+    fi
+fi
+if [ -n "$IPV4_CONFIG" ]; then
+    echo "Configuring {{.Bridge}} for IPv4."
+
+    DEFAULT_GATEWAY="$(echo $IPV4_CONFIG | cut -d' ' -f1)"
+    echo "Default gateway: $DEFAULT_GATEWAY"
+    PRIMARY_NIC="$(echo $IPV4_CONFIG | cut -d' ' -f2)"
+    echo "Primary NIC: $PRIMARY_NIC"
+
+    setup_bridge_config inet $PRIMARY_NIC
+    if [ "$?" != 0 ]; then
+      set -x && exit 4
+    else
+      ensure_bridge_connectivity $DEFAULT_GATEWAY ping
+      if [ "$?" != "0" ]; then
+        set -x && exit 5
+      fi
+    fi
+fi
+
+echo "{{.Bridge}} for LXC/KVM containers configured and working!"
+dump_network_config
+set -x
 `
 
 // setupJujuNetworking returns a string representing the script to run
