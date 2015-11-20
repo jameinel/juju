@@ -16,13 +16,6 @@ import (
 
 var logger = loggo.GetLogger("juju.worker.environ")
 
-// loadedInvalid is exposed via export_test.go so that tests can be informed of
-// WaitForEnviron's progress through the loop. This is a Bad Thing. Desired
-// behaviour should be verifiable via the exported interface; this may sometimes
-// mean passing things in "just for tests", but the benefits of knowing you're
-// using the exact same code at test- and at runtime outweight any inelegance.
-var loadedInvalid = func() {}
-
 // ErrWaitAborted is returned from WaitForEnviron when the wait is terminated by
 // closing the abort chan.
 var ErrWaitAborted = errors.New("environ wait aborted")
@@ -44,18 +37,17 @@ func WaitForEnviron(w watcher.NotifyWatcher, getter ConfigGetter, abort <-chan s
 			return nil, ErrWaitAborted
 		case _, ok := <-w.Changes():
 			if !ok {
-				return nil, errors.New("watcher closed channel")
+				return nil, errors.New("environ config watch closed")
 			}
 			config, err := getter.EnvironConfig()
 			if err != nil {
-				return nil, errors.Trace(err)
+				return nil, errors.Annotate(err, "cannot read environ config")
 			}
 			environ, err := environs.New(config)
 			if err == nil {
 				return environ, nil
 			}
 			logger.Errorf("loaded invalid environment configuration: %v", err)
-			loadedInvalid()
 		}
 	}
 }

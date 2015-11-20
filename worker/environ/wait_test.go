@@ -4,83 +4,127 @@
 package environ_test
 
 import (
-	"errors"
 	"time"
 
-	"github.com/juju/testing"
+	"github.com/juju/errors"
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 
-	"github.com/juju/juju/environs"
 	coretesting "github.com/juju/juju/testing"
 	"github.com/juju/juju/worker/environ"
 )
 
 type WaitSuite struct {
 	coretesting.BaseSuite
-
-	st *fakeState
 }
 
 var _ = gc.Suite(&WaitSuite{})
 
-func (s *WaitSuite) SetUpTest(c *gc.C) {
-	s.BaseSuite.SetUpTest(c)
-	s.st = &fakeState{
-		Stub:    &testing.Stub{},
-		changes: make(chan struct{}, 100),
-	}
+func (s *WaitSuite) TestWaitAborted(c *gc.C) {
+	fix := &fixture{}
+	fix.Run(c, func(context *runContext) {
+		abort := make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			env, err := environ.WaitForEnviron(context.watcher, nil, abort)
+			c.Check(env, gc.IsNil)
+			c.Check(err, gc.Equals, environ.ErrWaitAborted)
+		}()
+
+		close(abort)
+		select {
+		case <-done:
+		case <-time.After(coretesting.LongWait):
+			c.Fatalf("timed out waiting for abort")
+		}
+	})
 }
 
-func (s *WaitSuite) TestStop(c *gc.C) {
-	s.st.SetErrors(
-		nil,                // WatchForEnvironConfigChanges
-		errors.New("err1"), // Changes (closing the channel)
-	)
-	s.st.SetConfig(c, coretesting.Attrs{
-		"type": "invalid",
-	})
+func (s *WaitSuite) TestWatchClosed(c *gc.C) {
+	fix := &fixture{}
+	fix.Run(c, func(context *runContext) {
+		abort := make(chan struct{})
+		defer close(abort)
 
-	w, err := s.st.WatchForEnvironConfigChanges()
-	c.Assert(err, jc.ErrorIsNil)
-	defer stopWorker(c, w)
-	stop := make(chan struct{})
-	close(stop) // close immediately so the loop exits.
-	done := make(chan error)
-	go func() {
-		env, err := environ.WaitForEnviron(w, s.st, stop)
-		c.Check(env, gc.IsNil)
-		done <- err
-	}()
-	select {
-	case <-environ.LoadedInvalid:
-		c.Errorf("expected changes watcher to be closed")
-	case err := <-done:
-		c.Assert(err, gc.Equals, environ.ErrWaitAborted)
-	case <-time.After(coretesting.LongWait):
-		c.Fatalf("timeout waiting for the WaitForEnviron to stop")
-	}
-	s.st.CheckCallNames(c, "WatchForEnvironConfigChanges", "Changes")
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			env, err := environ.WaitForEnviron(context.watcher, nil, abort)
+			c.Check(env, gc.IsNil)
+			c.Check(err, gc.ErrorMatches, "environ config watch closed")
+		}()
+
+		context.CloseNotify()
+		select {
+		case <-done:
+		case <-time.After(coretesting.LongWait):
+			c.Fatalf("timed out waiting for failure")
+		}
+	})
 }
 
-func (s *WaitSuite) TestInvalidConfig(c *gc.C) {
-	s.st.SetConfig(c, coretesting.Attrs{
-		"type": "unknown",
-	})
-
-	w, err := s.st.WatchForEnvironConfigChanges()
-	c.Assert(err, jc.ErrorIsNil)
-	defer stopWorker(c, w)
-	done := make(chan environs.Environ)
-	go func() {
-		env, err := environ.WaitForEnviron(w, s.st, nil)
-		c.Check(err, jc.ErrorIsNil)
-		done <- env
-	}()
-	select {
-	case <-environ.LoadedInvalid:
-	case <-time.After(coretesting.LongWait):
-		c.Fatalf("timeout waiting for the LoadedInvalid notification")
+func (s *WaitSuite) TestConfigError(c *gc.C) {
+	fix := &fixture{
+		observerErrs: []error{
+			errors.New("biff zonk"),
+		},
 	}
-	s.st.CheckCallNames(c, "WatchForEnvironConfigChanges", "EnvironConfig")
+	fix.Run(c, func(context *runContext) {
+		abort := make(chan struct{})
+		defer close(abort)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			env, err := environ.WaitForEnviron(context.watcher, context, abort)
+			c.Check(env, gc.IsNil)
+			c.Check(err, gc.ErrorMatches, "cannot read environ config: biff zonk")
+		}()
+
+		context.SendNotify()
+		select {
+		case <-done:
+		case <-time.After(coretesting.LongWait):
+			c.Fatalf("timed out waiting for failure")
+		}
+	})
+}
+
+func (s *WaitSuite) TestIgnoresBadConfig(c *gc.C) {
+	fix := &fixture{
+		initialConfig: coretesting.Attrs{
+			"type": "unknown",
+		},
+	}
+	fix.Run(c, func(context *runContext) {
+		abort := make(chan struct{})
+		defer close(abort)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			env, err := environ.WaitForEnviron(context.watcher, context, abort)
+			if c.Check(err, jc.ErrorIsNil) {
+				c.Check(env.Config().Name(), gc.Equals, "expected-name")
+			}
+		}()
+
+		context.SendNotify()
+		select {
+		case <-time.After(coretesting.ShortWait):
+		case <-done:
+			c.Fatalf("completed unexpectedly")
+		}
+
+		context.SetConfig(c, coretesting.Attrs{
+			"name": "expected-name",
+		})
+		context.SendNotify()
+		select {
+		case <-done:
+		case <-time.After(coretesting.LongWait):
+			c.Fatalf("timed out waiting for success")
+		}
+	})
 }
