@@ -12,6 +12,7 @@ import (
 
 	coretesting "github.com/juju/juju/testing"
 	"github.com/juju/juju/worker/environ"
+	"github.com/juju/juju/worker/workertest"
 )
 
 type WaitSuite struct {
@@ -36,8 +37,9 @@ func (s *WaitSuite) TestWaitAborted(c *gc.C) {
 		select {
 		case <-done:
 		case <-time.After(coretesting.LongWait):
-			c.Fatalf("timed out waiting for abort")
+			c.Errorf("timed out waiting for abort")
 		}
+		workertest.CheckAlive(c, context.watcher)
 	})
 }
 
@@ -59,8 +61,9 @@ func (s *WaitSuite) TestWatchClosed(c *gc.C) {
 		select {
 		case <-done:
 		case <-time.After(coretesting.LongWait):
-			c.Fatalf("timed out waiting for failure")
+			c.Errorf("timed out waiting for failure")
 		}
+		workertest.CheckAlive(c, context.watcher)
 	})
 }
 
@@ -86,8 +89,9 @@ func (s *WaitSuite) TestConfigError(c *gc.C) {
 		select {
 		case <-done:
 		case <-time.After(coretesting.LongWait):
-			c.Fatalf("timed out waiting for failure")
+			c.Errorf("timed out waiting for failure")
 		}
+		workertest.CheckAlive(c, context.watcher)
 	})
 }
 
@@ -114,7 +118,7 @@ func (s *WaitSuite) TestIgnoresBadConfig(c *gc.C) {
 		select {
 		case <-time.After(coretesting.ShortWait):
 		case <-done:
-			c.Fatalf("completed unexpectedly")
+			c.Errorf("completed unexpectedly")
 		}
 
 		context.SetConfig(c, coretesting.Attrs{
@@ -124,7 +128,8 @@ func (s *WaitSuite) TestIgnoresBadConfig(c *gc.C) {
 		select {
 		case <-done:
 		case <-time.After(coretesting.LongWait):
-			c.Fatalf("timed out waiting for success")
+			c.Errorf("timed out waiting for success")
 		}
+		workertest.CheckAlive(c, context.watcher)
 	})
 }
