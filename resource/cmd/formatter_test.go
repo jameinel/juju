@@ -4,33 +4,122 @@
 package cmd
 
 import (
+	"strings"
+	"time"
+
 	"github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	charmresource "gopkg.in/juju/charm.v6-unstable/resource"
+
+	"github.com/juju/juju/resource"
 )
 
-var _ = gc.Suite(&FormatterSuite{})
+var _ = gc.Suite(&CharmFormatterSuite{})
 
-type FormatterSuite struct {
+type CharmFormatterSuite struct {
 	testing.IsolationSuite
 }
 
-func (s *FormatterSuite) TestFormatInfoOkay(c *gc.C) {
-	data := []byte("spamspamspam")
+func (s *CharmFormatterSuite) TestFormatCharmResource(c *gc.C) {
+	data := strings.NewReader("spamspamspam")
 	fp, err := charmresource.GenerateFingerprint(data)
 	c.Assert(err, jc.ErrorIsNil)
 	fingerprint := string(fp.Bytes())
-	res := newCharmResource(c, "spam", ".tgz", "X", fingerprint)
+	res := charmRes(c, "spam", ".tgz", "X", fingerprint)
 	formatted := FormatCharmResource(res)
 
 	c.Check(formatted, jc.DeepEquals, FormattedCharmResource{
-		Name:        "spam",
-		Type:        "file",
-		Path:        "spam.tgz",
-		Comment:     "X",
-		Revision:    0,
-		Fingerprint: fp.String(),
-		Origin:      "upload",
+		Name:          "spam",
+		Type:          "file",
+		Path:          "spam.tgz",
+		Comment:       "X",
+		Revision:      0,
+		Fingerprint:   fp.String(),
+		Origin:        "upload",
+		charmRevision: "-",
 	})
+}
+
+var _ = gc.Suite(&SvcFormatterSuite{})
+
+type SvcFormatterSuite struct {
+	testing.IsolationSuite
+}
+
+func (s *SvcFormatterSuite) TestFormatSvcResource(c *gc.C) {
+	fp, err := charmresource.GenerateFingerprint(strings.NewReader("something"))
+	c.Assert(err, jc.ErrorIsNil)
+	r := resource.Resource{
+		Resource: charmresource.Resource{
+			Meta: charmresource.Meta{
+				Name:    "website",
+				Comment: "your website data",
+				Type:    charmresource.TypeFile,
+				Path:    "foobar",
+			},
+			Revision:    5,
+			Origin:      charmresource.OriginStore,
+			Fingerprint: fp,
+		},
+		Username:  "Bill User",
+		Timestamp: time.Now().Add(-1 * time.Hour * 24 * 365),
+	}
+
+	f := FormatSvcResource(r)
+	c.Assert(f, gc.Equals, FormattedSvcResource{
+		Name:             r.Name,
+		Type:             "file",
+		Path:             r.Path,
+		Used:             true,
+		Revision:         r.Revision,
+		Origin:           "store",
+		Fingerprint:      fp.String(),
+		Comment:          r.Comment,
+		Timestamp:        r.Timestamp,
+		Username:         r.Username,
+		combinedRevision: "5",
+		usedYesNo:        "yes",
+		combinedOrigin:   "store",
+	})
+
+}
+
+func (s *SvcFormatterSuite) TestNotUsed(c *gc.C) {
+	r := resource.Resource{
+		Timestamp: time.Time{},
+	}
+	f := FormatSvcResource(r)
+	c.Assert(f.Used, jc.IsFalse)
+}
+
+func (s *SvcFormatterSuite) TestUsed(c *gc.C) {
+	r := resource.Resource{
+		Timestamp: time.Now(),
+	}
+	f := FormatSvcResource(r)
+	c.Assert(f.Used, jc.IsTrue)
+}
+
+func (s *SvcFormatterSuite) TestOriginUploadDeployed(c *gc.C) {
+	// represents what we get when we first deploy a service
+	r := resource.Resource{
+		Resource: charmresource.Resource{
+			Origin: charmresource.OriginUpload,
+		},
+		Username:  "bill",
+		Timestamp: time.Now(),
+	}
+	f := FormatSvcResource(r)
+	c.Assert(f.combinedOrigin, gc.Equals, "bill")
+}
+
+func (s *SvcFormatterSuite) TestInitialOriginUpload(c *gc.C) {
+	r := resource.Resource{
+		Resource: charmresource.Resource{
+			Origin: charmresource.OriginUpload,
+		},
+	}
+	f := FormatSvcResource(r)
+	c.Assert(f.combinedOrigin, gc.Equals, "upload")
 }

@@ -58,7 +58,7 @@ For cs:~user/trusty/mysql
 // Info implements cmd.Command.
 func (c *ShowCommand) Info() *cmd.Info {
 	return &cmd.Info{
-		Name:    "show-charm-resources",
+		Name:    "resources",
 		Args:    "<charm>",
 		Purpose: "display the resources for a charm in the charm store",
 		Doc:     showDoc,
@@ -69,7 +69,7 @@ func (c *ShowCommand) Info() *cmd.Info {
 func (c *ShowCommand) SetFlags(f *gnuflag.FlagSet) {
 	defaultFormat := "tabular"
 	c.out.AddFlags(f, defaultFormat, map[string]cmd.Formatter{
-		"tabular": FormatTabular,
+		"tabular": FormatCharmTabular,
 		"yaml":    cmd.FormatYaml,
 		"json":    cmd.FormatJson,
 	})

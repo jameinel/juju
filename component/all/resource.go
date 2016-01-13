@@ -4,7 +4,6 @@
 package all
 
 import (
-	"io"
 	"os"
 	"reflect"
 
@@ -142,13 +141,21 @@ func (r resources) registerPublicCommands() {
 	commands.RegisterEnvCommand(func() envcmd.EnvironCommand {
 		return cmd.NewUploadCommand(cmd.UploadDeps{
 			NewClient: func(c *cmd.UploadCommand) (cmd.UploadClient, error) {
-				return r.newClient(c)
+				return r.newClient(c.NewAPIRoot)
 			},
-			OpenResource: func(s string) (io.ReadCloser, error) {
+			OpenResource: func(s string) (cmd.ReadSeekCloser, error) {
 				return os.Open(s)
 			},
 		})
 
+	})
+
+	commands.RegisterEnvCommand(func() envcmd.EnvironCommand {
+		return cmd.NewShowServiceCommand(cmd.ShowServiceDeps{
+			NewClient: func(c *cmd.ShowServiceCommand) (cmd.ShowServiceClient, error) {
+				return r.newClient(c.NewAPIRoot)
+			},
+		})
 	})
 }
 
@@ -166,8 +173,42 @@ type charmstoreClient struct {
 }
 
 func (charmstoreClient) ListResources(charmURLs []charm.URL) ([][]charmresource.Resource, error) {
-	// TODO(ericsnow) finish!
-	return nil, errors.Errorf("not implemented")
+	// TODO(natefinch): this is all demo stuff and should go away afterward.
+	if len(charmURLs) != 1 || charmURLs[0].Name != "starsay" {
+		res := make([][]charmresource.Resource, len(charmURLs))
+		return res, nil
+	}
+	var fingerprint = []byte("123456789012345678901234567890123456789012345678")
+	fp, err := charmresource.NewFingerprint(fingerprint)
+	if err != nil {
+		return nil, err
+	}
+	res := [][]charmresource.Resource{
+		{
+			{
+				Meta: charmresource.Meta{
+					Name:    "store-resource",
+					Type:    charmresource.TypeFile,
+					Path:    "filename.tgz",
+					Comment: "One line that is useful when operators need to push it.",
+				},
+				Origin:      charmresource.OriginStore,
+				Revision:    1,
+				Fingerprint: fp,
+				Size:        1,
+			},
+			{
+				Meta: charmresource.Meta{
+					Name:    "upload-resource",
+					Type:    charmresource.TypeFile,
+					Path:    "somename.xml",
+					Comment: "Who uses xml anymore?",
+				},
+				Origin: charmresource.OriginUpload,
+			},
+		},
+	}
+	return res, nil
 }
 
 func (charmstoreClient) Close() error {
@@ -178,14 +219,20 @@ type apicommand interface {
 	NewAPIRoot() (api.Connection, error)
 }
 
-func (resources) newClient(command apicommand) (*client.Client, error) {
-	apiCaller, err := command.NewAPIRoot()
+func (resources) newClient(newAPICaller func() (api.Connection, error)) (*client.Client, error) {
+	apiCaller, err := newAPICaller()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	caller := base.NewFacadeCallerForVersion(apiCaller, resource.ComponentName, server.Version)
+	doer, err := apiCaller.HTTPClient()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
-	return client.NewClient(caller, apiCaller), nil
+	// The apiCaller takes care of prepending /environment/<envUUID>.
+	cl := client.NewClient(caller, doer, apiCaller)
+	return cl, nil
 }
 
 // TODO(katco): This seems to be common across components. Pop up a

@@ -5,6 +5,9 @@ package client_test
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/juju/errors"
@@ -23,8 +26,9 @@ import (
 type BaseSuite struct {
 	testing.IsolationSuite
 
-	stub   *testing.Stub
-	facade *stubFacade
+	stub     *testing.Stub
+	facade   *stubFacade
+	response string
 }
 
 func (s *BaseSuite) SetUpTest(c *gc.C) {
@@ -32,6 +36,23 @@ func (s *BaseSuite) SetUpTest(c *gc.C) {
 
 	s.stub = &testing.Stub{}
 	s.facade = newStubFacade(c, s.stub)
+	s.response = ""
+}
+
+func (s *BaseSuite) Do(req *http.Request, body io.ReadSeeker, resp interface{}) error {
+	s.stub.AddCall("Do", req, body, resp)
+	if err := s.stub.NextErr(); err != nil {
+		return errors.Trace(err)
+	}
+
+	result, ok := resp.(*string)
+	if !ok {
+		msg := fmt.Sprintf("bad response type %T, expected string", resp)
+		return errors.NewNotValid(nil, msg)
+	}
+
+	*result = s.response
+	return nil
 }
 
 func newResourceResult(c *gc.C, serviceID string, names ...string) ([]resource.Resource, api.ResourcesResult) {
@@ -47,7 +68,7 @@ func newResourceResult(c *gc.C, serviceID string, names ...string) ([]resource.R
 }
 
 func newResource(c *gc.C, name, username, data string) (resource.Resource, api.Resource) {
-	fp, err := charmresource.GenerateFingerprint([]byte(data))
+	fp, err := charmresource.GenerateFingerprint(strings.NewReader(data))
 	c.Assert(err, jc.ErrorIsNil)
 	var now time.Time
 	if username != "" {

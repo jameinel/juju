@@ -4,6 +4,7 @@
 package api_test
 
 import (
+	"strings"
 	"time"
 
 	"github.com/juju/errors"
@@ -20,7 +21,7 @@ import (
 const fingerprint = "123456789012345678901234567890123456789012345678"
 
 func newFingerprint(c *gc.C, data string) charmresource.Fingerprint {
-	fp, err := charmresource.GenerateFingerprint([]byte(data))
+	fp, err := charmresource.GenerateFingerprint(strings.NewReader(data))
 	c.Assert(err, jc.ErrorIsNil)
 	return fp
 }
@@ -46,6 +47,7 @@ func (helpersSuite) TestResource2API(c *gc.C) {
 			Origin:      charmresource.OriginUpload,
 			Revision:    1,
 			Fingerprint: fp,
+			Size:        10,
 		},
 		Username:  "a-user",
 		Timestamp: now,
@@ -63,6 +65,7 @@ func (helpersSuite) TestResource2API(c *gc.C) {
 			Origin:      "upload",
 			Revision:    1,
 			Fingerprint: []byte(fingerprint),
+			Size:        10,
 		},
 		Username:  "a-user",
 		Timestamp: now,
@@ -84,6 +87,7 @@ func (helpersSuite) TestAPIResult2ResourcesOkay(c *gc.C) {
 			Origin:      charmresource.OriginUpload,
 			Revision:    1,
 			Fingerprint: fp,
+			Size:        10,
 		},
 		Username:  "a-user",
 		Timestamp: now,
@@ -99,6 +103,7 @@ func (helpersSuite) TestAPIResult2ResourcesOkay(c *gc.C) {
 			Origin:      "upload",
 			Revision:    1,
 			Fingerprint: []byte(fingerprint),
+			Size:        10,
 		},
 		Username:  "a-user",
 		Timestamp: now,
@@ -125,6 +130,7 @@ func (helpersSuite) TestAPIResult2ResourcesFailure(c *gc.C) {
 			Origin:      "upload",
 			Revision:    1,
 			Fingerprint: []byte(fingerprint),
+			Size:        10,
 		},
 	}
 	failure := errors.New("<failure>")
@@ -153,6 +159,7 @@ func (helpersSuite) TestAPIResult2ResourcesNotFound(c *gc.C) {
 			Origin:      "upload",
 			Revision:    1,
 			Fingerprint: []byte(fingerprint),
+			Size:        10,
 		},
 	}
 
@@ -182,6 +189,7 @@ func (helpersSuite) TestAPI2Resource(c *gc.C) {
 			Origin:      "upload",
 			Revision:    1,
 			Fingerprint: []byte(fingerprint),
+			Size:        10,
 		},
 		Username:  "a-user",
 		Timestamp: now,
@@ -201,6 +209,7 @@ func (helpersSuite) TestAPI2Resource(c *gc.C) {
 			Origin:      charmresource.OriginUpload,
 			Revision:    1,
 			Fingerprint: fp,
+			Size:        10,
 		},
 		Username:  "a-user",
 		Timestamp: now,
@@ -224,6 +233,7 @@ func (helpersSuite) TestCharmResource2API(c *gc.C) {
 		Origin:      charmresource.OriginUpload,
 		Revision:    1,
 		Fingerprint: fp,
+		Size:        10,
 	}
 	err = res.Validate()
 	c.Assert(err, jc.ErrorIsNil)
@@ -237,6 +247,7 @@ func (helpersSuite) TestCharmResource2API(c *gc.C) {
 		Origin:      "upload",
 		Revision:    1,
 		Fingerprint: []byte(fingerprint),
+		Size:        10,
 	})
 }
 
@@ -249,6 +260,7 @@ func (helpersSuite) TestAPI2CharmResource(c *gc.C) {
 		Origin:      "upload",
 		Revision:    1,
 		Fingerprint: []byte(fingerprint),
+		Size:        10,
 	})
 	c.Assert(err, jc.ErrorIsNil)
 
@@ -264,6 +276,7 @@ func (helpersSuite) TestAPI2CharmResource(c *gc.C) {
 		Origin:      charmresource.OriginUpload,
 		Revision:    1,
 		Fingerprint: fp,
+		Size:        10,
 	}
 	err = expected.Validate()
 	c.Assert(err, jc.ErrorIsNil)

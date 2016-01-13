@@ -4,6 +4,7 @@
 package persistence
 
 import (
+	"strings"
 	"time"
 
 	"github.com/juju/errors"
@@ -218,7 +219,12 @@ func (s *PersistenceSuite) TestSetResourceExists(c *gc.C) {
 		C:      "resources",
 		Id:     "resource#a-service#spam",
 		Assert: txn.DocExists,
-		Update: &doc,
+		Remove: true,
+	}, {
+		C:      "resources",
+		Id:     "resource#a-service#spam",
+		Assert: txn.DocMissing,
+		Insert: &doc,
 	}, {
 		C:      "resources",
 		Id:     "resource#a-service#spam#staged",
@@ -251,7 +257,8 @@ func newResources(c *gc.C, serviceID string, names ...string) ([]resource.Resour
 }
 
 func newResource(c *gc.C, serviceID, name string) (resource.Resource, resourceDoc) {
-	fp, err := charmresource.GenerateFingerprint([]byte(name))
+	reader := strings.NewReader(name)
+	fp, err := charmresource.GenerateFingerprint(reader)
 	c.Assert(err, jc.ErrorIsNil)
 
 	res := resource.Resource{
