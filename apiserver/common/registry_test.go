@@ -4,7 +4,9 @@
 package common_test
 
 import (
+	"fmt"
 	"reflect"
+	// "strings"
 
 	"github.com/juju/errors"
 	jc "github.com/juju/testing/checkers"
@@ -201,10 +203,13 @@ func (s *facadeRegistrySuite) TestRegisterStandardFacadePanic(c *gc.C) {
 }
 
 func (*facadeRegistrySuite) TestDiscardedAPIMethods(c *gc.C) {
+	everything := []string{}
 	allFacades := common.Facades.List()
 	c.Assert(allFacades, gc.Not(gc.HasLen), 0)
 	for _, description := range allFacades {
+		everything = append(everything, fmt.Sprintf("%s\n", description.Name))
 		for _, version := range description.Versions {
+			everything = append(everything, fmt.Sprintf("  v%d\n", version))
 			facadeType, err := common.Facades.GetType(description.Name, version)
 			c.Assert(err, jc.ErrorIsNil)
 			facadeObjType := rpcreflect.ObjTypeOf(facadeType)
@@ -214,7 +219,37 @@ func (*facadeRegistrySuite) TestDiscardedAPIMethods(c *gc.C) {
 			// We don't allow any methods that don't implement
 			// an RPC entry point.
 			c.Assert(facadeObjType.DiscardedMethods(), gc.HasLen, 0)
+			for _, methodName := range facadeObjType.MethodNames() {
+				method, err := facadeObjType.Method(methodName)
+				c.Assert(err, jc.ErrorIsNil)
+				// method.Params, method.Result
+				// params := []string{}
+				// if method.Params != nil && method.Params.Kind() == reflect.Struct {
+				// 	for i := 0; i < method.Params.NumField(); i++ {
+				// 		params = append(params, method.Params.Field(i).Name)
+				// 	}
+				// }
+				// results := []string{}
+				// if method.Result != nil && method.Result.Kind() == reflect.Struct {
+				// 	for i := 0; i < method.Result.NumField(); i++ {
+				// 		results = append(results, method.Result.Field(i).Name)
+				// 	}
+				// }
+				params := ""
+				if method.Params != nil {
+					params = method.Params.String()
+				}
+				result := ""
+				if method.Result != nil {
+					result = method.Result.String()
+				}
+				everything = append(everything, fmt.Sprintf("    %s(%s) => (%s)\n",
+					methodName, params, result))
+			}
 		}
+	}
+	for _, s := range(everything) {
+		fmt.Print(s)
 	}
 }
 

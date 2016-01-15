@@ -322,3 +322,52 @@ func DescribeFacades() []params.FacadeVersions {
 	}
 	return result
 }
+
+// typeToMap converts a reflect.Type (which must be a struct) into a nested map of Name to Type.
+func typeToMap(reflect.Type) map[string]interface{} {
+}
+
+// FacadeDetails returns a full mapping of all facades, what methods are
+// available, and what parameters are supplied to those methods.
+func FacadeDetails() (params.FacadesDetails, error) {
+	alldetails := params.FacadesDetails{}
+	for i, facade := range facades {
+		for _, version := range facade.Versions {
+			details, err := facadeDetails(facade.Name, version)
+			if err != nil {
+				return params.FacadesDetails{}, err
+			}
+			alldetails = append(alldetails, details)
+		}
+	}
+	return alldetails, nil
+}
+
+func facadeDetails(facadeName string, version int) (params.FacadeDetails, error) {
+	details = params.FacadeDetails{Name: facadeName, Version: version}
+	facadeType, err := common.Facades.GetType(facadeName, version)
+	if err != nil {
+		return params.FacadeDetails{}, err
+	}
+	facadeObjType := rpcreflect.ObjTypeOf(facadeType)
+	for _, methodName := range facadeObjType.MethodNames() {
+		method, err := facadeObjType.Method(methodName)
+		if err != nil {
+			return params.FacadeDetails{}, err
+		}
+		methodDetails := params.MethodDetails{
+			Name: methodName,
+			Description: "",
+		}
+		if method.Params != nil {
+			methodDetails.ParamsName = method.Params.String()
+			methodDetails.Params = typeToMap(method.Params)
+		}
+		if method.Result != nil {
+			methodDetails.ResultName = method.Result.String()
+			methodDetails.Result = typeToMap(method.Result)
+		}
+		details.Methods = append(details.Methods, method)
+	}
+	return alldetails, nil
+}

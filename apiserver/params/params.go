@@ -592,6 +592,28 @@ type FacadeVersions struct {
 	Versions []int
 }
 
+// MethodDetails contains the specific information about a particular API method.
+type MethodDetails struct {
+	Name string
+	Description string
+	ParamsName string
+	Params map[string]interface{}
+	ResultName string
+	Result map[string]interface{}
+}
+
+// FacadeDetails describes all of the methods that a facade provides
+type FacadeDetails struct {
+	Name string
+	Version int
+	Methods []MethodDetails
+}
+
+// FacadesDetails contains a list of all facades that are available
+type FacadesDetails struct {
+	Facades []FacadeDetails
+}
+
 // LoginResult holds the result of a Login call.
 type LoginResult struct {
 	Servers        [][]HostPort     `json:"Servers"`
