@@ -118,12 +118,15 @@ func API2CharmResource(apiInfo CharmResource) (charmresource.Resource, error) {
 		return res, errors.Trace(err)
 	}
 
-	fp, err := charmresource.NewFingerprint(apiInfo.Fingerprint)
-	if err != nil {
-		return res, errors.Trace(err)
-	}
-	if err := fp.Validate(); err != nil {
-		return res, errors.Trace(err)
+	var fp charmresource.Fingerprint
+	if len(apiInfo.Fingerprint) > 0 {
+		fp, err = charmresource.NewFingerprint(apiInfo.Fingerprint)
+		if err != nil {
+			return res, errors.Trace(err)
+		}
+		if err := fp.Validate(); err != nil {
+			return res, errors.Trace(err)
+		}
 	}
 
 	res = charmresource.Resource{
