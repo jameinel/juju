@@ -111,13 +111,7 @@ func maasObjectNetworkInterfaces(maasObject *gomaasapi.MAASObject) ([]network.In
 		return nil, errors.NotSupportedf("interface_set")
 	}
 
-	// TODO(dimitern): Change gomaasapi JSONObject to give access to the raw
-	// JSON bytes directly, rather than having to do call MarshalJSON just so
-	// the result can be unmarshaled from it.
-	//
-	// LKK Card: https://canonical.leankit.com/Boards/View/101652562/119311323
-
-	rawBytes, err := interfaceSet.MarshalJSON()
+	rawBytes, err := getJSONBytes(interfaceSet)
 	if err != nil {
 		return nil, errors.Annotate(err, "cannot get interface_set JSON bytes")
 	}

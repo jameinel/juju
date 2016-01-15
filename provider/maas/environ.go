@@ -4,6 +4,7 @@
 package maas
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -1965,4 +1966,36 @@ func (environ *maasEnviron) nodeIdFromInstance(inst instance.Instance) (string, 
 		return "", err
 	}
 	return nodeId, err
+}
+
+// getJSONBytes extracts the raw JSON bytes in the given jsonData (usually
+// either a gomaasapi.MAASObject or a gomaasapi.JSONObject).
+func getJSONBytes(jsonData json.Marshaler) ([]byte, error) {
+
+	// TODO(dimitern): Change gomaasapi JSONObject to give access to the raw
+	// JSON bytes directly, rather than having to do call MarshalJSON just so
+	// the result can be unmarshaled from it.
+	//
+	// LKK Card: https://canonical.leankit.com/Boards/View/101652562/119311323
+
+	rawBytes, err := jsonData.MarshalJSON()
+	if err != nil {
+		return nil, errors.Annotate(err, "cannot get JSON bytes")
+	}
+	return rawBytes, nil
+}
+
+// getMAASErrorCode tries to unwrap the given err and if it's of type
+// gomaasapi.ServerError, its StatusCode is returned. In all other cases -1 is
+// returned, unless err is nil - which causes 0 to be returned.
+func getMAASErrorCode(err error) int {
+	if err == nil {
+		return 0
+	}
+
+	maasErr, ok := err.(gomaasapi.ServerError)
+	if ok {
+		return maasErr.StatusCode
+	}
+	return -1
 }
