@@ -1993,8 +1993,7 @@ func getMAASErrorCode(err error) int {
 		return 0
 	}
 
-	maasErr, ok := err.(gomaasapi.ServerError)
-	if ok {
+	if maasErr, ok := err.(gomaasapi.ServerError); ok {
 		return maasErr.StatusCode
 	}
 	return -1

@@ -105,7 +105,7 @@ func (d *devicesAPIShim) GetSubObject(uri string) devicesAPI {
 func (d *devicesAPIShim) CallGet(op string, params url.Values) (devicesAPI, error) {
 	result, err := d.MAASObject.CallGet(op, params)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err // don't wrap so we don't obscure a ServerError.
 	}
 	return &devicesAPIShim{JSONObject: &result}, nil
 }
@@ -113,7 +113,7 @@ func (d *devicesAPIShim) CallGet(op string, params url.Values) (devicesAPI, erro
 func (d *devicesAPIShim) CallPost(op string, params url.Values) (devicesAPI, error) {
 	result, err := d.MAASObject.CallPost(op, params)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err // don't wrap so we don't obscure a ServerError.
 	}
 	return &devicesAPIShim{JSONObject: &result}, nil
 }
@@ -121,15 +121,17 @@ func (d *devicesAPIShim) CallPost(op string, params url.Values) (devicesAPI, err
 func (d *devicesAPIShim) Update(params url.Values) (devicesAPI, error) {
 	result, err := d.MAASObject.Update(params)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err // don't wrap so we don't obscure a ServerError.
 	}
+	// NOTE: The following case is only manually tested live, as gomaasapi test
+	// server does not support device updates.
 	return &devicesAPIShim{MAASObject: &result}, nil
 }
 
 func (d *devicesAPIShim) Get() (devicesAPI, error) {
 	result, err := d.MAASObject.Get()
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err // don't wrap so we don't obscure a ServerError.
 	}
 	return &devicesAPIShim{MAASObject: &result}, nil
 }
@@ -141,6 +143,8 @@ func (d *devicesAPIShim) MarshalJSON() ([]byte, error) {
 	if d.MAASObject != nil {
 		return d.MAASObject.MarshalJSON()
 	}
+	// This can't happen in practice as one of the objects will be always set,
+	// but for completeness sake we have a test for it.
 	return nil, errors.Errorf("no object available to marshal")
 }
 
@@ -153,12 +157,16 @@ var devicesClient = func(environ *maasEnviron) devicesAPI {
 
 // listDevices returns the parsed devices list, which match all of the
 // specified, optional filters.
-func (environ *maasEnviron) listDevices(withHostnames, withParents, withIDs []string) ([]maasDevice, error) {
+func (environ *maasEnviron) listDevices(withHostnames, withMACs, withParents, withIDs []string) ([]maasDevice, error) {
 	devicesObj := devicesClient(environ)
 
 	params := make(url.Values)
 	for _, hostname := range withHostnames {
 		params.Add("hostname", hostname)
+	}
+
+	for _, mac := range withMACs {
+		params.Add("mac_address", mac)
 	}
 
 	for _, parent := range withParents {
