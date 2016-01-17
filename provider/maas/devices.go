@@ -10,8 +10,6 @@ import (
 	"launchpad.net/gomaasapi"
 
 	"github.com/juju/errors"
-
-	"github.com/juju/juju/network"
 )
 
 // TODO(dimitern): The types below should be part of gomaasapi.
@@ -37,6 +35,8 @@ type maasDevice struct {
 	Owner        string           `json:"owner"`
 	TagNames     []string         `json:"tag_names,omitempty"`
 	ResourceURI  string           `json:"resource_uri"`
+
+	Interfaces []maasInterface `json:"interface_set,omitempty"`
 }
 
 // parseDevices extracts the raw JSON from the given jsonData and then parses
@@ -206,6 +206,7 @@ func (environ *maasEnviron) createDevice(parentID, macAddress, hostname string) 
 		params.Add("hostname", hostname)
 	}
 
+	logger.Tracef("creating a new device for MAC %q, hostname %q, parent %q", macAddress, hostname, parentID)
 	result, err := devicesObj.CallPost("new", params)
 	if err != nil {
 		return nil, errors.Annotatef(
@@ -219,7 +220,9 @@ func (environ *maasEnviron) createDevice(parentID, macAddress, hostname string) 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return &devices[0], nil
+	device := &devices[0]
+	logger.Tracef("created device %+v", device)
+	return device, nil
 }
 
 // updateDevice tries to update the hostname and/or parent of the device
@@ -285,16 +288,6 @@ func (environ *maasEnviron) getDevice(deviceID string) (*maasDevice, error) {
 // device's current interfaces config with it. Typically the interfaceConfig is
 // taken from the device's parent's interfaces (or a subset of them).
 func (environ *maasEnviron) setupDeviceInterfaces(deviceID string, interfaceConfig []maasInterface) ([]maasInterface, error) {
+	// TODO(dimitern): Implement this in a follow-up.
 	return nil, errors.NotImplementedf("setupDeviceInterfaces")
-}
-
-// claimStickyIPForDevice reserves a sticky IP address for the given deviceID -
-// either the given address, or (when empty) an available address given by MAAS.
-//
-// NOTE: This is only used when the address-allocation feature flag is enabled
-// and devices API is supported by MAAS. Otherwise the default behavior is to
-// use setupDeviceInterfaces() to mirror the parent's interfaces and claim
-// addresses for each one explicitly.
-func (environ *maasEnviron) claimStickyIPForDevice(deviceID string, address network.Address) (network.Address, error) {
-	return network.Address{}, errors.NotImplementedf("claimStickyIPForDevice")
 }
