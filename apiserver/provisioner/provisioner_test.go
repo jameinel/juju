@@ -1166,28 +1166,19 @@ func (s *withoutStateServerSuite) TestSetInstanceInfo(c *gc.C) {
 	}}
 	ifaces := []params.NetworkInterface{{
 		MACAddress:    "aa:bb:cc:dd:ee:f0",
-		NetworkTag:    "network-net1",
 		InterfaceName: "eth0",
 	}, {
 		MACAddress:    "aa:bb:cc:dd:ee:f1",
-		NetworkTag:    "network-net1",
 		InterfaceName: "eth1",
 	}, {
 		MACAddress:    "aa:bb:cc:dd:ee:f1",
-		NetworkTag:    "network-vlan42",
 		InterfaceName: "eth1.42",
 	}, {
 		MACAddress:    "aa:bb:cc:dd:ee:f0",
-		NetworkTag:    "network-vlan69",
 		InterfaceName: "eth0.69",
 		Disabled:      true,
 	}, {
-		MACAddress:    "aa:bb:cc:dd:ee:f1", // duplicated mac+net; ignored
-		NetworkTag:    "network-vlan42",
-		InterfaceName: "eth2",
-	}, {
 		MACAddress:    "aa:bb:cc:dd:ee:f2",
-		NetworkTag:    "network-net1",
 		InterfaceName: "eth1", // duplicated name+machine id; ignored for machine 1.
 	}}
 	args := params.InstancesInfo{Machines: []params.InstanceInfo{{
@@ -1266,19 +1257,17 @@ func (s *withoutStateServerSuite) TestSetInstanceInfo(c *gc.C) {
 	actual := make([]params.NetworkInterface, len(ifacesMachine1))
 	for i, iface := range ifacesMachine1 {
 		actual[i].InterfaceName = iface.InterfaceName()
-		actual[i].NetworkTag = iface.NetworkTag().String()
 		actual[i].MACAddress = iface.MACAddress()
 		actual[i].Disabled = iface.IsDisabled()
 		c.Check(iface.MachineId(), gc.Equals, s.machines[1].Id())
 		c.Check(iface.MachineTag(), gc.Equals, s.machines[1].Tag())
 	}
-	c.Assert(actual, jc.SameContents, ifaces[:4])
+	c.Assert(actual, jc.SameContents, ifaces[:4]) // skip ignored duplicates
 	ifacesMachine2, err := s.machines[2].NetworkInterfaces()
 	c.Assert(err, jc.ErrorIsNil)
-	c.Assert(ifacesMachine2, gc.HasLen, 1)
-	c.Assert(ifacesMachine2[0].InterfaceName(), gc.Equals, ifaces[5].InterfaceName)
-	c.Assert(ifacesMachine2[0].MACAddress(), gc.Equals, ifaces[5].MACAddress)
-	c.Assert(ifacesMachine2[0].NetworkTag().String(), gc.Equals, ifaces[5].NetworkTag)
+	c.Assert(ifacesMachine2, gc.HasLen, 4)
+	c.Assert(ifacesMachine2[0].InterfaceName(), gc.Equals, ifaces[0].InterfaceName)
+	c.Assert(ifacesMachine2[0].MACAddress(), gc.Equals, ifaces[0].MACAddress)
 	c.Assert(ifacesMachine2[0].MachineId(), gc.Equals, s.machines[2].Id())
 	for i := range networks {
 		if i == 3 {

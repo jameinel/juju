@@ -137,8 +137,6 @@ func maasObjectNetworkInterfaces(maasObject *gomaasapi.MAASObject) ([]network.In
 			InterfaceName: iface.Name,
 			Disabled:      !iface.Enabled,
 			NoAutoStart:   !iface.Enabled,
-			// This is not needed anymore, but the provisioner still validates it's set.
-			NetworkName: network.DefaultPrivate,
 		}
 
 		for _, link := range iface.Links {
@@ -500,7 +498,6 @@ func (environ *maasEnviron) setupNetworks(inst instance.Instance) ([]network.Int
 					CIDR:           netCIDR.String(),
 					VLANTag:        netw.VLANTag,
 					ProviderId:     network.Id(netw.Name),
-					NetworkName:    netw.Name,
 					Disabled:       ifinfo.Disabled,
 					GatewayAddress: defaultGateway,
 				})
@@ -511,7 +508,7 @@ func (environ *maasEnviron) setupNetworks(inst instance.Instance) ([]network.Int
 	// and drop incomplete records.
 	var interfaceInfo []network.InterfaceInfo
 	for _, info := range tempInterfaceInfo {
-		if info.ProviderId == "" || info.NetworkName == "" || info.CIDR == "" {
+		if info.ProviderId == "" || info.CIDR == "" {
 			logger.Infof("ignoring interface %q: missing subnet info", info.InterfaceName)
 			continue
 		}

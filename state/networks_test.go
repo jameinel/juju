@@ -46,21 +46,18 @@ func (s *NetworkSuite) TestInterfaces(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 	c.Assert(ifaces, gc.HasLen, 0)
 
-	iface0, err := s.machine.AddNetworkInterface(state.NetworkInterfaceInfo{
+	_, err = s.machine.AddNetworkInterface(state.NetworkInterfaceInfo{
 		MACAddress:    "aa:bb:cc:dd:ee:f0",
 		InterfaceName: "eth0",
-		NetworkName:   "net1",
 	})
 	c.Assert(err, jc.ErrorIsNil)
-	iface1, err := s.machine.AddNetworkInterface(state.NetworkInterfaceInfo{
+	_, err = s.machine.AddNetworkInterface(state.NetworkInterfaceInfo{
 		MACAddress:    "aa:bb:cc:dd:ee:f1",
 		InterfaceName: "eth1",
-		NetworkName:   "net1",
 	})
 	c.Assert(err, jc.ErrorIsNil)
 
 	ifaces, err = s.network.Interfaces()
 	c.Assert(err, jc.ErrorIsNil)
-	c.Assert(ifaces, gc.HasLen, 2)
-	c.Assert(ifaces, jc.DeepEquals, []*state.NetworkInterface{iface0, iface1})
+	c.Assert(ifaces, gc.HasLen, 0)
 }

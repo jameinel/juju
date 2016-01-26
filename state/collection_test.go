@@ -165,7 +165,6 @@ func (s *collectionSuite) TestEnvStateCollection(c *gc.C) {
 	_, err = m0.AddNetworkInterface(state.NetworkInterfaceInfo{
 		MACAddress:    "91:de:f1:02:f6:f0",
 		InterfaceName: "foo0",
-		NetworkName:   "net1",
 	})
 	c.Assert(err, jc.ErrorIsNil)
 
@@ -178,7 +177,6 @@ func (s *collectionSuite) TestEnvStateCollection(c *gc.C) {
 	_, err = otherM0.AddNetworkInterface(state.NetworkInterfaceInfo{
 		MACAddress:    "91:de:f1:02:f6:f0",
 		InterfaceName: "foo1",
-		NetworkName:   "net2",
 	})
 	c.Assert(err, jc.ErrorIsNil)
 

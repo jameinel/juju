@@ -214,7 +214,6 @@ func (st *State) prepareOrGetContainerInterfaceInfo(
 			DeviceIndex:      netInfo.DeviceIndex,
 			MACAddress:       netInfo.MACAddress,
 			CIDR:             netInfo.CIDR,
-			NetworkName:      netInfo.NetworkName,
 			ProviderId:       network.Id(netInfo.ProviderId),
 			ProviderSubnetId: network.Id(netInfo.ProviderSubnetId),
 			VLANTag:          netInfo.VLANTag,

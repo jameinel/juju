@@ -703,13 +703,8 @@ func networkParamsToStateParams(networks []params.Network, ifaces []params.Netwo
 	}
 	stateInterfaces := make([]state.NetworkInterfaceInfo, len(ifaces))
 	for i, iface := range ifaces {
-		tag, err := names.ParseNetworkTag(iface.NetworkTag)
-		if err != nil {
-			return nil, nil, err
-		}
 		stateInterfaces[i] = state.NetworkInterfaceInfo{
 			MACAddress:    iface.MACAddress,
-			NetworkName:   tag.Id(),
 			InterfaceName: iface.InterfaceName,
 			Disabled:      iface.Disabled,
 		}
@@ -1083,7 +1078,6 @@ func (p *ProvisionerAPI) prepareOrGetContainerInterfaceInfo(
 				DeviceIndex:      interfaceInfo.DeviceIndex,
 				MACAddress:       macAddress,
 				CIDR:             subnetInfo.CIDR,
-				NetworkName:      interfaceInfo.NetworkName,
 				ProviderId:       string(interfaceInfo.ProviderId),
 				ProviderSubnetId: string(subnetInfo.ProviderId),
 				VLANTag:          interfaceInfo.VLANTag,

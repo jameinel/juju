@@ -602,9 +602,6 @@ func configureContainerNetwork(
 		finalIfaceInfo[i].DNSServers = dnsServers
 		finalIfaceInfo[i].DNSSearch = searchDomain
 		finalIfaceInfo[i].GatewayAddress = primaryAddr
-		if finalIfaceInfo[i].NetworkName == "" {
-			finalIfaceInfo[i].NetworkName = network.DefaultPrivate
-		}
 		if finalIfaceInfo[i].ProviderId == "" {
 			finalIfaceInfo[i].ProviderId = network.DefaultProviderId
 		}

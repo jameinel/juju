@@ -331,7 +331,6 @@ func (s *suite) TestNetworkInterfaces(c *gc.C) {
 	expectInfo := []network.InterfaceInfo{{
 		ProviderId:       "dummy-eth0",
 		ProviderSubnetId: "dummy-private",
-		NetworkName:      "juju-private",
 		CIDR:             "0.10.0.0/24",
 		DeviceIndex:      0,
 		InterfaceName:    "eth0",
@@ -347,7 +346,6 @@ func (s *suite) TestNetworkInterfaces(c *gc.C) {
 	}, {
 		ProviderId:       "dummy-eth1",
 		ProviderSubnetId: "dummy-public",
-		NetworkName:      "juju-public",
 		CIDR:             "0.20.0.0/24",
 		DeviceIndex:      1,
 		InterfaceName:    "eth1",
@@ -363,7 +361,6 @@ func (s *suite) TestNetworkInterfaces(c *gc.C) {
 	}, {
 		ProviderId:       "dummy-eth2",
 		ProviderSubnetId: "dummy-disabled",
-		NetworkName:      "juju-disabled",
 		CIDR:             "0.30.0.0/24",
 		DeviceIndex:      2,
 		InterfaceName:    "eth2",
@@ -394,7 +391,6 @@ func (s *suite) TestNetworkInterfaces(c *gc.C) {
 	expectInfo = []network.InterfaceInfo{{
 		DeviceIndex:   0,
 		ProviderId:    network.Id("dummy-eth0"),
-		NetworkName:   "juju-public",
 		InterfaceName: "eth0",
 		MACAddress:    "aa:bb:cc:dd:ee:f0",
 		Disabled:      false,
@@ -411,7 +407,6 @@ func (s *suite) TestNetworkInterfaces(c *gc.C) {
 	expectInfo = []network.InterfaceInfo{{
 		ProviderId:       "dummy-eth2",
 		ProviderSubnetId: "dummy-disabled",
-		NetworkName:      "juju-disabled",
 		CIDR:             "0.30.0.0/24",
 		DeviceIndex:      2,
 		InterfaceName:    "eth2",

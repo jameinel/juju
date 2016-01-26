@@ -219,7 +219,6 @@ func (s *prepareSuite) TestErrorWithNoFeatureFlagAllocateSuccess(c *gc.C) {
 	args := s.makeArgs(container)
 	_, testLog := s.assertCall(c, args, s.makeResults([]params.NetworkConfig{{
 		DeviceIndex:    0,
-		NetworkName:    "juju-private",
 		ProviderId:     "dummy-eth0",
 		InterfaceName:  "eth0",
 		DNSServers:     []string{"ns1.dummy", "ns2.dummy"},
@@ -571,7 +570,6 @@ func (s *prepareSuite) TestReleaseAndRetryWhenSetOnlyFails(c *gc.C) {
 	_, testLog := s.assertCall(c, args, s.makeResults([]params.NetworkConfig{{
 		ProviderId:       "dummy-eth0",
 		ProviderSubnetId: "dummy-private",
-		NetworkName:      "juju-private",
 		CIDR:             "0.10.0.0/24",
 		DeviceIndex:      0,
 		InterfaceName:    "eth0",
@@ -653,7 +651,6 @@ func (s *prepareSuite) TestSuccessWithSingleContainer(c *gc.C) {
 	_, testLog := s.assertCall(c, args, s.makeResults([]params.NetworkConfig{{
 		ProviderId:       "dummy-eth0",
 		ProviderSubnetId: "dummy-private",
-		NetworkName:      "juju-private",
 		CIDR:             "0.10.0.0/24",
 		DeviceIndex:      0,
 		InterfaceName:    "eth0",
@@ -690,7 +687,6 @@ func (s *prepareSuite) TestSuccessWhenFirstSubnetNotAllocatable(c *gc.C) {
 	_, testLog := s.assertCall(c, args, s.makeResults([]params.NetworkConfig{{
 		ProviderId:       "dummy-eth1",
 		ProviderSubnetId: "dummy-public",
-		NetworkName:      "juju-public",
 		CIDR:             "0.20.0.0/24",
 		DeviceIndex:      1,
 		InterfaceName:    "eth1",

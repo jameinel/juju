@@ -11,7 +11,6 @@ import (
 	"github.com/juju/errors"
 	"github.com/juju/names"
 	"github.com/juju/utils"
-	"github.com/juju/utils/set"
 	"launchpad.net/tomb"
 
 	apiprovisioner "github.com/juju/juju/api/provisioner"
@@ -694,40 +693,10 @@ func (task *provisionerTask) prepareNetworkAndInterfaces(networkInfo []network.I
 	if len(networkInfo) == 0 {
 		return nil, nil, nil
 	}
-	visitedNetworks := set.NewStrings()
 	for _, info := range networkInfo {
-		// TODO(dimitern): The following few fields are required, but no longer
-		// matter and will be dropped or changed soon as part of making spaces
-		// and subnets usable across the board.
-		if info.NetworkName == "" {
-			info.NetworkName = network.DefaultPrivate
-		}
-		if info.ProviderId == "" {
-			info.ProviderId = network.DefaultPrivate
-		}
-		if info.CIDR == "" {
-			// TODO(dimitern): This is only when NOT using addressable
-			// containers, as we don't fetch the subnet details, but since
-			// networks in state are going away real soon, it's not important.
-			info.CIDR = "0.0.0.0/32"
-		}
-		if !names.IsValidNetwork(info.NetworkName) {
-			return nil, nil, errors.Errorf("invalid network name %q", info.NetworkName)
-		}
-		networkTag := names.NewNetworkTag(info.NetworkName).String()
-		if !visitedNetworks.Contains(networkTag) {
-			networks = append(networks, params.Network{
-				Tag:        networkTag,
-				ProviderId: string(info.ProviderId),
-				CIDR:       info.CIDR,
-				VLANTag:    info.VLANTag,
-			})
-			visitedNetworks.Add(networkTag)
-		}
 		ifaces = append(ifaces, params.NetworkInterface{
-			InterfaceName: info.ActualInterfaceName(),
+			InterfaceName: info.InterfaceName,
 			MACAddress:    info.MACAddress,
-			NetworkTag:    networkTag,
 			Disabled:      info.Disabled,
 		})
 	}

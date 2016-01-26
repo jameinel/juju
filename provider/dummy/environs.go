@@ -1220,7 +1220,6 @@ func (env *environ) NetworkInterfaces(instId instance.Id) ([]network.InterfaceIn
 			DeviceIndex:      i,
 			ProviderId:       network.Id(fmt.Sprintf("dummy-eth%d", i)),
 			ProviderSubnetId: network.Id("dummy-" + netName),
-			NetworkName:      "juju-" + netName,
 			CIDR:             fmt.Sprintf("0.%d.0.0/24", (i+1)*10),
 			InterfaceName:    fmt.Sprintf("eth%d", i),
 			VLANTag:          i,
@@ -1247,7 +1246,6 @@ func (env *environ) NetworkInterfaces(instId instance.Id) ([]network.InterfaceIn
 		info = []network.InterfaceInfo{{
 			DeviceIndex:   0,
 			ProviderId:    network.Id("dummy-eth0"),
-			NetworkName:   "juju-public",
 			InterfaceName: "eth0",
 			MACAddress:    "aa:bb:cc:dd:ee:f0",
 			Disabled:      false,

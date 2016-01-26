@@ -1535,10 +1535,6 @@ func (m *Machine) AddNetworkInterface(args NetworkInterfaceInfo) (iface *Network
 	ops := []txn.Op{
 		assertEnvAliveOp(m.st.EnvironUUID()),
 		{
-			C:      networksC,
-			Id:     m.st.docID(args.NetworkName),
-			Assert: txn.DocExists,
-		}, {
 			C:      machinesC,
 			Id:     m.doc.DocID,
 			Assert: isAliveDoc,
@@ -1553,9 +1549,6 @@ func (m *Machine) AddNetworkInterface(args NetworkInterfaceInfo) (iface *Network
 	err = m.st.runTransaction(ops)
 	switch err {
 	case txn.ErrAborted:
-		if _, err = m.st.Network(args.NetworkName); err != nil {
-			return nil, err
-		}
 		if err = m.Refresh(); err != nil {
 			return nil, err
 		} else if m.doc.Life != Alive {
@@ -1566,7 +1559,6 @@ func (m *Machine) AddNetworkInterface(args NetworkInterfaceInfo) (iface *Network
 	case nil:
 		// We have a unique key restrictions on the following fields:
 		// - InterfaceName, MachineId
-		// - MACAddress, NetworkName
 		// These will cause the insert to fail if there is another record
 		// with the same combination of values in the table.
 		// The txn logic does not report insertion errors, so we check
@@ -1581,10 +1573,6 @@ func (m *Machine) AddNetworkInterface(args NetworkInterfaceInfo) (iface *Network
 		sel := bson.D{{"interfacename", args.InterfaceName}, {"machineid", m.doc.Id}}
 		if err = networkInterfaces.Find(sel).One(nil); err == nil {
 			return nil, errors.AlreadyExistsf("%q on machine %q", args.InterfaceName, m.doc.Id)
-		}
-		sel = bson.D{{"macaddress", args.MACAddress}, {"networkname", args.NetworkName}}
-		if err = networkInterfaces.Find(sel).One(nil); err == nil {
-			return nil, errors.AlreadyExistsf("MAC address %q on network %q", args.MACAddress, args.NetworkName)
 		}
 		// Should never happen.
 		logger.Errorf("unknown error while adding network interface doc %#v", doc)

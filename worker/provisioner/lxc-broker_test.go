@@ -369,7 +369,6 @@ func (s *lxcBrokerSuite) TestStartInstancePopulatesNetworkInfoWithAddressAllocat
 		DNSSearch:      "dummy",
 		Address:        network.NewAddress("0.1.2.3"),
 		GatewayAddress: network.NewAddress("0.1.2.1"),
-		NetworkName:    network.DefaultPrivate,
 		ProviderId:     network.DefaultProviderId,
 	})
 }
@@ -937,7 +936,6 @@ func (s *lxcBrokerSuite) TestConfigureContainerNetwork(c *gc.C) {
 		DNSServers:     network.NewAddresses("ns1.dummy"),
 		Address:        network.NewAddress("0.1.2.3"),
 		GatewayAddress: network.NewAddress("0.1.2.1"),
-		NetworkName:    network.DefaultPrivate,
 		ProviderId:     network.DefaultProviderId,
 	}})
 	s.api.CheckCalls(c, []gitjujutesting.StubCall{{
@@ -958,7 +956,6 @@ func (s *lxcBrokerSuite) TestConfigureContainerNetwork(c *gc.C) {
 		DNSServers:     network.NewAddresses("ns1.dummy"),
 		Address:        network.NewAddress("0.1.2.3"),
 		GatewayAddress: network.NewAddress("0.1.2.1"),
-		NetworkName:    network.DefaultPrivate,
 		ProviderId:     network.DefaultProviderId,
 	}})
 

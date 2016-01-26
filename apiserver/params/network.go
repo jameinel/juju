@@ -78,9 +78,6 @@ type NetworkInterface struct {
 	// "eth1", even for for a VLAN eth1.42 virtual interface).
 	InterfaceName string `json:"InterfaceName"`
 
-	// NetworkTag is this interface's network tag.
-	NetworkTag string `json:"NetworkTag"`
-
 	// Disabled returns whether the interface is disabled.
 	Disabled bool `json:"Disabled"`
 }
@@ -101,11 +98,6 @@ type NetworkConfig struct {
 
 	// CIDR of the network, in 123.45.67.89/24 format.
 	CIDR string `json:"CIDR"`
-
-	// NetworkName is juju-internal name of the network.
-	// TODO(dimitern) This should be removed or adapted to the model
-	// once spaces are introduced.
-	NetworkName string `json:"NetworkName"`
 
 	// ProviderId is a provider-specific network interface id.
 	ProviderId string `json:"ProviderId"`

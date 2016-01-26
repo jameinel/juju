@@ -26,21 +26,14 @@ func (s *NetworkInterfaceSuite) SetUpTest(c *gc.C) {
 	s.ConnSuite.SetUpTest(c)
 	var err error
 	s.machine, err = s.State.AddMachine("quantal", state.JobHostUnits)
-	c.Assert(err, jc.ErrorIsNil)
-	s.net1, err = s.State.AddNetwork(state.NetworkInfo{"net1", "net1", "0.1.2.3/24", 0})
-	c.Assert(err, jc.ErrorIsNil)
-	s.vlan42, err = s.State.AddNetwork(state.NetworkInfo{"vlan42", "vlan42", "0.2.3.4/24", 42})
-	c.Assert(err, jc.ErrorIsNil)
 	s.ifaceNet1, err = s.machine.AddNetworkInterface(state.NetworkInterfaceInfo{
 		MACAddress:    "aa:bb:cc:dd:ee:ff",
 		InterfaceName: "eth0",
-		NetworkName:   "net1",
 	})
 	c.Assert(err, jc.ErrorIsNil)
 	s.ifaceVLAN42, err = s.machine.AddNetworkInterface(state.NetworkInterfaceInfo{
 		MACAddress:    "aa:bb:cc:dd:ee:ff",
 		InterfaceName: "eth0.42",
-		NetworkName:   "vlan42",
 	})
 	c.Assert(err, jc.ErrorIsNil)
 }
@@ -49,17 +42,12 @@ func (s *NetworkInterfaceSuite) TestGetterMethods(c *gc.C) {
 	c.Assert(s.ifaceNet1.Id(), gc.Not(gc.Equals), "")
 	c.Assert(s.ifaceNet1.MACAddress(), gc.Equals, "aa:bb:cc:dd:ee:ff")
 	c.Assert(s.ifaceNet1.InterfaceName(), gc.Equals, "eth0")
-	c.Assert(s.ifaceNet1.RawInterfaceName(), gc.Equals, "eth0")
-	c.Assert(s.ifaceNet1.NetworkName(), gc.Equals, s.net1.Name())
-	c.Assert(s.ifaceNet1.NetworkTag(), gc.Equals, s.net1.Tag())
 	c.Assert(s.ifaceNet1.MachineId(), gc.Equals, s.machine.Id())
 	c.Assert(s.ifaceNet1.MachineTag(), gc.Equals, s.machine.Tag())
 	c.Assert(s.ifaceNet1.IsDisabled(), jc.IsFalse)
 
-	c.Assert(s.ifaceVLAN42.NetworkName(), gc.Equals, s.vlan42.Name())
 	c.Assert(s.ifaceVLAN42.MACAddress(), gc.Equals, "aa:bb:cc:dd:ee:ff")
 	c.Assert(s.ifaceVLAN42.InterfaceName(), gc.Equals, "eth0.42")
-	c.Assert(s.ifaceVLAN42.RawInterfaceName(), gc.Equals, "eth0")
 	c.Assert(s.ifaceVLAN42.IsDisabled(), jc.IsFalse)
 }
 

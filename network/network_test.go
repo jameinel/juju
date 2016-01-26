@@ -39,12 +39,6 @@ func (s *InterfaceInfoSuite) SetUpTest(c *gc.C) {
 	}
 }
 
-func (s *InterfaceInfoSuite) TestActualInterfaceName(c *gc.C) {
-	c.Check(s.info[0].ActualInterfaceName(), gc.Equals, "eth0.1")
-	c.Check(s.info[1].ActualInterfaceName(), gc.Equals, "eth1")
-	c.Check(s.info[2].ActualInterfaceName(), gc.Equals, "br2.42")
-}
-
 func (s *InterfaceInfoSuite) TestIsVLAN(c *gc.C) {
 	c.Check(s.info[0].IsVLAN(), jc.IsTrue)
 	c.Check(s.info[1].IsVLAN(), jc.IsFalse)

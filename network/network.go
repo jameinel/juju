@@ -5,7 +5,6 @@ package network
 
 import (
 	"bufio"
-	"fmt"
 	"net"
 	"os"
 	"regexp"
@@ -141,9 +140,6 @@ type InterfaceInfo struct {
 	// CIDR of the network, in 123.45.67.89/24 format.
 	CIDR string
 
-	// NetworkName is juju-internal name of the network.
-	NetworkName string
-
 	// ProviderId is a provider-specific NIC id.
 	ProviderId Id
 
@@ -222,15 +218,6 @@ func (s interfaceInfoSlice) Less(i, j int) bool {
 // order.
 func SortInterfaceInfo(interfaces []InterfaceInfo) {
 	sort.Sort(interfaceInfoSlice(interfaces))
-}
-
-// ActualInterfaceName returns raw interface name for raw interface (e.g. "eth0") and
-// virtual interface name for virtual interface (e.g. "eth0.42")
-func (i *InterfaceInfo) ActualInterfaceName() string {
-	if i.VLANTag > 0 {
-		return fmt.Sprintf("%s.%d", i.InterfaceName, i.VLANTag)
-	}
-	return i.InterfaceName
 }
 
 // IsVLAN returns true when the interface is a VLAN interface.

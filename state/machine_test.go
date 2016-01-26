@@ -785,7 +785,6 @@ func addNetworkAndInterface(c *gc.C, st *state.State, machine *state.Machine,
 	iface, err := machine.AddNetworkInterface(state.NetworkInterfaceInfo{
 		MACAddress:    mac,
 		InterfaceName: ifaceName,
-		NetworkName:   networkName,
 	})
 	c.Assert(err, jc.ErrorIsNil)
 	return net, iface
@@ -874,7 +873,6 @@ var addNetworkInterfaceErrorsTests = []struct {
 	state.NetworkInterfaceInfo{
 		MACAddress:    "",
 		InterfaceName: "eth1",
-		NetworkName:   "net1",
 		Disabled:      false,
 	},
 	nil,
@@ -883,25 +881,14 @@ var addNetworkInterfaceErrorsTests = []struct {
 	state.NetworkInterfaceInfo{
 		MACAddress:    "invalid",
 		InterfaceName: "eth1",
-		NetworkName:   "net1",
 		Disabled:      false,
 	},
 	nil,
 	`cannot add network interface "eth1" to machine "2": invalid MAC address.*`,
 }, {
 	state.NetworkInterfaceInfo{
-		MACAddress:    "aa:bb:cc:dd:ee:f0",
-		InterfaceName: "eth1",
-		NetworkName:   "net1",
-		Disabled:      false,
-	},
-	nil,
-	`cannot add network interface "eth1" to machine "2": MAC address "aa:bb:cc:dd:ee:f0" on network "net1" already exists`,
-}, {
-	state.NetworkInterfaceInfo{
 		MACAddress:    "aa:bb:cc:dd:ee:ff",
 		InterfaceName: "",
-		NetworkName:   "net1",
 		Disabled:      false,
 	},
 	nil,
@@ -910,25 +897,14 @@ var addNetworkInterfaceErrorsTests = []struct {
 	state.NetworkInterfaceInfo{
 		MACAddress:    "aa:bb:cc:dd:ee:ff",
 		InterfaceName: "eth0",
-		NetworkName:   "net1",
 		Disabled:      false,
 	},
 	nil,
 	`cannot add network interface "eth0" to machine "2": "eth0" on machine "2" already exists`,
 }, {
 	state.NetworkInterfaceInfo{
-		MACAddress:    "aa:bb:cc:dd:ee:ff",
-		InterfaceName: "eth1",
-		NetworkName:   "missing",
-		Disabled:      false,
-	},
-	nil,
-	`cannot add network interface "eth1" to machine "2": network "missing" not found`,
-}, {
-	state.NetworkInterfaceInfo{
 		MACAddress:    "aa:bb:cc:dd:ee:f1",
 		InterfaceName: "eth1",
-		NetworkName:   "net1",
 		Disabled:      false,
 	},
 	func(c *gc.C, m *state.Machine) {
@@ -939,7 +915,6 @@ var addNetworkInterfaceErrorsTests = []struct {
 	state.NetworkInterfaceInfo{
 		MACAddress:    "aa:bb:cc:dd:ee:f1",
 		InterfaceName: "eth1",
-		NetworkName:   "net1",
 		Disabled:      false,
 	},
 	func(c *gc.C, m *state.Machine) {
@@ -1170,7 +1145,7 @@ func (s *MachineSuite) TestMachineSetInstanceInfoSuccess(c *gc.C) {
 		{Name: "net1", ProviderId: "net1", CIDR: "0.1.2.0/24", VLANTag: 0},
 	}
 	interfaces := []state.NetworkInterfaceInfo{
-		{MACAddress: "aa:bb:cc:dd:ee:ff", NetworkName: "net1", InterfaceName: "eth0"},
+		{MACAddress: "aa:bb:cc:dd:ee:ff", InterfaceName: "eth0"},
 	}
 	volumeInfo := state.VolumeInfo{
 		VolumeId: "storage-123",
@@ -1190,7 +1165,6 @@ func (s *MachineSuite) TestMachineSetInstanceInfoSuccess(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 	c.Assert(ifaces, gc.HasLen, 1)
 	c.Check(ifaces[0].InterfaceName(), gc.Equals, interfaces[0].InterfaceName)
-	c.Check(ifaces[0].NetworkName(), gc.Equals, interfaces[0].NetworkName)
 	c.Check(ifaces[0].MACAddress(), gc.Equals, interfaces[0].MACAddress)
 	c.Check(ifaces[0].MachineTag(), gc.Equals, s.machine.Tag())
 

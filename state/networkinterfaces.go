@@ -5,7 +5,6 @@ package state
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/juju/errors"
 	"github.com/juju/names"
@@ -33,9 +32,6 @@ type NetworkInterfaceInfo struct {
 	// "eth1:suffix" for a network alias).
 	InterfaceName string
 
-	// NetworkName is this interface's network name.
-	NetworkName string
-
 	// Disabled returns whether the interface is disabled.
 	Disabled bool
 }
@@ -47,7 +43,6 @@ type networkInterfaceDoc struct {
 	EnvUUID       string        `bson:"env-uuid"`
 	MACAddress    string        `bson:"macaddress"`
 	InterfaceName string        `bson:"interfacename"`
-	NetworkName   string        `bson:"networkname"`
 	MachineId     string        `bson:"machineid"`
 	IsDisabled    bool          `bson:"isdisabled"`
 }
@@ -55,8 +50,8 @@ type networkInterfaceDoc struct {
 // GoString implements fmt.GoStringer.
 func (ni *NetworkInterface) GoString() string {
 	return fmt.Sprintf(
-		"&state.NetworkInterface{machineId: %q, mac: %q, name: %q, networkName: %q, isDisabled: %t}",
-		ni.MachineId(), ni.MACAddress(), ni.InterfaceName(), ni.NetworkName(), ni.IsDisabled())
+		"&state.NetworkInterface{machineId: %q, mac: %q, name: %q, isDisabled: %t}",
+		ni.MachineId(), ni.MACAddress(), ni.InterfaceName(), ni.IsDisabled())
 }
 
 // Id returns the internal juju-specific id of the interface.
@@ -72,25 +67,6 @@ func (ni *NetworkInterface) MACAddress() string {
 // InterfaceName returns the name of the interface.
 func (ni *NetworkInterface) InterfaceName() string {
 	return ni.doc.InterfaceName
-}
-
-// RawInterfaceName return the name of the raw interface.
-func (ni *NetworkInterface) RawInterfaceName() string {
-	nw, err := ni.st.Network(ni.doc.NetworkName)
-	if err == nil {
-		return strings.TrimSuffix(ni.doc.InterfaceName, fmt.Sprintf(".%d", nw.VLANTag()))
-	}
-	return ni.doc.InterfaceName
-}
-
-// NetworkName returns the network name of the interface.
-func (ni *NetworkInterface) NetworkName() string {
-	return ni.doc.NetworkName
-}
-
-// NetworkTag returns the network tag of the interface.
-func (ni *NetworkInterface) NetworkTag() names.NetworkTag {
-	return names.NewNetworkTag(ni.doc.NetworkName)
 }
 
 // MachineId returns the machine id of the interface.
@@ -172,7 +148,6 @@ func newNetworkInterfaceDoc(machineID, envUUID string, args NetworkInterfaceInfo
 		MachineId:     machineID,
 		MACAddress:    args.MACAddress,
 		InterfaceName: args.InterfaceName,
-		NetworkName:   args.NetworkName,
 		IsDisabled:    args.Disabled,
 	}
 }

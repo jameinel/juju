@@ -295,27 +295,18 @@ func (s *provisionerSuite) TestSetInstanceInfo(c *gc.C) {
 	}}
 	ifaces := []params.NetworkInterface{{
 		MACAddress:    "aa:bb:cc:dd:ee:f0",
-		NetworkTag:    "network-net1",
 		InterfaceName: "eth0",
 	}, {
 		MACAddress:    "aa:bb:cc:dd:ee:f1",
-		NetworkTag:    "network-net1",
 		InterfaceName: "eth1",
 	}, {
 		MACAddress:    "aa:bb:cc:dd:ee:f1",
-		NetworkTag:    "network-vlan42",
 		InterfaceName: "eth1.42",
 	}, {
 		MACAddress:    "aa:bb:cc:dd:ee:f1",
-		NetworkTag:    "network-vlan69",
 		InterfaceName: "eth1.69",
 	}, {
-		MACAddress:    "aa:bb:cc:dd:ee:f1", // duplicated mac+net; ignored
-		NetworkTag:    "network-vlan42",
-		InterfaceName: "eth2",
-	}, {
 		MACAddress:    "aa:bb:cc:dd:ee:f4",
-		NetworkTag:    "network-net1",
 		InterfaceName: "eth1", // duplicated name+machine id; ignored
 	}}
 	volumes := []params.Volume{{
@@ -376,7 +367,6 @@ func (s *provisionerSuite) TestSetInstanceInfo(c *gc.C) {
 	actual := make([]params.NetworkInterface, len(ifacesMachine))
 	for i, iface := range ifacesMachine {
 		actual[i].InterfaceName = iface.InterfaceName()
-		actual[i].NetworkTag = iface.NetworkTag().String()
 		actual[i].MACAddress = iface.MACAddress()
 		c.Check(iface.MachineTag(), gc.Equals, notProvisionedMachine.Tag())
 		c.Check(iface.MachineId(), gc.Equals, notProvisionedMachine.Id())
@@ -864,7 +854,6 @@ func (s *provisionerSuite) TestPrepareContainerInterfaceInfo(c *gc.C) {
 	expectInfo := []network.InterfaceInfo{{
 		DeviceIndex:      0,
 		CIDR:             "0.10.0.0/24",
-		NetworkName:      "juju-private",
 		ProviderId:       "dummy-eth0",
 		ProviderSubnetId: "dummy-private",
 		VLANTag:          0,
