@@ -81,10 +81,6 @@ type NetworkInterface struct {
 	// NetworkTag is this interface's network tag.
 	NetworkTag string `json:"NetworkTag"`
 
-	// IsVirtual is true when the interface is a virtual device, as
-	// opposed to a physical device.
-	IsVirtual bool `json:"IsVirtual"`
-
 	// Disabled returns whether the interface is disabled.
 	Disabled bool `json:"Disabled"`
 }

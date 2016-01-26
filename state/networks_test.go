@@ -50,14 +50,12 @@ func (s *NetworkSuite) TestInterfaces(c *gc.C) {
 		MACAddress:    "aa:bb:cc:dd:ee:f0",
 		InterfaceName: "eth0",
 		NetworkName:   "net1",
-		IsVirtual:     false,
 	})
 	c.Assert(err, jc.ErrorIsNil)
 	iface1, err := s.machine.AddNetworkInterface(state.NetworkInterfaceInfo{
 		MACAddress:    "aa:bb:cc:dd:ee:f1",
 		InterfaceName: "eth1",
 		NetworkName:   "net1",
-		IsVirtual:     false,
 	})
 	c.Assert(err, jc.ErrorIsNil)
 

@@ -36,10 +36,6 @@ type NetworkInterfaceInfo struct {
 	// NetworkName is this interface's network name.
 	NetworkName string
 
-	// IsVirtual is true when the interface is a virtual device, as
-	// opposed to a physical device (e.g. a VLAN or a network alias).
-	IsVirtual bool
-
 	// Disabled returns whether the interface is disabled.
 	Disabled bool
 }
@@ -53,15 +49,14 @@ type networkInterfaceDoc struct {
 	InterfaceName string        `bson:"interfacename"`
 	NetworkName   string        `bson:"networkname"`
 	MachineId     string        `bson:"machineid"`
-	IsVirtual     bool          `bson:"isvirtual"`
 	IsDisabled    bool          `bson:"isdisabled"`
 }
 
 // GoString implements fmt.GoStringer.
 func (ni *NetworkInterface) GoString() string {
 	return fmt.Sprintf(
-		"&state.NetworkInterface{machineId: %q, mac: %q, name: %q, networkName: %q, isVirtual: %t, isDisabled: %t}",
-		ni.MachineId(), ni.MACAddress(), ni.InterfaceName(), ni.NetworkName(), ni.IsVirtual(), ni.IsDisabled())
+		"&state.NetworkInterface{machineId: %q, mac: %q, name: %q, networkName: %q, isDisabled: %t}",
+		ni.MachineId(), ni.MACAddress(), ni.InterfaceName(), ni.NetworkName(), ni.IsDisabled())
 }
 
 // Id returns the internal juju-specific id of the interface.
@@ -106,18 +101,6 @@ func (ni *NetworkInterface) MachineId() string {
 // MachineTag returns the machine tag of the interface.
 func (ni *NetworkInterface) MachineTag() names.MachineTag {
 	return names.NewMachineTag(ni.doc.MachineId)
-}
-
-// IsVirtual returns whether the interface represents a virtual
-// device.
-func (ni *NetworkInterface) IsVirtual() bool {
-	return ni.doc.IsVirtual
-}
-
-// IsPhysical returns whether the interface represents a physical
-// device.
-func (ni *NetworkInterface) IsPhysical() bool {
-	return !ni.doc.IsVirtual
 }
 
 // IsDisabled returns whether the interface is disabled.
@@ -190,7 +173,6 @@ func newNetworkInterfaceDoc(machineID, envUUID string, args NetworkInterfaceInfo
 		MACAddress:    args.MACAddress,
 		InterfaceName: args.InterfaceName,
 		NetworkName:   args.NetworkName,
-		IsVirtual:     args.IsVirtual,
 		IsDisabled:    args.Disabled,
 	}
 }
@@ -227,7 +209,7 @@ func (ni *NetworkInterface) disableOps(shouldDisable bool) ([]txn.Op, error) {
 		Assert: txn.DocExists,
 		Update: bson.D{{"$set", bson.D{{"isdisabled", shouldDisable}}}},
 	}}
-	if shouldDisable && ni.IsPhysical() {
+	if shouldDisable {
 		// Fetch and dependent virtual interfaces on the same machine,
 		// so we can disable them along with their parent.
 		m, err := ni.st.Machine(ni.MachineId())
@@ -242,7 +224,7 @@ func (ni *NetworkInterface) disableOps(shouldDisable bool) ([]txn.Op, error) {
 			if iface.Id() == ni.Id() {
 				continue
 			}
-			if iface.MACAddress() == ni.MACAddress() && iface.IsVirtual() {
+			if iface.MACAddress() == ni.MACAddress() {
 				ops = append(ops, txn.Op{
 					C:      networkInterfacesC,
 					Id:     iface.doc.Id,

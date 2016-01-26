@@ -728,7 +728,6 @@ func (task *provisionerTask) prepareNetworkAndInterfaces(networkInfo []network.I
 			InterfaceName: info.ActualInterfaceName(),
 			MACAddress:    info.MACAddress,
 			NetworkTag:    networkTag,
-			IsVirtual:     info.IsVirtual(),
 			Disabled:      info.Disabled,
 		})
 	}

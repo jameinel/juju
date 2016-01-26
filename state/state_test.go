@@ -1752,7 +1752,7 @@ func (s *StateSuite) TestAddNetworkErrors(c *gc.C) {
 	for i, netName := range includeNetworks {
 		stateNet, _ := addNetworkAndInterface(
 			c, s.State, machine,
-			netName, "provider-"+netName, fmt.Sprintf("0.%02d.2.0/24", i), 0, false,
+			netName, "provider-"+netName, fmt.Sprintf("0.%02d.2.0/24", i), 0,
 			fmt.Sprintf("aa:%02x:cc:dd:ee:f0", i), fmt.Sprintf("eth%d", i))
 
 		net, err := s.State.Network(netName)
@@ -1803,7 +1803,7 @@ func (s *StateSuite) TestAllNetworks(c *gc.C) {
 		}
 		network, _ := addNetworkAndInterface(
 			c, s.State, machine,
-			netName, "provider-"+netName, cidr, i, false,
+			netName, "provider-"+netName, cidr, i,
 			macAddress, ifaceName)
 		networks = append(networks, network)
 

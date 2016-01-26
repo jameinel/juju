@@ -711,7 +711,6 @@ func networkParamsToStateParams(networks []params.Network, ifaces []params.Netwo
 			MACAddress:    iface.MACAddress,
 			NetworkName:   tag.Id(),
 			InterfaceName: iface.InterfaceName,
-			IsVirtual:     iface.IsVirtual,
 			Disabled:      iface.Disabled,
 		}
 	}

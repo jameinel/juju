@@ -233,12 +233,6 @@ func (i *InterfaceInfo) ActualInterfaceName() string {
 	return i.InterfaceName
 }
 
-// IsVirtual returns true when the interface is a virtual device, as
-// opposed to a physical device (e.g. a VLAN or a network alias)
-func (i *InterfaceInfo) IsVirtual() bool {
-	return i.VLANTag > 0
-}
-
 // IsVLAN returns true when the interface is a VLAN interface.
 func (i *InterfaceInfo) IsVLAN() bool {
 	return i.VLANTag > 0

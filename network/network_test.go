@@ -45,12 +45,6 @@ func (s *InterfaceInfoSuite) TestActualInterfaceName(c *gc.C) {
 	c.Check(s.info[2].ActualInterfaceName(), gc.Equals, "br2.42")
 }
 
-func (s *InterfaceInfoSuite) TestIsVirtual(c *gc.C) {
-	c.Check(s.info[0].IsVirtual(), jc.IsTrue)
-	c.Check(s.info[1].IsVirtual(), jc.IsFalse)
-	c.Check(s.info[2].IsVirtual(), jc.IsTrue)
-}
-
 func (s *InterfaceInfoSuite) TestIsVLAN(c *gc.C) {
 	c.Check(s.info[0].IsVLAN(), jc.IsTrue)
 	c.Check(s.info[1].IsVLAN(), jc.IsFalse)

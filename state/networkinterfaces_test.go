@@ -35,14 +35,12 @@ func (s *NetworkInterfaceSuite) SetUpTest(c *gc.C) {
 		MACAddress:    "aa:bb:cc:dd:ee:ff",
 		InterfaceName: "eth0",
 		NetworkName:   "net1",
-		IsVirtual:     false,
 	})
 	c.Assert(err, jc.ErrorIsNil)
 	s.ifaceVLAN42, err = s.machine.AddNetworkInterface(state.NetworkInterfaceInfo{
 		MACAddress:    "aa:bb:cc:dd:ee:ff",
 		InterfaceName: "eth0.42",
 		NetworkName:   "vlan42",
-		IsVirtual:     true,
 	})
 	c.Assert(err, jc.ErrorIsNil)
 }
@@ -56,16 +54,12 @@ func (s *NetworkInterfaceSuite) TestGetterMethods(c *gc.C) {
 	c.Assert(s.ifaceNet1.NetworkTag(), gc.Equals, s.net1.Tag())
 	c.Assert(s.ifaceNet1.MachineId(), gc.Equals, s.machine.Id())
 	c.Assert(s.ifaceNet1.MachineTag(), gc.Equals, s.machine.Tag())
-	c.Assert(s.ifaceNet1.IsVirtual(), jc.IsFalse)
-	c.Assert(s.ifaceNet1.IsPhysical(), jc.IsTrue)
 	c.Assert(s.ifaceNet1.IsDisabled(), jc.IsFalse)
 
 	c.Assert(s.ifaceVLAN42.NetworkName(), gc.Equals, s.vlan42.Name())
 	c.Assert(s.ifaceVLAN42.MACAddress(), gc.Equals, "aa:bb:cc:dd:ee:ff")
 	c.Assert(s.ifaceVLAN42.InterfaceName(), gc.Equals, "eth0.42")
 	c.Assert(s.ifaceVLAN42.RawInterfaceName(), gc.Equals, "eth0")
-	c.Assert(s.ifaceVLAN42.IsVirtual(), jc.IsTrue)
-	c.Assert(s.ifaceVLAN42.IsPhysical(), jc.IsFalse)
 	c.Assert(s.ifaceVLAN42.IsDisabled(), jc.IsFalse)
 }
 

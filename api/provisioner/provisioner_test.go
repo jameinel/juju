@@ -297,32 +297,26 @@ func (s *provisionerSuite) TestSetInstanceInfo(c *gc.C) {
 		MACAddress:    "aa:bb:cc:dd:ee:f0",
 		NetworkTag:    "network-net1",
 		InterfaceName: "eth0",
-		IsVirtual:     false,
 	}, {
 		MACAddress:    "aa:bb:cc:dd:ee:f1",
 		NetworkTag:    "network-net1",
 		InterfaceName: "eth1",
-		IsVirtual:     false,
 	}, {
 		MACAddress:    "aa:bb:cc:dd:ee:f1",
 		NetworkTag:    "network-vlan42",
 		InterfaceName: "eth1.42",
-		IsVirtual:     true,
 	}, {
 		MACAddress:    "aa:bb:cc:dd:ee:f1",
 		NetworkTag:    "network-vlan69",
 		InterfaceName: "eth1.69",
-		IsVirtual:     true,
 	}, {
 		MACAddress:    "aa:bb:cc:dd:ee:f1", // duplicated mac+net; ignored
 		NetworkTag:    "network-vlan42",
 		InterfaceName: "eth2",
-		IsVirtual:     true,
 	}, {
 		MACAddress:    "aa:bb:cc:dd:ee:f4",
 		NetworkTag:    "network-net1",
 		InterfaceName: "eth1", // duplicated name+machine id; ignored
-		IsVirtual:     false,
 	}}
 	volumes := []params.Volume{{
 		VolumeTag: "volume-1-0",
@@ -384,7 +378,6 @@ func (s *provisionerSuite) TestSetInstanceInfo(c *gc.C) {
 		actual[i].InterfaceName = iface.InterfaceName()
 		actual[i].NetworkTag = iface.NetworkTag().String()
 		actual[i].MACAddress = iface.MACAddress()
-		actual[i].IsVirtual = iface.IsVirtual()
 		c.Check(iface.MachineTag(), gc.Equals, notProvisionedMachine.Tag())
 		c.Check(iface.MachineId(), gc.Equals, notProvisionedMachine.Id())
 	}
