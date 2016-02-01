@@ -474,7 +474,7 @@ func (s *upgradesSuite) setupAddDefaultEndpointBindingsToServices(c *gc.C) []*Se
 	}
 
 	// Set the controller space used for default (unspecified) bindings.
-	err = s.state.UpdateEnvironConfig(map[string]interface{}{
+	err = s.state.UpdateModelConfig(map[string]interface{}{
 		config.ControllerSpaceName: "controllers",
 	}, nil, nil)
 	c.Assert(err, jc.ErrorIsNil)

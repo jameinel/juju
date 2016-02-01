@@ -1189,12 +1189,12 @@ func (st *State) AddService(args AddServiceArgs) (service *Service, err error) {
 	var controllerSpace string
 	if len(args.EndpointBindings) > 0 {
 		// Ensure we have controller space to use for unspecified bindings.
-		envConfig, err := st.EnvironConfig()
+		modelConfig, err := st.ModelConfig()
 		if err != nil {
-			return nil, errors.Annotate(err, "cannot get environment config")
+			return nil, errors.Annotate(err, "cannot get model config")
 		}
 		var hasControllerSpace bool
-		controllerSpace, hasControllerSpace = envConfig.ControllerSpaceName()
+		controllerSpace, hasControllerSpace = modelConfig.ControllerSpaceName()
 		if !hasControllerSpace {
 			// TODO(dimitern): This should be an error, but we can't do that at
 			// the moment, as deployments will stop working on providers without

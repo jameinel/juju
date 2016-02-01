@@ -242,11 +242,11 @@ func addDefaultBindingsToServices(st *State) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	envConfig, err := st.EnvironConfig()
+	modelConfig, err := st.ModelConfig()
 	if err != nil {
-		return errors.Annotate(err, "cannot get environment config")
+		return errors.Annotate(err, "cannot get model config")
 	}
-	controllerSpace, hasControllerSpace := envConfig.ControllerSpaceName()
+	controllerSpace, hasControllerSpace := modelConfig.ControllerSpaceName()
 	if !hasControllerSpace {
 		logger.Warningf("cannot add default endpoint bindings to services: no controller space set in config for unspecified bindings")
 		return nil

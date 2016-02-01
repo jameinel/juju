@@ -1908,7 +1908,7 @@ func (s *StateSuite) TestAddServiceWithDefaultBindings(c *gc.C) {
 	c.Skip("skipped temporarily to pass CI merge gating")
 
 	// Set controller space to use for unspecified bindings.
-	err := s.State.UpdateEnvironConfig(map[string]interface{}{
+	err := s.State.UpdateModelConfig(map[string]interface{}{
 		config.ControllerSpaceName: "controllers",
 	}, nil, nil)
 	c.Assert(err, jc.ErrorIsNil)
@@ -1945,7 +1945,7 @@ func (s *StateSuite) TestAddServiceIgnoresBindingsWithoutControllerSpaceSet(c *g
 	c.Skip("skipped temporarily to pass CI merge gating")
 
 	// Unset controller space to trigger ignoring any bindings.
-	err := s.State.UpdateEnvironConfig(map[string]interface{}{
+	err := s.State.UpdateModelConfig(map[string]interface{}{
 		config.ControllerSpaceName: "",
 	}, nil, nil)
 	c.Assert(err, jc.ErrorIsNil)
@@ -1970,7 +1970,7 @@ func (s *StateSuite) TestAddServiceWithSpecifiedBindings(c *gc.C) {
 	c.Skip("skipped temporarily to pass CI merge gating")
 
 	// Set controller space to use for unspecified bindings.
-	err := s.State.UpdateEnvironConfig(map[string]interface{}{
+	err := s.State.UpdateModelConfig(map[string]interface{}{
 		config.ControllerSpaceName: "controllers",
 	}, nil, nil)
 	c.Assert(err, jc.ErrorIsNil)
@@ -2010,7 +2010,7 @@ func (s *StateSuite) TestAddServiceWithInvalidBindings(c *gc.C) {
 	c.Skip("skipped temporarily to pass CI merge gating")
 
 	// Set controller space to use for unspecified bindings.
-	err := s.State.UpdateEnvironConfig(map[string]interface{}{
+	err := s.State.UpdateModelConfig(map[string]interface{}{
 		config.ControllerSpaceName: "controllers",
 	}, nil, nil)
 	c.Assert(err, jc.ErrorIsNil)
@@ -2373,12 +2373,12 @@ func (s *StateSuite) TestModelConfig(c *gc.C) {
 }
 
 func (s *StateSuite) TestModelConstraints(c *gc.C) {
-	// Environ constraints start out empty (for now).
+	// Model constraints start out empty (for now).
 	cons, err := s.State.ModelConstraints()
 	c.Assert(err, jc.ErrorIsNil)
 	c.Assert(&cons, jc.Satisfies, constraints.IsEmpty)
 
-	// Environ constraints can be set.
+	// Model constraints can be set.
 	cons2 := constraints.Value{Mem: uint64p(1024)}
 	err = s.State.SetModelConstraints(cons2)
 	c.Assert(err, jc.ErrorIsNil)
@@ -2386,7 +2386,7 @@ func (s *StateSuite) TestModelConstraints(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 	c.Assert(cons3, gc.DeepEquals, cons2)
 
-	// Environ constraints are completely overwritten when re-set.
+	// Model constraints are completely overwritten when re-set.
 	cons4 := constraints.Value{CpuPower: uint64p(250)}
 	err = s.State.SetModelConstraints(cons4)
 	c.Assert(err, jc.ErrorIsNil)

@@ -1758,11 +1758,11 @@ func getMachineAddressesAndControllerSpace(agentConfig agent.Config) ([]network.
 		return nil, "", errors.Annotate(err, "failed to open state to retrieve machine addresses and controller space")
 	}
 	defer st.Close()
-	envConfig, err := st.EnvironConfig()
+	modelConfig, err := st.ModelConfig()
 	if err != nil {
 		return nil, "", errors.Annotate(err, "failed to retrieve controller space name from config")
 	}
-	controllerSpace, _ := envConfig.ControllerSpaceName()
+	controllerSpace, _ := modelConfig.ControllerSpaceName()
 	return m.Addresses(), controllerSpace, nil
 }
 

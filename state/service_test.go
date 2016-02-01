@@ -2251,7 +2251,7 @@ func (s *ServiceSuite) TestEndpointBindingsJustDefaults(c *gc.C) {
 	// not set, any bindings are ignored.
 
 	// Set controller space to use for unspecified bindings.
-	err := s.State.UpdateEnvironConfig(map[string]interface{}{
+	err := s.State.UpdateModelConfig(map[string]interface{}{
 		config.ControllerSpaceName: "controllers",
 	}, nil, nil)
 	c.Assert(err, jc.ErrorIsNil)
@@ -2270,7 +2270,7 @@ func (s *ServiceSuite) TestEndpointBindingsJustDefaults(c *gc.C) {
 	s.assertServiceRemovedWithItsBindings(c, service1)
 
 	// Clear controller space to cause serivce2 bindings to be ignored.
-	err = s.State.UpdateEnvironConfig(map[string]interface{}{
+	err = s.State.UpdateModelConfig(map[string]interface{}{
 		config.ControllerSpaceName: "",
 	}, nil, nil)
 	c.Assert(err, jc.ErrorIsNil)
@@ -2290,7 +2290,7 @@ func (s *ServiceSuite) TestEndpointBindingsWithExplictOverrides(c *gc.C) {
 	c.Skip("skipped temporarily to pass CI merge gating")
 
 	// Set controller space to use for unspecified bindings.
-	err := s.State.UpdateEnvironConfig(map[string]interface{}{
+	err := s.State.UpdateModelConfig(map[string]interface{}{
 		config.ControllerSpaceName: "controllers",
 	}, nil, nil)
 	c.Assert(err, jc.ErrorIsNil)
@@ -2324,7 +2324,7 @@ func (s *ServiceSuite) TestSetCharmExtraBindingsUseDefaults(c *gc.C) {
 	c.Skip("skipped temporarily to pass CI merge gating")
 
 	// Set controller space to use for unspecified bindings.
-	err := s.State.UpdateEnvironConfig(map[string]interface{}{
+	err := s.State.UpdateModelConfig(map[string]interface{}{
 		config.ControllerSpaceName: "controllers",
 	}, nil, nil)
 	c.Assert(err, jc.ErrorIsNil)

@@ -35,12 +35,12 @@ func (st *State) stateServerAddresses() ([]string, error) {
 	}
 	// Get the controller space from the config (if set) to use below for the
 	// address selection.
-	envConfig, err := ssState.EnvironConfig()
+	modelConfig, err := ssState.ModelConfig()
 	if err != nil {
-		return nil, errors.Annotate(err, "cannot get environment config")
+		return nil, errors.Annotate(err, "cannot get model config")
 	}
 	var controllerSpace string
-	if setSpace, isSet := envConfig.ControllerSpaceName(); isSet {
+	if setSpace, isSet := modelConfig.ControllerSpaceName(); isSet {
 		controllerSpace = setSpace
 	}
 
@@ -121,12 +121,12 @@ type apiHostPortsDoc struct {
 // SetAPIHostPorts sets the addresses of the API server instances.
 // Each server is represented by one element in the top level slice.
 func (st *State) SetAPIHostPorts(netHostsPorts [][]network.HostPort) error {
-	envConfig, err := st.EnvironConfig()
+	modelConfig, err := st.ModelConfig()
 	if err != nil {
-		return errors.Annotate(err, "cannot get environment config")
+		return errors.Annotate(err, "cannot get model config")
 	}
 
-	controllerSpace, hasControllerSpace := envConfig.ControllerSpaceName()
+	controllerSpace, hasControllerSpace := modelConfig.ControllerSpaceName()
 
 	var hpsToSet [][]network.HostPort
 	// Filter any addresses not on the controller space (when set). All API

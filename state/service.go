@@ -475,11 +475,11 @@ func (s *Service) changeCharmOps(ch *Charm, forceUnits bool) ([]txn.Op, error) {
 	}
 
 	// Get the configured controller space to use for unspecified bindings.
-	envConfig, err := s.st.EnvironConfig()
+	modelConfig, err := s.st.ModelConfig()
 	if err != nil {
-		return nil, errors.Annotate(err, "cannot get environment config")
+		return nil, errors.Annotate(err, "cannot get model config")
 	}
-	controllerSpace, _ := envConfig.ControllerSpaceName()
+	controllerSpace, _ := modelConfig.ControllerSpaceName()
 
 	// Create or replace service settings.
 	var settingsOp txn.Op
