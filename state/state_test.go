@@ -1904,6 +1904,12 @@ func (s *StateSuite) TestAddServiceNonExistentUser(c *gc.C) {
 }
 
 func (s *StateSuite) TestAddServiceWithDefaultBindings(c *gc.C) {
+	// Set controller space to use for unspecified bindings.
+	err := s.State.UpdateEnvironConfig(map[string]interface{}{
+		config.ControllerSpaceName: "controllers",
+	}, nil, nil)
+	c.Assert(err, jc.ErrorIsNil)
+
 	ch := s.AddMetaCharm(c, "mysql", metaBase, 42)
 	svc, err := s.State.AddService(state.AddServiceArgs{
 		Name:  "yoursql",
@@ -1917,9 +1923,9 @@ func (s *StateSuite) TestAddServiceWithDefaultBindings(c *gc.C) {
 	bindings, err := svc.EndpointBindings()
 	c.Assert(err, jc.ErrorIsNil)
 	c.Assert(bindings, jc.DeepEquals, map[string]string{
-		"server":  network.DefaultSpace,
-		"client":  network.DefaultSpace,
-		"cluster": network.DefaultSpace,
+		"server":  "controllers",
+		"client":  "controllers",
+		"cluster": "controllers",
 	})
 
 	// Removing the service also removes its bindings.
@@ -1931,9 +1937,37 @@ func (s *StateSuite) TestAddServiceWithDefaultBindings(c *gc.C) {
 	c.Assert(err, jc.Satisfies, errors.IsNotFound)
 }
 
+func (s *StateSuite) TestAddServiceIgnoresBindingsWithoutControllerSpaceSet(c *gc.C) {
+	// Unset controller space to trigger ignoring any bindings.
+	err := s.State.UpdateEnvironConfig(map[string]interface{}{
+		config.ControllerSpaceName: "",
+	}, nil, nil)
+	c.Assert(err, jc.ErrorIsNil)
+
+	ch := s.AddMetaCharm(c, "mysql", metaBase, 42)
+	svc, err := s.State.AddService(state.AddServiceArgs{
+		Name:  "yoursql",
+		Owner: s.Owner.String(),
+		Charm: ch,
+	})
+	c.Assert(err, jc.ErrorIsNil)
+
+	// Read them back to verify they are not found and ignored as expected.
+	bindings, err := svc.EndpointBindings()
+	c.Assert(err, jc.Satisfies, errors.IsNotFound)
+	c.Assert(err, gc.ErrorMatches, `endpoint bindings for "s#yoursql" not found`)
+	c.Assert(bindings, gc.IsNil)
+}
+
 func (s *StateSuite) TestAddServiceWithSpecifiedBindings(c *gc.C) {
+	// Set controller space to use for unspecified bindings.
+	err := s.State.UpdateEnvironConfig(map[string]interface{}{
+		config.ControllerSpaceName: "controllers",
+	}, nil, nil)
+	c.Assert(err, jc.ErrorIsNil)
+
 	// Add extra spaces to use in bindings.
-	_, err := s.State.AddSpace("db", "", nil, false)
+	_, err = s.State.AddSpace("db", "", nil, false)
 	c.Assert(err, jc.ErrorIsNil)
 	_, err = s.State.AddSpace("client", "", nil, true)
 	c.Assert(err, jc.ErrorIsNil)
@@ -1956,16 +1990,22 @@ func (s *StateSuite) TestAddServiceWithSpecifiedBindings(c *gc.C) {
 	bindings, err := svc.EndpointBindings()
 	c.Assert(err, jc.ErrorIsNil)
 	c.Assert(bindings, jc.DeepEquals, map[string]string{
-		"server":  network.DefaultSpace, // inherited from defaults.
+		"server":  "controllers", // inherited from defaults.
 		"client":  "client",
 		"cluster": "db",
 	})
 }
 
 func (s *StateSuite) TestAddServiceWithInvalidBindings(c *gc.C) {
+	// Set controller space to use for unspecified bindings.
+	err := s.State.UpdateEnvironConfig(map[string]interface{}{
+		config.ControllerSpaceName: "controllers",
+	}, nil, nil)
+	c.Assert(err, jc.ErrorIsNil)
+
 	charm := s.AddMetaCharm(c, "mysql", metaBase, 44)
 	// Add extra spaces to use in bindings.
-	_, err := s.State.AddSpace("db", "", nil, false)
+	_, err = s.State.AddSpace("db", "", nil, false)
 	c.Assert(err, jc.ErrorIsNil)
 	_, err = s.State.AddSpace("client", "", nil, true)
 	c.Assert(err, jc.ErrorIsNil)
@@ -2004,7 +2044,7 @@ func (s *StateSuite) TestAddServiceWithInvalidBindings(c *gc.C) {
 		expectedError: `unbound endpoint "server" not valid`,
 	}, {
 		about:         "known endpoint bound correctly and an extra endpoint",
-		bindings:      map[string]string{"server": "db", "foo": network.DefaultSpace},
+		bindings:      map[string]string{"server": "db", "foo": "controllers"},
 		expectedError: `unknown endpoint "foo" not valid`,
 	}} {
 		c.Logf("test #%d: %s", i, test.about)
