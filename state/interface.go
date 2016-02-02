@@ -94,11 +94,16 @@ type AgentEntity interface {
 	NotifyWatcherFactory
 }
 
-// ModelAccessor defines the methods needed to watch for model
-// config changes, and read the model config.
-type ModelAccessor interface {
-	WatchForModelConfigChanges() NotifyWatcher
+// ModelConfigGetter defines the method needed to read the model config.
+type ModelConfigGetter interface {
 	ModelConfig() (*config.Config, error)
+}
+
+// ModelAccessor defines the methods needed to watch for model config changes,
+// and read the model config.
+type ModelAccessor interface {
+	ModelConfigGetter
+	WatchForModelConfigChanges() NotifyWatcher
 }
 
 // UnitsWatcher defines the methods needed to retrieve an entity (a
