@@ -1017,13 +1017,13 @@ var configTests = []configTest{
 			"name":             "my-name",
 			"controller-space": "",
 		},
-		err: `empty controller-space in environment configuration`,
+		err: `empty controller-space in model configuration`,
 	},
 	{
 		about:       "No defaults: explicitly empty controller-space not allowed",
 		useDefaults: config.NoDefaults,
 		attrs:       sampleConfig.Merge(testing.Attrs{"controller-space": ""}),
-		err:         `empty controller-space in environment configuration`,
+		err:         `empty controller-space in model configuration`,
 	},
 	{
 		about:       "Explicit and valid controller space",
