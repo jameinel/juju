@@ -154,3 +154,75 @@ func (s *NetworkSuite) TestNoAddressError(c *gc.C) {
 	c.Assert(network.IsNoAddress(err), jc.IsTrue)
 	c.Assert(network.IsNoAddress(errors.New("address found")), jc.IsFalse)
 }
+
+func (s *NetworkSuite) TestSanitizeSpaceName(c *gc.C) {
+	for i, test := range []struct {
+		about        string
+		givenName    string
+		expectedName string
+	}{{
+		about:        "only lowercase letters",
+		givenName:    "foo",
+		expectedName: "foo",
+	}, {
+		about:        "lowercase letters and a number",
+		givenName:    "foo1",
+		expectedName: "foo1",
+	}, {
+		about:        "lowercase letters, numbers, and dashes",
+		givenName:    "foo-1",
+		expectedName: "foo-1",
+	}, {
+		about:        "with uppercase letters and spaces",
+		givenName:    "Foo Thing",
+		expectedName: "foo-thing",
+	}, {
+		about:        "starts valid, mixed with invalid characters",
+		givenName:    "foo^9*//++!!!!",
+		expectedName: "foo9",
+	}, {
+		about:        "starts invalid, mixed with invalid characters",
+		givenName:    "!!!!++//*foo^9",
+		expectedName: "foo9",
+	}, {
+		about:        "starts with a single dash",
+		givenName:    "-foo",
+		expectedName: "foo",
+	}, {
+		about:        "starts with multiple dashes and uppercase characters",
+		givenName:    "--FOo",
+		expectedName: "foo",
+	}, {
+		about:        "contains only invalid characters",
+		givenName:    "---^^&*()!",
+		expectedName: network.EmptySpace,
+	}, {
+		about:        "contains only spaces",
+		givenName:    "  ",
+		expectedName: network.EmptySpace,
+	}, {
+		about:        "empty name given",
+		givenName:    "",
+		expectedName: network.EmptySpace,
+	}, {
+		about:        "ends with a single dash",
+		givenName:    "foo-",
+		expectedName: "foo",
+	}, {
+		about:        "ends with multiple dashes",
+		givenName:    "foo-bar---",
+		expectedName: "foo-bar",
+	}, {
+		about:        "ends with an invalid unicode character",
+		givenName:    "foo\u2318",
+		expectedName: "foo",
+	}, {
+		about:        "contains multiple sets of dashes, including as prefix and suffix",
+		givenName:    "-foo---bar----baz--",
+		expectedName: "foo-bar-baz",
+	}} {
+		c.Logf("test #%d: %s", i, test.about)
+		result := network.SanitizeSpaceName(test.givenName)
+		c.Check(result, gc.Equals, test.expectedName)
+	}
+}

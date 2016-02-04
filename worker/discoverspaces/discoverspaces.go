@@ -5,8 +5,6 @@ package discoverspaces
 
 import (
 	"fmt"
-	"regexp"
-	"strings"
 
 	"github.com/juju/errors"
 	"github.com/juju/loggo"
@@ -29,27 +27,8 @@ type discoverspacesWorker struct {
 	discoveringSpaces chan struct{}
 }
 
-var dashPrefix = regexp.MustCompile("^-*")
-var dashSuffix = regexp.MustCompile("-*$")
-var multipleDashes = regexp.MustCompile("--+")
-
 func convertSpaceName(name string, existing set.Strings) string {
-	// First lower case and replace spaces with dashes.
-	name = strings.Replace(name, " ", "-", -1)
-	name = strings.ToLower(name)
-	// Replace any character that isn't in the set "-", "a-z", "0-9".
-	name = network.SpaceInvalidChars.ReplaceAllString(name, "")
-	// Get rid of any dashes at the start as that isn't valid.
-	name = dashPrefix.ReplaceAllString(name, "")
-	// And any at the end.
-	name = dashSuffix.ReplaceAllString(name, "")
-	// Repleace multiple dashes with a single dash.
-	name = multipleDashes.ReplaceAllString(name, "-")
-	// Special case of when the space name was only dashes or invalid
-	// characters!
-	if name == "" {
-		name = "empty"
-	}
+	name = network.SanitizeSpaceName(name)
 	// If this name is in use add a numerical suffix.
 	if existing.Contains(name) {
 		counter := 2

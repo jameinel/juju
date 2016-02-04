@@ -19,25 +19,59 @@ import (
 
 var logger = loggo.GetLogger("juju.network")
 
-// TODO(dimitern): Remove this once we use spaces as per the model.
 const (
 	// Id of the default public juju network
+	// TODO(dimitern): Remove this once we use spaces as per the model.
 	DefaultPublic = "juju-public"
 
 	// Id of the default private juju network
+	// TODO(dimitern): Remove this once we use spaces as per the model.
 	DefaultPrivate = "juju-private"
 
 	// Provider Id for the default network
+	// TODO(dimitern): Remove this once we use spaces as per the model.
 	DefaultProviderId = "juju-unknown"
+
+	// DefaultSpace is the name used for the default space for an environment.
+	// TODO(dimitern): Drop this once nothing uses it anymore.
+	DefaultSpace = "default"
+
+	// EmptySpace is used when a sanitized space name contains only invalid
+	// characters.
+	EmptySpace = "empty"
 )
 
-// DefaultSpace is the name used for the default space for an environment.
-// TODO(dimitern): Make this configurable per environment.
-const DefaultSpace = "default"
+var (
+	// The following regular expressions are used by SanitizeSpaceName
+	invalidCharactersForSpaceName         = regexp.MustCompile("[^0-9a-z-]")
+	spaceNameDoesNotStartWithDash         = regexp.MustCompile("^-*")
+	spaceNameDoesNotEndWithDash           = regexp.MustCompile("-*$")
+	spaceNameDoesNotContainMultipleDashes = regexp.MustCompile("--+")
+)
 
-// SpaceInvalidChars is a regexp for validating that space names contain no
-// invalid characters.
-var SpaceInvalidChars = regexp.MustCompile("[^0-9a-z-]")
+// SanitizeSpaceName ensures the given name is a valid juju space name,
+// transforming it if necessary to use lowercase letters and replaces invalid
+// characters. If no valid characters remain after sanitizing, EmptySpace will
+// be returned, so the result is never empty.
+func SanitizeSpaceName(name string) string {
+	// First lower case and replace spaces with dashes.
+	name = strings.Replace(name, " ", "-", -1)
+	name = strings.ToLower(name)
+	// Replace any character that isn't in the set "-", "a-z", "0-9".
+	name = invalidCharactersForSpaceName.ReplaceAllString(name, "")
+	// Get rid of any dashes at the start as that isn't valid.
+	name = spaceNameDoesNotStartWithDash.ReplaceAllString(name, "")
+	// And any at the end.
+	name = spaceNameDoesNotEndWithDash.ReplaceAllString(name, "")
+	// Repleace multiple dashes with a single dash.
+	name = spaceNameDoesNotContainMultipleDashes.ReplaceAllString(name, "-")
+	// Special case of when the space name was only dashes or invalid
+	// characters!
+	if name == "" {
+		return EmptySpace
+	}
+	return name
+}
 
 // noAddress represents an error when an address is requested but not available.
 type noAddress struct {
