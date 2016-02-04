@@ -14,9 +14,10 @@ import (
 )
 
 // Space represents the state of a space.
-// A space is a security subdivision of a network. In practice, a space
-// is a collection of related subnets that have no firewalls between
-// each other, and that have the same ingress and egress policies.
+//
+// A space is a security subdivision of a network. In practice, a space is a
+// collection of related subnets that have no firewalls between each other, and
+// that have the same ingress and egress policies.
 type Space struct {
 	st  *State
 	doc spaceDoc
@@ -54,7 +55,7 @@ func (s *Space) Name() string {
 // ProviderId returns the provider id of the space. This will be the empty
 // string except on substrates that directly support spaces.
 func (s *Space) ProviderId() network.Id {
-	return network.Id(s.doc.ProviderId)
+	return network.Id(s.st.localID(s.doc.ProviderId))
 }
 
 // Subnets returns all the subnets associated with the Space.
@@ -86,13 +87,19 @@ func (st *State) AddSpace(name string, providerId network.Id, subnets []string, 
 	}
 
 	spaceID := st.docID(name)
+
+	var modelLocalProviderID string
+	if providerId != "" {
+		modelLocalProviderID = st.docID(string(providerId))
+	}
+
 	spaceDoc := spaceDoc{
 		DocID:      spaceID,
 		ModelUUID:  st.ModelUUID(),
 		Life:       Alive,
 		Name:       name,
 		IsPublic:   isPublic,
-		ProviderId: string(providerId),
+		ProviderId: modelLocalProviderID,
 	}
 	newSpace = &Space{doc: spaceDoc, st: st}
 
@@ -127,13 +134,17 @@ func (st *State) AddSpace(name string, providerId network.Id, subnets []string, 
 	} else if err != nil {
 		return nil, err
 	}
-	// if the ProviderId was not unique adding the space can fail
-	// without an error. Refreshing catches this.
+
+	// If the ProviderId was not unique adding the space can fail without an
+	// error. Refreshing catches this by returning NotFoundError.
 	err = newSpace.Refresh()
-	if err == nil {
-		return newSpace, nil
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, errors.Errorf("ProviderId %q not unique", providerId)
+		}
+		return nil, errors.Trace(err)
 	}
-	return nil, errors.Errorf("ProviderId %q not unique", providerId)
+	return newSpace, nil
 }
 
 // Space returns a space from state that matches the provided name. An error
@@ -171,8 +182,9 @@ func (st *State) AllSpaces() ([]*Space, error) {
 	return spaces, nil
 }
 
-// EnsureDead sets the Life of the space to Dead, if it's Alive. It
-// does nothing otherwise.
+// EnsureDead sets the Life of the space to Dead, if it's Alive. If spaces is
+// already Dead, no error is returned. When the space is no longer Alive or
+// already removed, errNotAlive is returned.
 func (s *Space) EnsureDead() (err error) {
 	defer errors.DeferredAnnotatef(&err, "cannot set space %q to dead", s)
 
@@ -186,15 +198,17 @@ func (s *Space) EnsureDead() (err error) {
 		Update: bson.D{{"$set", bson.D{{"life", Dead}}}},
 		Assert: isAliveDoc,
 	}}
-	if err = s.st.runTransaction(ops); err != nil {
-		// Ignore ErrAborted if it happens, otherwise return err.
-		return onAbort(err, nil)
+
+	txnErr := s.st.runTransaction(ops)
+	if txnErr == nil {
+		s.doc.Life = Dead
+		return nil
 	}
-	s.doc.Life = Dead
-	return nil
+	return onAbort(txnErr, errNotAlive)
 }
 
-// Remove removes a dead space. If the space is not dead it returns an error.
+// Remove removes a Dead space. If the space is not Dead or it is already
+// removed, an error is returned.
 func (s *Space) Remove() (err error) {
 	defer errors.DeferredAnnotatef(&err, "cannot remove space %q", s)
 
@@ -206,30 +220,31 @@ func (s *Space) Remove() (err error) {
 		C:      spacesC,
 		Id:     s.doc.DocID,
 		Remove: true,
-		Assert: notDeadDoc,
+		Assert: isDeadDoc,
 	}}
 
-	err = s.st.runTransaction(ops)
-	if err == mgo.ErrNotFound {
+	txnErr := s.st.runTransaction(ops)
+	if txnErr == nil {
 		return nil
 	}
-	return err
+	return onAbort(txnErr, errors.New("not found or not dead"))
 }
 
-// Refresh: refreshes the contents of the Space from the underlying
-// state. It returns an error that satisfies errors.IsNotFound if the Space has
-// been removed.
+// Refresh: refreshes the contents of the Space from the underlying state. It
+// returns an error that satisfies errors.IsNotFound if the Space has been
+// removed.
 func (s *Space) Refresh() error {
 	spaces, closer := s.st.getCollection(spacesC)
 	defer closer()
 
-	err := spaces.FindId(s.doc.DocID).One(&s.doc)
+	var doc spaceDoc
+	err := spaces.FindId(s.doc.DocID).One(&doc)
 	if err == mgo.ErrNotFound {
 		return errors.NotFoundf("space %q", s)
+	} else if err != nil {
+		return errors.Annotatef(err, "cannot refresh space %q", s)
 	}
-	if err != nil {
-		return errors.Errorf("cannot refresh space %q: %v", s, err)
-	}
+	s.doc = doc
 	return nil
 }
 
