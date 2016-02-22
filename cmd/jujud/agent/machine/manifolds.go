@@ -59,10 +59,6 @@ type ManifoldsConfig struct {
 	// use to establish a connection to state.
 	OpenStateForUpgrade func() (*state.State, func(), error)
 
-	// WriteUninstallFile is a function the uninstaller manifold uses
-	// to write the agent uninstall file.
-	WriteUninstallFile func() error
-
 	// StartAPIWorkers is passed to the apiworkers manifold. It starts
 	// workers which rely on an API connection (which have not yet
 	// been converted to work directly with the dependency engine).
@@ -151,15 +147,6 @@ func Manifolds(config ManifoldsConfig) dependency.Manifolds {
 			PreUpgradeSteps:      config.PreUpgradeSteps,
 		}),
 
-		// The uninstaller manifold checks if the machine is dead. If
-		// it is it writes the agent uninstall file and returns
-		// ErrTerminateAgent which causes the agent to remove itself.
-		uninstallerName: uninstallerManifold(uninstallerManifoldConfig{
-			AgentName:          agentName,
-			APICallerName:      apiCallerName,
-			WriteUninstallFile: config.WriteUninstallFile,
-		}),
-
 		// The serving-info-setter manifold sets grabs the state
 		// serving info from the API connection and writes it to the
 		// agent config.
@@ -242,7 +229,6 @@ func Manifolds(config ManifoldsConfig) dependency.Manifolds {
 				APICallerName:     apiCallerName,
 				UpgradeWaiterName: upgradeWaiterName,
 			},
-			WriteUninstallFile: config.WriteUninstallFile,
 		}),
 
 		// The log sender is a leaf worker that sends log messages to some
