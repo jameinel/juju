@@ -59,6 +59,7 @@ var facadeVersions = map[string]int{
 	"Resumer":                      2,
 	"RetryStrategy":                1,
 	"Service":                      3,
+	"ServiceScaler":                1,
 	"Storage":                      2,
 	"Spaces":                       2,
 	"Subnets":                      2,
