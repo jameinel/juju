@@ -1014,7 +1014,7 @@ func (a *MachineAgent) startModelWorkers(uuid string) (worker.Worker, error) {
 		BounceDelay: 10 * time.Millisecond,
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	manifolds := modelManifolds(model.ManifoldsConfig{
@@ -1030,7 +1030,7 @@ func (a *MachineAgent) startModelWorkers(uuid string) (worker.Worker, error) {
 		if err := worker.Stop(engine); err != nil {
 			logger.Errorf("while stopping engine with bad manifolds: %v", err)
 		}
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	return engine, nil
 }
