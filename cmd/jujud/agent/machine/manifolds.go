@@ -293,7 +293,7 @@ func Manifolds(config ManifoldsConfig) dependency.Manifolds {
 		// The storageProvisioner worker manages provisioning
 		// (deprovisioning), and attachment (detachment) of first-class
 		// volumes and filesystems.
-		storageprovisionerName: storageprovisioner.Manifold(storageprovisioner.ManifoldConfig{
+		storageprovisionerName: storageprovisioner.MachineManifold(storageprovisioner.MachineManifoldConfig{
 			PostUpgradeManifoldConfig: util.PostUpgradeManifoldConfig{
 				AgentName:         agentName,
 				APICallerName:     apiCallerName,

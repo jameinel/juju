@@ -1604,7 +1604,8 @@ func (s *MachineSuite) TestControllerModelWorkers(c *gc.C) {
 			case <-time.After(coretesting.ShortWait):
 				s.BackingState.StartSync()
 			case <-timeout:
-				c.Fatalf("timed out waiting for workers")
+				c.Errorf("timed out waiting for workers")
+				return
 			}
 		}
 	})
