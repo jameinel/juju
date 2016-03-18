@@ -671,7 +671,6 @@ func (s *MachineSuite) TestManageModelRunsDbLogPrunerIfFeatureFlagEnabled(c *gc.
 }
 
 func (s *MachineSuite) TestManageModelRunsRegisteredWorkers(c *gc.C) {
-	c.Fatalf("needs investigation")
 	stub := &gitjujutesting.Stub{}
 	factory := newStubWorkerFactory(stub)
 	err := RegisterModelWorker("testing-spam", factory.NewModelWorker)
