@@ -8,6 +8,7 @@ package lxdclient
 import (
 	"github.com/juju/errors"
 	"github.com/lxc/lxd"
+	"github.com/lxc/lxd/shared"
 )
 
 type rawProfileClient interface {
@@ -16,6 +17,7 @@ type rawProfileClient interface {
 	SetProfileConfigItem(name, key, value string) error
 	ProfileDelete(profile string) error
 	ProfileDeviceAdd(profile, devname, devtype string, props []string) (*lxd.Response, error)
+	ProfileConfig(profile string) (*shared.ProfileConfig, error)
 }
 
 type profileClient struct {
