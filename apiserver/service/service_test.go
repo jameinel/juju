@@ -1663,7 +1663,7 @@ func (s *serviceSuite) TestAddServiceUnitsToNewContainer(c *gc.C) {
 	_, err = s.serviceApi.AddUnits(params.AddServiceUnits{
 		ServiceName: "dummy",
 		NumUnits:    1,
-		Placement:   []*instance.Placement{instance.MustParsePlacement("lxc:" + machine.Id())},
+		Placement:   []*instance.Placement{instance.MustParsePlacement("lxd:" + machine.Id())},
 	})
 	c.Assert(err, jc.ErrorIsNil)
 
@@ -1671,7 +1671,7 @@ func (s *serviceSuite) TestAddServiceUnitsToNewContainer(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 	mid, err := units[0].AssignedMachineId()
 	c.Assert(err, jc.ErrorIsNil)
-	c.Assert(mid, gc.Equals, machine.Id()+"/lxc/0")
+	c.Assert(mid, gc.Equals, machine.Id()+"/lxd/0")
 }
 
 var addServiceUnitTests = []struct {
@@ -1690,8 +1690,8 @@ var addServiceUnitTests = []struct {
 	}, {
 		about:      "direct machine assignment placement directive",
 		expected:   []string{"dummy/1", "dummy/2"},
-		placement:  []*instance.Placement{{"#", "1"}, {"lxc", "1"}},
-		machineIds: []string{"1", "1/lxc/0"},
+		placement:  []*instance.Placement{{"#", "1"}, {"lxd", "1"}},
+		machineIds: []string{"1", "1/lxd/0"},
 	}, {
 		about:     "invalid placement directive",
 		err:       ".* invalid placement is invalid",
