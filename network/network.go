@@ -468,3 +468,22 @@ func FilterLXCAddresses(addresses []Address) []Address {
 	}
 	return addresses
 }
+
+// FilterLXDAddresses removes addresses on the LXD bridge from the list to be
+// considered.
+func FilterLXDAddresses(addresses []Address) []Address {
+	// Should we be getting this from LXD instead?
+	bridgeName, err := GetDefaultLXDBridgeName()
+	if err != nil {
+		logger.Debugf("could not find LXD bridge to filter addresses: %v", err)
+		return addresses
+	}
+	addrs, err := InterfaceByNameAddrs(bridgeName)
+	if err != nil {
+		logger.Warningf("cannot get %q addresses: %v (ignoring)", bridgeName, err)
+		return addresses
+	}
+	logger.Debugf("%q has addresses %v", bridgeName, addrs)
+	return filterAddrs(bridgeName, addresses, addrs)
+
+}

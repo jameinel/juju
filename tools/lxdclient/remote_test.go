@@ -13,6 +13,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 
+	"github.com/juju/juju/network"
 	"github.com/juju/juju/tools/lxdclient"
 )
 
@@ -336,7 +337,7 @@ type remoteFunctionalSuite struct {
 }
 
 func (s *remoteFunctionalSuite) TestUsingTCP(c *gc.C) {
-	netIF, err := lxdclient.GetDefaultBridgeName()
+	netIF, err := network.GetDefaultLXDBridgeName()
 	if err != nil {
 		c.Skip(fmt.Sprintf("could not determine default bridge: %v", err))
 	}

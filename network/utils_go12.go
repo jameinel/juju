@@ -3,9 +3,9 @@
 
 // +build !go1.3
 
-package lxdclient
+package network
 
-func GetDefaultBridgeName() (string, error) {
+func GetDefaultLXDBridgeName() (string, error) {
 	/* lxd not supported in go1.2 */
 	return "lxcbr0", nil
 }

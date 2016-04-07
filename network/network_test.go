@@ -5,6 +5,7 @@ package network_test
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"path/filepath"
@@ -175,6 +176,39 @@ LXC_BRIDGE="ignored"`[1:])
 		"192.168.123.42",
 	)
 	c.Assert(network.FilterLXCAddresses(inputAddresses), jc.DeepEquals, filteredAddresses)
+}
+
+func (s *NetworkSuite) TestFilterLXDAddresses(c *gc.C) {
+	bridgename, err := network.GetDefaultLXDBridgeName()
+	if err != nil {
+		c.Skip(fmt.Sprintf("could not get LXD bridge name: %v", err))
+	}
+	s.PatchValue(&network.InterfaceByNameAddrs, func(name string) ([]net.Addr, error) {
+		c.Assert(name, gc.Equals, bridgename)
+		return []net.Addr{
+			&net.IPAddr{IP: net.IPv4(10, 0, 3, 1)},
+			&net.IPAddr{IP: net.IPv4(10, 0, 3, 4)},
+			// Try a CIDR 10.0.3.5/24 as well.
+			&net.IPNet{IP: net.IPv4(10, 0, 3, 5), Mask: net.IPv4Mask(255, 255, 255, 0)},
+		}, nil
+	})
+	inputAddresses := network.NewAddresses(
+		"127.0.0.1",
+		"2001:db8::1",
+		"10.0.0.1",
+		"10.0.3.1", // filtered (directly as IP)
+		"10.0.3.3", // filtered (by the 10.0.3.5/24 CIDR)
+		"10.0.3.5", // filtered (directly)
+		"10.0.3.4", // filtered (directly)
+		"192.168.123.42",
+	)
+	filteredAddresses := network.NewAddresses(
+		"127.0.0.1",
+		"2001:db8::1",
+		"10.0.0.1",
+		"192.168.123.42",
+	)
+	c.Assert(network.FilterLXDAddresses(inputAddresses), jc.DeepEquals, filteredAddresses)
 }
 
 func (s *NetworkSuite) TestNoAddressError(c *gc.C) {
