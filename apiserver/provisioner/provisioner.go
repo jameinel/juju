@@ -1002,6 +1002,10 @@ func (p *ProvisionerAPI) prepareContainerAccessEnvironment() (environs.Networkin
 		return nil, nil, nil, errors.Trace(err)
 	}
 
+	if _, err := netEnviron.SupportsAddressAllocation(network.AnySubnet); err != nil {
+		return nil, nil, nil, errors.Trace(err)
+	}
+
 	canAccess, err := p.getAuthFunc()
 	if err != nil {
 		return nil, nil, nil, errors.Annotate(err, "cannot authenticate request")
