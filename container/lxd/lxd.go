@@ -127,6 +127,19 @@ func (manager *containerManager) CreateContainer(
 		"boot.autostart": "true",
 	}
 
+	// apply any constraints
+	if instanceConfig.Constraints.CpuCores != nil {
+		metadata["limits.cpu"] = fmt.Sprintf("%v", *instanceConfig.Constraints.CpuCores)
+	}
+
+	if instanceConfig.Constraints.CpuPower != nil {
+		metadata["limits.cpu.allowance"] = fmt.Sprintf("%v", *instanceConfig.Constraints.CpuPower)
+	}
+
+	if instanceConfig.Constraints.Mem != nil {
+		metadata["limits.memory"] = fmt.Sprintf("%vMB", *instanceConfig.Constraints.Mem)
+	}
+
 	networkProfile := fmt.Sprintf("%s-network", name)
 
 	if len(networkConfig.Interfaces) > 0 || networkConfig.Device != "" {
