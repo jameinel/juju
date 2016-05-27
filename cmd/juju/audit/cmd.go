@@ -11,7 +11,6 @@ import (
 	"bytes"
 	"fmt"
 	"net"
-	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -23,33 +22,23 @@ import (
 
 const usageSummary = "Output audit messages for the given model."
 
-var usageDetails = `
-TODO(redir): Figure out what the usage details are: examples?, querying, filtering.
-`[1:]
-
 // APIClientBase represents the api client connection method for testing.
-type APIClientBase interface {
-	Connect(*cmd.Context) (LogLister, error)
-}
-
-// LogLister represents the audit api client interface for testing.
-type LogLister interface {
-	QueryResults([]LogFilter) ([]auditRecord, error)
-
-	// Do we need this or is this a feature solely of the charmstore?
+type AuditAPIClient interface {
+	Connect() error
+	AuditEntries([]LogFilter) ([]auditRecord, error)
 	Close() error
 }
 
 // NewAuditCommand shockingly returns a command to access a models audit log.
-func NewAuditCommand(c APIClientBase) cmd.Command {
-	return &auditCommand{APIClientBase: c}
+func NewAuditCommand(apiClient AuditAPIClient) cmd.Command {
+	return &auditCommand{apiClient: apiClient}
 }
 
 type auditCommand struct {
 	modelcmd.ModelCommandBase
-	out cmd.Output
 
-	APIClientBase
+	out       cmd.Output
+	apiClient AuditAPIClient
 
 	CIDRBlock  string
 	ModelName  string
@@ -71,7 +60,6 @@ func (c *auditCommand) Info() *cmd.Info {
 		Args:    "[options] <model name>",
 		Name:    "audit",
 		Purpose: usageSummary,
-		Doc:     usageDetails,
 	}
 }
 
@@ -96,7 +84,7 @@ func (c *auditCommand) SetFlags(f *gnuflag.FlagSet) {
 		"yaml":    cmd.FormatYaml,
 		"json":    cmd.FormatJson,
 	})
-	f.StringVar(&c.CIDRBlock, "ip", "0.0.0.0/0", "A CIDR block to filter on.")
+	f.StringVar(&c.CIDRBlock, "ip", "", "A CIDR block to filter on.")
 	f.StringVar(&c.Operation, "operation", "", `The actual operation performed, e.g. "status"`)
 	f.StringVar(&c.OriginName, "origin-name", "", "The name of the origin to filter on. E.g. model name, user name, action name")
 	f.StringVar(&c.OriginType, "origin-type", "", "The type of origin to filter on. I.e. model, user, or action.")
@@ -105,27 +93,27 @@ func (c *auditCommand) SetFlags(f *gnuflag.FlagSet) {
 
 // Run implements cmd.Command, executing the command.
 func (c *auditCommand) Run(ctx *cmd.Context) error {
-	apiClient, err := c.Connect(ctx)
+	err := c.apiClient.Connect()
 	if err != nil {
 		return errors.Trace(err)
 	}
 	defer func() {
-		err = apiClient.Close()
+		err = c.apiClient.Close()
 		if err != nil {
 			// TODO(redir): Do we care about this error?
 		}
 	}()
 
 	// TODO(redir): Get the actual filters from args. s.filtersFromArgs() ([]LogFilter, error)
-	records, err := apiClient.QueryResults([]LogFilter{})
+	records, err := c.apiClient.AuditEntries([]LogFilter{})
 	if err != nil {
 		return errors.Trace(err)
 	}
 	return c.out.Write(ctx, records)
 }
 
-// formatTabular returns []bytes formatted as a tab separated table for
-// cmd.Output to render appropriately.
+// formatTabular returns []bytes formatted as a tab separated table
+// for cmd.Output to render appropriately.
 func formatTabular(val interface{}) ([]byte, error) {
 	records, ok := val.([]auditRecord)
 	if !ok {
@@ -137,16 +125,23 @@ func formatTabular(val interface{}) ([]byte, error) {
 	const (
 		minwidth = 0
 		tabwidth = 1
-		padding  = 2
+		padding  = 1
 		padchar  = ' '
 		flags    = 0
 	)
-	w := tabwriter.NewWriter(&out, minwidth, tabwidth, padchar, padchar, flags)
-	fmt.Fprintf(&out, "DATE\tIP\tSOURCE\tOPERATION\n")
+	tw := tabwriter.NewWriter(&out, minwidth, tabwidth, padding, padchar, flags)
+	fmt.Fprintf(tw, "DATE\tIP\tSOURCE\tOPERATION\n")
 	for _, rec := range records {
-		fmt.Fprintf(&out, "%s\t%s\t%s\t%s\n", rec.Timestamp.String(), rec.IPAddress, strings.Join([]string{rec.Type, rec.Name}, ":"), rec.Operation)
+		fmt.Fprintf(
+			tw,
+			"%v\t%v\t%s\t%s\n",
+			rec.Timestamp,
+			rec.IPAddress,
+			rec.Type+":"+rec.Name,
+			rec.Operation,
+		)
 	}
-	err := w.Flush()
+	err := tw.Flush()
 	if err != nil {
 		return nil, errors.Errorf("failed to flush tabwriter buffer: %s", err)
 	}
@@ -158,8 +153,9 @@ func formatTabular(val interface{}) ([]byte, error) {
 // auditRecord represents the audit logs data model.
 // TODO(redir): Do we want omitempty on these? Can any ever be empty?
 type auditRecord struct {
-	IPAddress net.IP    `json:"ipAddress"`
-	ModelID   string    `json:"modelID"`
+	IPAddress net.IP `json:"ipAddress"`
+	// DELETE(katco): We specify a model to get back these records; not strictly necessary.
+	// ModelID   string    `json:"modelID"`
 	Name      string    `json:"name"`
 	Operation string    `json:"operation"`
 	Timestamp time.Time `json:"timestamp"`

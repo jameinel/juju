@@ -19,6 +19,7 @@ import (
 
 	jujucmd "github.com/juju/juju/cmd"
 	"github.com/juju/juju/cmd/juju/action"
+	"github.com/juju/juju/cmd/juju/audit"
 	"github.com/juju/juju/cmd/juju/backups"
 	"github.com/juju/juju/cmd/juju/block"
 	"github.com/juju/juju/cmd/juju/cachedimages"
@@ -382,6 +383,10 @@ func registerCommands(r commandRegistry, ctx *cmd.Context) {
 	// Juju GUI commands.
 	r.Register(gui.NewGUICommand())
 	r.Register(gui.NewUpgradeGUICommand())
+
+	// Audit sub-commands
+	// TODO(katco): This was for a demo; it should never make it to production code
+	r.Register(audit.NewAuditCommand(&audit.FakeAuditAPIClient{}))
 
 	// Commands registered elsewhere.
 	for _, newCommand := range registeredCommands {
