@@ -30,7 +30,6 @@ import (
 	"github.com/juju/juju/container/lxc/mock"
 	lxctesting "github.com/juju/juju/container/lxc/testing"
 	containertesting "github.com/juju/juju/container/testing"
-	"github.com/juju/juju/feature"
 	"github.com/juju/juju/instance"
 	instancetest "github.com/juju/juju/instance/testing"
 	"github.com/juju/juju/network"
@@ -88,7 +87,6 @@ more bogus content`
 
 func (s *LxcSuite) SetUpTest(c *gc.C) {
 	s.TestSuite.SetUpTest(c)
-	s.SetFeatureFlags(feature.AddressAllocation)
 	s.logDir = c.MkDir()
 	loggo.GetLogger("juju.container.lxc").SetLogLevel(loggo.TRACE)
 	s.events = make(chan mock.Event, 25)

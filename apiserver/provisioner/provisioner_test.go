@@ -21,7 +21,6 @@ import (
 	apiservertesting "github.com/juju/juju/apiserver/testing"
 	"github.com/juju/juju/constraints"
 	"github.com/juju/juju/container"
-	"github.com/juju/juju/feature"
 	"github.com/juju/juju/instance"
 	"github.com/juju/juju/juju/testing"
 	"github.com/juju/juju/network"
@@ -58,10 +57,6 @@ func (s *provisionerSuite) setUpTest(c *gc.C, withController bool) {
 		"image-stream": "daily",
 	}
 	s.JujuConnSuite.SetUpTest(c)
-	// We're testing with address allocation on by default. There are
-	// separate tests to check the behavior when the flag is not
-	// enabled.
-	s.SetFeatureFlags(feature.AddressAllocation)
 
 	// Reset previous machines (if any) and create 3 machines
 	// for the tests, plus an optional controller machine.
@@ -1047,31 +1042,6 @@ func (s *withoutControllerSuite) TestContainerManagerConfig(c *gc.C) {
 	cfg := s.getManagerConfig(c, instance.KVM)
 	c.Assert(cfg, jc.DeepEquals, map[string]string{
 		container.ConfigModelUUID: coretesting.ModelTag.Id(),
-
-		// dummy provider supports both networking and address
-		// allocation by default, so IP forwarding should be enabled.
-		container.ConfigIPForwarding: "true",
-	})
-}
-
-func (s *withoutControllerSuite) TestContainerManagerConfigNoFeatureFlagNoIPForwarding(c *gc.C) {
-	s.SetFeatureFlags() // clear the flags.
-
-	cfg := s.getManagerConfig(c, instance.KVM)
-	c.Assert(cfg, jc.DeepEquals, map[string]string{
-		container.ConfigModelUUID: coretesting.ModelTag.Id(),
-		// ConfigIPForwarding should be missing.
-	})
-}
-
-func (s *withoutControllerSuite) TestContainerManagerConfigNoIPForwarding(c *gc.C) {
-	// Break dummy provider's SupportsAddressAllocation method to
-	// ensure ConfigIPForwarding is not set below.
-	s.AssertConfigParameterUpdated(c, "broken", "SupportsAddressAllocation")
-
-	cfg := s.getManagerConfig(c, instance.KVM)
-	c.Assert(cfg, jc.DeepEquals, map[string]string{
-		container.ConfigModelUUID: coretesting.ModelTag.Id(),
 	})
 }
 
@@ -1297,14 +1267,12 @@ func (s *lxcDefaultMTUSuite) TestContainerManagerConfigLXCDefaultMTU(c *gc.C) {
 		container.ConfigModelUUID:     coretesting.ModelTag.Id(),
 		container.ConfigLXCDefaultMTU: "9000",
 
-		"use-aufs":                   "false",
-		container.ConfigIPForwarding: "true",
+		"use-aufs": "false",
 	})
 
 	// KVM instances are not affected.
 	managerConfig = s.getManagerConfig(c, instance.KVM)
 	c.Assert(managerConfig, jc.DeepEquals, map[string]string{
-		container.ConfigModelUUID:    coretesting.ModelTag.Id(),
-		container.ConfigIPForwarding: "true",
+		container.ConfigModelUUID: coretesting.ModelTag.Id(),
 	})
 }

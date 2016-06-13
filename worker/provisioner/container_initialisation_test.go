@@ -8,14 +8,12 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"sync/atomic"
 
 	"github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/utils/arch"
-	"github.com/juju/utils/featureflag"
 	"github.com/juju/utils/fslock"
 	jujuos "github.com/juju/utils/os"
 	"github.com/juju/utils/packaging/manager"
@@ -29,9 +27,7 @@ import (
 	"github.com/juju/juju/container"
 	containertesting "github.com/juju/juju/container/testing"
 	"github.com/juju/juju/environs"
-	"github.com/juju/juju/feature"
 	"github.com/juju/juju/instance"
-	"github.com/juju/juju/juju/osenv"
 	"github.com/juju/juju/provider/dummy"
 	"github.com/juju/juju/state"
 	coretesting "github.com/juju/juju/testing"
@@ -50,7 +46,6 @@ type ContainerSetupSuite struct {
 	aptCmdChan  <-chan *exec.Cmd
 	initLockDir string
 	initLock    *fslock.Lock
-	fakeLXCNet  string
 }
 
 var _ = gc.Suite(&ContainerSetupSuite{})
@@ -91,10 +86,6 @@ func (s *ContainerSetupSuite) SetUpTest(c *gc.C) {
 	initLock, err := fslock.NewLock(s.initLockDir, "container-init", fslock.Defaults())
 	c.Assert(err, jc.ErrorIsNil)
 	s.initLock = initLock
-
-	// Patch to isolate the test from the host machine.
-	s.fakeLXCNet = filepath.Join(c.MkDir(), "lxc-net")
-	s.PatchValue(provisioner.EtcDefaultLXCNetPath, s.fakeLXCNet)
 }
 
 func (s *ContainerSetupSuite) TearDownTest(c *gc.C) {
@@ -282,7 +273,7 @@ func (s *ContainerSetupSuite) TestLxcContainerUsesImageURL(c *gc.C) {
 
 	brokerCalled := false
 	newlxcbroker := func(api provisioner.APICalls, agentConfig agent.Config, managerConfig container.ManagerConfig,
-		imageURLGetter container.ImageURLGetter, enableNAT bool, defaultMTU int) (environs.InstanceBroker, error) {
+		imageURLGetter container.ImageURLGetter, defaultMTU int) (environs.InstanceBroker, error) {
 		imageURL, err := imageURLGetter.ImageURL(instance.LXC, "trusty", "amd64")
 		c.Assert(err, jc.ErrorIsNil)
 		c.Assert(imageURL, gc.Equals, "imageURL")
@@ -351,23 +342,7 @@ func (s *ContainerSetupSuite) assertContainerInitialised(c *gc.C, cont Container
 	err = m.SetAgentVersion(current)
 	c.Assert(err, jc.ErrorIsNil)
 
-	// Before starting /etc/default/lxc-net should be missing.
-	c.Assert(s.fakeLXCNet, jc.DoesNotExist)
-
 	s.createContainer(c, m, cont.ctype)
-
-	// Only feature-flagged addressable containers modify lxc-net.
-	if addressable {
-		// After initialisation starts, but before running the
-		// initializer, lxc-net should be created if cont.ctype is LXC, as the
-		// dummy provider supports static address allocation by default.
-		if cont.ctype == instance.LXC {
-			AssertFileContains(c, s.fakeLXCNet, provisioner.EtcDefaultLXCNet)
-			defer os.Remove(s.fakeLXCNet)
-		} else {
-			c.Assert(s.fakeLXCNet, jc.DoesNotExist)
-		}
-	}
 
 	for _, pack := range cont.packages {
 		cmd := <-s.aptCmdChan
@@ -415,144 +390,10 @@ func (s *ContainerSetupSuite) TestContainerInitLockError(c *gc.C) {
 
 }
 
-func (s *ContainerSetupSuite) TestMaybeOverrideDefaultLXCNet(c *gc.C) {
-	for i, test := range []struct {
-		ctype          instance.ContainerType
-		addressable    bool
-		expectOverride bool
-	}{
-		{instance.KVM, false, false},
-		{instance.KVM, true, false},
-		{instance.LXC, false, false},
-		{instance.LXC, true, true}, // the only case when we override; also last
-	} {
-		c.Logf(
-			"test %d: ctype: %q, addressable: %v -> expectOverride: %v",
-			i, test.ctype, test.addressable, test.expectOverride,
-		)
-		err := provisioner.MaybeOverrideDefaultLXCNet(test.ctype, test.addressable)
-		if !c.Check(err, jc.ErrorIsNil) {
-			continue
-		}
-		if !test.expectOverride {
-			c.Check(s.fakeLXCNet, jc.DoesNotExist)
-		} else {
-			AssertFileContains(c, s.fakeLXCNet, provisioner.EtcDefaultLXCNet)
-		}
-	}
-}
-
-func AssertFileContains(c *gc.C, filename string, expectedContent ...string) {
-	// TODO(dimitern): We should put this in juju/testing repo and
-	// replace all similar checks with it.
-	data, err := ioutil.ReadFile(filename)
-	c.Assert(err, jc.ErrorIsNil)
-	for _, s := range expectedContent {
-		c.Assert(string(data), jc.Contains, s)
-	}
-}
-
-func AssertFileContents(c *gc.C, checker gc.Checker, filename string, expectedContent ...string) {
-	// TODO(dimitern): We should put this in juju/testing repo and
-	// replace all similar checks with it.
-	data, err := ioutil.ReadFile(filename)
-	c.Assert(err, jc.ErrorIsNil)
-	for _, s := range expectedContent {
-		c.Assert(string(data), checker, s)
-	}
-}
-
-type SetIPAndARPForwardingSuite struct {
-	coretesting.BaseSuite
-}
-
-func (s *SetIPAndARPForwardingSuite) SetUpSuite(c *gc.C) {
-	if runtime.GOOS == "windows" {
-		c.Skip("bug 1403084: Skipping for now")
-	}
-	s.BaseSuite.SetUpSuite(c)
-}
-
-var _ = gc.Suite(&SetIPAndARPForwardingSuite{})
-
-func (s *SetIPAndARPForwardingSuite) TestSuccess(c *gc.C) {
-	// NOTE: Because PatchExecutableAsEchoArgs does not allow us to
-	// assert on earlier invocations of the same binary (each run
-	// overwrites the last args used), we only check sysctl was called
-	// for the second key (arpProxySysctlKey). We do check the config
-	// contains both though.
-	fakeConfig := filepath.Join(c.MkDir(), "sysctl.conf")
-	testing.PatchExecutableAsEchoArgs(c, s, "sysctl")
-	s.PatchValue(provisioner.SysctlConfig, fakeConfig)
-
-	err := provisioner.SetIPAndARPForwarding(true)
-	c.Assert(err, jc.ErrorIsNil)
-	expectConf := fmt.Sprintf(
-		"%s=1\n%s=1",
-		provisioner.IPForwardSysctlKey,
-		provisioner.ARPProxySysctlKey,
-	)
-	AssertFileContains(c, fakeConfig, expectConf)
-	expectKeyVal := fmt.Sprintf("%s=1", provisioner.IPForwardSysctlKey)
-	testing.AssertEchoArgs(c, "sysctl", "-w", expectKeyVal)
-	expectKeyVal = fmt.Sprintf("%s=1", provisioner.ARPProxySysctlKey)
-	testing.AssertEchoArgs(c, "sysctl", "-w", expectKeyVal)
-
-	err = provisioner.SetIPAndARPForwarding(false)
-	c.Assert(err, jc.ErrorIsNil)
-	expectConf = fmt.Sprintf(
-		"%s=0\n%s=0",
-		provisioner.IPForwardSysctlKey,
-		provisioner.ARPProxySysctlKey,
-	)
-	AssertFileContains(c, fakeConfig, expectConf)
-	expectKeyVal = fmt.Sprintf("%s=0", provisioner.IPForwardSysctlKey)
-	testing.AssertEchoArgs(c, "sysctl", "-w", expectKeyVal)
-	expectKeyVal = fmt.Sprintf("%s=0", provisioner.ARPProxySysctlKey)
-	testing.AssertEchoArgs(c, "sysctl", "-w", expectKeyVal)
-}
-
-func (s *SetIPAndARPForwardingSuite) TestFailure(c *gc.C) {
-	fakeConfig := filepath.Join(c.MkDir(), "sysctl.conf")
-	testing.PatchExecutableThrowError(c, s, "sysctl", 123)
-	s.PatchValue(provisioner.SysctlConfig, fakeConfig)
-	expectKeyVal := fmt.Sprintf("%s=1", provisioner.IPForwardSysctlKey)
-
-	err := provisioner.SetIPAndARPForwarding(true)
-	c.Assert(err, gc.ErrorMatches, fmt.Sprintf(
-		`cannot set %s: unexpected exit code 123`, expectKeyVal),
-	)
-	_, err = os.Stat(fakeConfig)
-	c.Assert(err, jc.Satisfies, os.IsNotExist)
-}
-
 type toolsFinderFunc func(v version.Number, series string, arch string) (tools.List, error)
 
 func (t toolsFinderFunc) FindTools(v version.Number, series string, arch string) (tools.List, error) {
 	return t(v, series, arch)
-}
-
-// AddressableContainerSetupSuite only contains tests depending on the
-// address allocation feature flag being enabled.
-type AddressableContainerSetupSuite struct {
-	ContainerSetupSuite
-}
-
-var _ = gc.Suite(&AddressableContainerSetupSuite{})
-
-func (s *AddressableContainerSetupSuite) enableFeatureFlag() {
-	s.SetFeatureFlags(feature.AddressAllocation)
-	featureflag.SetFlagsFromEnvironment(osenv.JujuFeatureFlagEnvKey)
-}
-
-func (s *AddressableContainerSetupSuite) TestContainerInitialised(c *gc.C) {
-	cont, err := getContainerInstance()
-	c.Assert(err, jc.ErrorIsNil)
-
-	for _, test := range cont {
-		s.enableFeatureFlag()
-		s.assertContainerInitialised(c, test, true)
-	}
 }
 
 func getContainerInstance() (cont []ContainerInstance, err error) {
@@ -624,7 +465,7 @@ func (s *LXCDefaultMTUSuite) TestDefaultMTUPropagatedToNewLXCBroker(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 
 	brokerCalled := false
-	newlxcbroker := func(api provisioner.APICalls, agentConfig agent.Config, managerConfig container.ManagerConfig, imageURLGetter container.ImageURLGetter, enableNAT bool, defaultMTU int) (environs.InstanceBroker, error) {
+	newlxcbroker := func(api provisioner.APICalls, agentConfig agent.Config, managerConfig container.ManagerConfig, imageURLGetter container.ImageURLGetter, defaultMTU int) (environs.InstanceBroker, error) {
 		brokerCalled = true
 		c.Assert(defaultMTU, gc.Equals, 9000)
 		return nil, fmt.Errorf("lxc broker error")
@@ -632,4 +473,24 @@ func (s *LXCDefaultMTUSuite) TestDefaultMTUPropagatedToNewLXCBroker(c *gc.C) {
 	s.PatchValue(&provisioner.NewLxcBroker, newlxcbroker)
 	s.createContainer(c, m, instance.LXC)
 	c.Assert(brokerCalled, jc.IsTrue)
+}
+
+func AssertFileContains(c *gc.C, filename string, expectedContent ...string) {
+	// TODO(dimitern): We should put this in juju/testing repo and
+	// replace all similar checks with it.
+	data, err := ioutil.ReadFile(filename)
+	c.Assert(err, jc.ErrorIsNil)
+	for _, s := range expectedContent {
+		c.Assert(string(data), jc.Contains, s)
+	}
+}
+
+func AssertFileContents(c *gc.C, checker gc.Checker, filename string, expectedContent ...string) {
+	// TODO(dimitern): We should put this in juju/testing repo and
+	// replace all similar checks with it.
+	data, err := ioutil.ReadFile(filename)
+	c.Assert(err, jc.ErrorIsNil)
+	for _, s := range expectedContent {
+		c.Assert(string(data), checker, s)
+	}
 }

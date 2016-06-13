@@ -14,17 +14,6 @@ const (
 	ConfigModelUUID = "model-uuid"
 	ConfigLogDir    = "log-dir"
 
-	// ConfigIPForwarding, if set to a non-empty value, instructs the
-	// container manager to enable IP forwarding as part of the
-	// container initialization. Will be enabled if the enviroment
-	// supports networking.
-	ConfigIPForwarding = "ip-forwarding"
-
-	// ConfigEnableNAT, if set to a non-empty value, instructs the
-	// container manager to enable NAT for hosted containers. NAT is
-	// required for AWS, but should be disabled for MAAS.
-	ConfigEnableNAT = "enable-nat"
-
 	// ConfigLXCDefaultMTU, if set to a positive integer (serialized
 	// as a string), will cause all network interfaces on all created
 	// LXC containers (not KVM instances) to use the given MTU
