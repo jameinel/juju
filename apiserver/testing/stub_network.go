@@ -2,7 +2,6 @@ package testing
 
 import (
 	"fmt"
-	"net"
 	"strconv"
 	"strings"
 
@@ -63,8 +62,6 @@ func (s StubNetwork) SetUpSuite(c *gc.C) {
 		CIDR:              "10.10.0.0/24",
 		ProviderId:        "sn-zadf00d",
 		AvailabilityZones: []string{"zone1"},
-		AllocatableIPLow:  net.ParseIP("10.10.0.10"),
-		AllocatableIPHigh: net.ParseIP("10.10.0.100"),
 	}, {
 		CIDR:              "2001:db8::/32",
 		ProviderId:        "sn-ipv6",
@@ -402,8 +399,6 @@ func (sb *StubBacking) SetUp(c *gc.C, envName string, withZones, withSpaces, wit
 		info0 := networkingcommon.BackingSubnetInfo{
 			CIDR:              ProviderInstance.Subnets[0].CIDR,
 			ProviderId:        ProviderInstance.Subnets[0].ProviderId,
-			AllocatableIPLow:  ProviderInstance.Subnets[0].AllocatableIPLow.String(),
-			AllocatableIPHigh: ProviderInstance.Subnets[0].AllocatableIPHigh.String(),
 			AvailabilityZones: ProviderInstance.Subnets[0].AvailabilityZones,
 			SpaceName:         "private",
 		}
