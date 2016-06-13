@@ -298,7 +298,7 @@ type ContainerInstance struct {
 	packages [][]string
 }
 
-func (s *ContainerSetupSuite) assertContainerInitialised(c *gc.C, cont ContainerInstance, addressable bool) {
+func (s *ContainerSetupSuite) assertContainerInitialised(c *gc.C, cont ContainerInstance) {
 	// A noop worker callback.
 	startProvisionerWorker := func(runner worker.Runner, containerType instance.ContainerType,
 		pr *apiprovisioner.State, cfg agent.Config, broker environs.InstanceBroker,
@@ -357,7 +357,7 @@ func (s *ContainerSetupSuite) TestContainerInitialised(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 
 	for _, test := range cont {
-		s.assertContainerInitialised(c, test, false)
+		s.assertContainerInitialised(c, test)
 	}
 }
 
