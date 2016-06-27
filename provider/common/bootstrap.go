@@ -68,6 +68,11 @@ func BootstrapInstance(ctx environs.BootstrapContext, env environs.Environ, args
 	// If two Bootstraps are called concurrently, there's
 	// no way to make sure that only one succeeds.
 
+	if args.ContainerBridgeName == "" {
+		logger.Debugf("no ContainerBridgeName set - using fan-250")
+		args.ContainerBridgeName = "fan-250"
+	}
+
 	// First thing, ensure we have tools otherwise there's no point.
 	if args.BootstrapSeries != "" {
 		selectedSeries = args.BootstrapSeries
@@ -121,13 +126,14 @@ func BootstrapInstance(ctx environs.BootstrapContext, env environs.Environ, args
 	maybeSetBridge := func(icfg *instancecfg.InstanceConfig) {
 		// If we need to override the default bridge name, do it now. When
 		// args.ContainerBridgeName is empty, the default names for LXC
-		// (lxcbr0) and KVM (virbr0) will be used.
+		// (lxcbr0), and KVM (virbr0) will be used.
 		if args.ContainerBridgeName != "" {
 			logger.Debugf("using %q as network bridge for all container types", args.ContainerBridgeName)
 			if icfg.AgentEnvironment == nil {
 				icfg.AgentEnvironment = make(map[string]string)
 			}
 			icfg.AgentEnvironment[agent.LxcBridge] = args.ContainerBridgeName
+			icfg.AgentEnvironment[agent.LxdBridge] = args.ContainerBridgeName
 		}
 	}
 	maybeSetBridge(instanceConfig)

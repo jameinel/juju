@@ -41,6 +41,7 @@ func (broker *lxdBroker) StartInstance(args environs.StartInstanceParams) (*envi
 	if bridgeDevice == "" {
 		bridgeDevice = network.DefaultLXDBridge
 	}
+	lxdLogger.Debugf("using bridge device %q", bridgeDevice)
 
 	config, err := broker.api.ContainerConfig()
 	if err != nil {
