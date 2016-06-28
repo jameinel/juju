@@ -106,19 +106,18 @@ func (w *unixConfigure) ConfigureBasic() error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			// underlayRange := "172.31.0.0/16" // AWS Default VPC
-			underlayRange := "10.0.0.0/16" // Azure juju-created default VNet + subnet
-			fanConfig := struct {
-				Config     string `yaml:"config"`
-				ConfigPath string `yaml:"config_path"`
-			}{
-				Config:     fmt.Sprintf("%s\t250.0.0.0/8\t--dhcp --enable\n", underlayRange),
-				ConfigPath: "/etc/network/fan",
+
+			if fanConf := w.icfg.FanConfig; fanConf != nil {
+				w.conf.SetAttr("fan", fanConf)
+				w.conf.AddBootCmd(
+					cloudinit.LogProgressCmd(
+						"Using fan config %q in %q",
+						fanConf.Config,
+						fanConf.ConfigPath,
+					),
+				)
+				w.conf.AddRunCmd("fanctl up -a")
 			}
-			_ = fanConfig
-			w.conf.SetAttr("fan", fanConfig)
-			w.conf.AddBootCmd(cloudinit.LogProgressCmd("Using fan config %q in %q", fanConfig.Config, fanConfig.ConfigPath))
-			w.conf.AddRunCmd("fanctl up -a")
 
 			w.addCleanShutdownJob(initSystem)
 		}

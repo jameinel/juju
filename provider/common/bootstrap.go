@@ -68,11 +68,6 @@ func BootstrapInstance(ctx environs.BootstrapContext, env environs.Environ, args
 	// If two Bootstraps are called concurrently, there's
 	// no way to make sure that only one succeeds.
 
-	if args.ContainerBridgeName == "" {
-		logger.Debugf("no ContainerBridgeName set - using fan-250")
-		args.ContainerBridgeName = "fan-250"
-	}
-
 	// First thing, ensure we have tools otherwise there's no point.
 	if args.BootstrapSeries != "" {
 		selectedSeries = args.BootstrapSeries

@@ -41,6 +41,27 @@ import (
 
 var logger = loggo.GetLogger("juju.cloudconfig.instancecfg")
 
+// FanConfig defines a cloud-init "fan" section config.
+type FanConfig struct {
+	Config     string `yaml:"config"`
+	ConfigPath string `yaml:"config_path"`
+}
+
+// FanConfigPath is the default location for storing ubuntu-fan persistent
+// configuration.
+const FanConfigPath = "/etc/network/fan"
+
+// NewFanConfig returns an intialized FanConfig, ready for rendering as part of
+// cloud-init userdata.
+func NewFanConfig(underlayRange, overlayRange string) *FanConfig {
+	const configLine = "%s\t%s\t--dhcp --enable\n"
+
+	return &FanConfig{
+		Config:     fmt.Sprintf(configLine, underlayRange, overlayRange),
+		ConfigPath: FanConfigPath,
+	}
+}
+
 // InstanceConfig represents initialization information for a new juju instance.
 type InstanceConfig struct {
 	// Tags is a set of tags to set on the instance, if supported. This
@@ -144,6 +165,15 @@ type InstanceConfig struct {
 	// instances. If enabled, the OS will perform any upgrades
 	// available as part of its provisioning.
 	EnableOSUpgrade bool
+
+	// FanConfig, if specified will enable configuring ubuntu-fan as part of the
+	// generated cloud-init userdata. Not to be used inside containers, only
+	// top-level machines.
+	FanConfig *FanConfig
+
+	// FanUnderlayRange is the provider-specific underlay range /16 range to use
+	// for the ubuntu-fan config.
+	FanUnderlayRange string
 }
 
 // ControllerConfig represents controller-specific initialization information
@@ -650,6 +680,7 @@ func NewInstanceConfig(
 	if err != nil {
 		return nil, err
 	}
+
 	cloudInitOutputLog := path.Join(logDir, "cloud-init-output.log")
 	icfg := &InstanceConfig{
 		// Fixed entries.
@@ -729,6 +760,19 @@ func PopulateInstanceConfig(icfg *InstanceConfig,
 	if icfg.AgentEnvironment == nil {
 		icfg.AgentEnvironment = make(map[string]string)
 	}
+
+	if icfg.MachineContainerType == "" {
+		if icfg.FanUnderlayRange == "" {
+			logger.Warningf("%q provider does not set icfg.FanUnderlayRange!", providerType)
+		} else {
+			icfg.FanConfig = NewFanConfig(icfg.FanUnderlayRange, "250.0.0.0/8")
+			icfg.AgentEnvironment[agent.LxdBridge] = "fan-250"
+			logger.Debugf("MACHINE %q: using fan-250 as default LXD bridge", icfg.MachineId)
+		}
+	} else {
+		logger.Debugf("CONTAINER %q: skipping fan-250 set up", icfg.MachineId)
+	}
+
 	icfg.AgentEnvironment[agent.ProviderType] = providerType
 	icfg.AgentEnvironment[agent.ContainerType] = string(icfg.MachineContainerType)
 	icfg.DisableSSLHostnameVerification = !sslHostnameVerification
