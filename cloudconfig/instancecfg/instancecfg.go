@@ -11,9 +11,6 @@ import (
 	"path"
 	"reflect"
 	"strconv"
-	"strings"
-
-	"code.google.com/p/rog-go/exp/runtime/debug"
 
 	"github.com/juju/errors"
 	"github.com/juju/loggo"
@@ -766,9 +763,7 @@ func PopulateInstanceConfig(icfg *InstanceConfig,
 
 	if icfg.MachineContainerType == "" {
 		if icfg.FanUnderlayRange == "" {
-			logger.Warningf("%q provider does not set icfg.FanUnderlayRange!", providerType)
-			stack := string(debug.Callers(0, 20))
-			logger.Warningf(strings.Replace(stack, " ", "\n", -1))
+			logger.Debugf("%q provider does not set icfg.FanUnderlayRange!", providerType)
 		} else {
 			icfg.FanConfig = NewFanConfig(icfg.FanUnderlayRange, "250.0.0.0/8")
 			icfg.AgentEnvironment[agent.LxdBridge] = "fan-250"
