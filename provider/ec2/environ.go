@@ -439,6 +439,31 @@ func (e *environ) StartInstance(args environs.StartInstanceParams) (_ *environs.
 	if err := args.InstanceConfig.SetTools(tools); err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	haveVPCID := isVPCIDSet(e.ecfg().vpcID())
+	var usedVPCID string
+	if !haveVPCID {
+		defaultVPCID, err := findDefaultVPCID(e.ec2())
+		if err != nil {
+			logger.Warningf("cannot find default VPC ID: %v", err)
+		} else {
+			logger.Infof("using default VPC %q", defaultVPCID)
+			usedVPCID = defaultVPCID
+		}
+	} else {
+		usedVPCID = e.ecfg().vpcID()
+	}
+
+	if usedVPCID != "" {
+		vpc, err := getVPCByID(e.ec2(), usedVPCID)
+		if err != nil {
+			logger.Warningf("cannot find VPC by ID %q: %v", usedVPCID, err)
+		} else {
+			args.InstanceConfig.FanUnderlayRange = vpc.CIDRBlock
+			logger.Infof("using VPC %q as FanUnderlayRange", vpc.CIDRBlock)
+		}
+	}
+
 	if err := instancecfg.FinishInstanceConfig(args.InstanceConfig, e.Config()); err != nil {
 		return nil, err
 	}
@@ -483,8 +508,6 @@ func (e *environ) StartInstance(args environs.StartInstanceParams) (_ *environs.
 		BlockDeviceMappings: blockDeviceMappings,
 		ImageId:             spec.Image.Id,
 	}
-
-	haveVPCID := isVPCIDSet(e.ecfg().vpcID())
 
 	for _, zone := range availabilityZones {
 		runArgs := commonRunArgs
