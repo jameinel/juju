@@ -763,7 +763,7 @@ func PopulateInstanceConfig(icfg *InstanceConfig,
 
 	if icfg.MachineContainerType == "" {
 		if icfg.FanUnderlayRange == "" {
-			logger.Debugf("%q provider does not set icfg.FanUnderlayRange!", providerType)
+			logger.Warningf("%q provider does not set icfg.FanUnderlayRange!", providerType)
 		} else {
 			icfg.FanConfig = NewFanConfig(icfg.FanUnderlayRange, "250.0.0.0/8")
 			icfg.AgentEnvironment[agent.LxdBridge] = "fan-250"

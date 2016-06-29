@@ -153,6 +153,7 @@ func BootstrapInstance(ctx environs.BootstrapContext, env environs.Environ, args
 	fmt.Fprintf(ctx.GetStderr(), " - %s\n", result.Instance.Id())
 
 	finalize := func(ctx environs.BootstrapContext, icfg *instancecfg.InstanceConfig) error {
+		icfg.FanUnderlayRange = instanceConfig.FanUnderlayRange
 		icfg.Bootstrap.BootstrapMachineInstanceId = result.Instance.Id()
 		icfg.Bootstrap.BootstrapMachineHardwareCharacteristics = result.Hardware
 		envConfig := env.Config()
