@@ -459,6 +459,16 @@ func (env *azureEnviron) StartInstance(args environs.StartInstanceParams) (*envi
 	if err := args.InstanceConfig.SetTools(selectedTools); err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	if internalNetworkSubnet.Properties == nil {
+		logger.Warningf("not setting FanUnderlayRange - internalNetworkSubnet(%#v).Properties == nil!", internalNetworkSubnet)
+	} else if internalNetworkSubnet.Properties.AddressPrefix == nil {
+		logger.Warningf("not setting FanUnderlayRange - internalNetworkSubnet(%#v).Properties.AddressPrefix == nil!", internalNetworkSubnet)
+	} else {
+		args.InstanceConfig.FanUnderlayRange = *internalNetworkSubnet.Properties.AddressPrefix
+		logger.Debugf("setting FanUnderlayRange %q", args.InstanceConfig.FanUnderlayRange)
+	}
+
 	if err := instancecfg.FinishInstanceConfig(
 		args.InstanceConfig, env.Config(),
 	); err != nil {
