@@ -1936,6 +1936,14 @@ func (st *State) PutAuditEntryFn() func(audit.AuditEntry) error {
 	return stateaudit.PutAuditEntryFn(auditingC, insert)
 }
 
+func (st *State) BlockingAuditEntryReaderFn(after time.Time) <-chan audit.AuditEntry {
+	auditColl := st.MongoSession().DB(jujuDB).C(auditingC)
+	auditCollPipe := auditColl.Pipe(stateaudit.AggregateAuditRecordsAfter(after))
+	auditCollIter := auditCollPipe.Iter()
+
+	return stateaudit.NewAuditTailer(logger, auditCollIter, 10*time.Second).AuditEntryPipe
+}
+
 var tagPrefix = map[byte]string{
 	'm': names.MachineTagKind + "-",
 	'a': names.ApplicationTagKind + "-",

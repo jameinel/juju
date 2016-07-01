@@ -17,13 +17,6 @@ import (
 
 var logger = loggo.GetLogger("juju.worker.logforwarder")
 
-// LogStream streams log entries from a log source (e.g. the Juju
-// controller).
-type LogStream interface {
-	// Next returns the next log record from the stream.
-	Next() (logfwd.Record, error)
-}
-
 // LogStreamFn is a function that opens a log stream.
 type LogStreamFn func(_ base.APICaller, _ params.LogStreamConfig, controllerUUID string) (LogStream, error)
 

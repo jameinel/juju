@@ -407,6 +407,10 @@ func Manifolds(config ManifoldsConfig) dependency.Manifolds {
 			SinkOpeners: []logforwarder.LogSinkFn{
 				sinks.OpenSyslog,
 			},
+			OpenLogStream: logforwarder.NewLogStreamMultiplexer(
+			//logforwarder.OpenAuditStream,
+			// logforwarder.OpenLogForwarder,
+			),
 		})),
 	}
 }
