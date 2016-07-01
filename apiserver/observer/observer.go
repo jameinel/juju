@@ -102,6 +102,9 @@ func (m *Multiplexer) Login(entityName string) {
 // mapConcurrent calls fn on all observers concurrently and then waits
 // for all calls to exit before returning.
 func mapConcurrent(fn func(Observer), observers []Observer) {
+
+	panic("look! i never get called!")
+
 	var wg sync.WaitGroup
 	wg.Add(len(observers))
 	defer wg.Wait()

@@ -1112,24 +1112,14 @@ func newObserverFn(
 	auditErrorHandler observer.ErrorHandler,
 ) observer.ObserverFactory {
 	var connectionID int64
-	return observer.ObserverFactoryMultiplexer(
-		func() observer.Observer {
-			logger := loggo.GetLogger("juju.apiserver")
-			ctx := observer.RequestNotifierContext{
-				Clock:  clock,
-				Logger: logger,
-			}
-			return observer.NewRequestNotifier(ctx, atomic.AddInt64(&connectionID, 1))
-		},
-		func() observer.Observer {
-			ctx := &observer.AuditContext{
-				JujuServerVersion: jujuServerVersion,
-				ModelUUID:         modelUUID,
-			}
-			// TODO(katco): Pass in an error channel
-			return observer.NewAudit(ctx, persistAuditEntry, auditErrorHandler)
-		},
-	)
+	return func() observer.Observer {
+		logger := loggo.GetLogger("juju.apiserver")
+		ctx := observer.RequestNotifierContext{
+			Clock:  clock,
+			Logger: logger,
+		}
+		return observer.NewRequestNotifier(ctx, atomic.AddInt64(&connectionID, 1))
+	}
 }
 
 // limitLogins is called by the API server for each login attempt.
