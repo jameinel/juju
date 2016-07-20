@@ -17,6 +17,9 @@ Every controller has its own UUID, and every model within that controller also
 has a UUID. To make a request to a particular model, you connect to the URL:
 ```wss://<ip-address>:17007/model-uuid/<UUID>/api```
 
+The first request that any client should make is to the `Login` API. It takes
+the username and password that you are connecting as, and returns the list of
+API Facades and their associated versions.
 
 ### Macaroon based Auth
 
