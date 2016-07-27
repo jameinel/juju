@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/juju/errors"
+	"github.com/juju/gojsonschema"
 	"github.com/juju/loggo"
 
 	"github.com/juju/juju/rpc"
@@ -73,6 +74,45 @@ type inMsgV1 struct {
 	ErrorCode string          `json:"error-code"`
 	Response  json.RawMessage `json:"response"`
 }
+
+const inMsgv1Schema = `
+{
+	"$schema": "http://json-schema.org/draft-04/schema#",
+	"title": "Message Schema v1",
+	"type": "object",
+	"description": "Format of valid Request and Response messages",
+	"properties": {
+		"request-id": {
+			"type": "integer"
+		},
+		"type": {
+			"type": "string"
+		},
+		"version": {
+			"type": "integer"
+		},
+		"id": {
+			"type": "string"
+		},
+		"request": {
+			"type": "string"
+		},
+		"params": {
+			"type": "object"
+		},
+		"error": {
+			"type": "string"
+		},
+		"error-code": {
+			"type": "string"
+		},
+		"response": {
+			"type": "object"
+		}
+	},
+	"required": ["request-id", "type", "version", "id", "error", "error-code"]
+}
+`
 
 // outMsg holds an outgoing message.
 type outMsgV0 struct {
@@ -145,6 +185,11 @@ func (c *Codec) ReadHeader(hdr *rpc.Header) error {
 
 func (c *Codec) readMessage(m json.RawMessage) (inMsgV1, int, error) {
 	var msg inMsgV1
+	schemaLoader := gojsonschema.NewStringLoader(inMsgv1Schema)
+	valueLoader := gojsonschema.NewStringLoader(string(m))
+	if _, err := gojsonschema.Validate(schemaLoader, valueLoader); err != nil {
+		return msg, -1, errors.Trace(err)
+	}
 	if err := json.Unmarshal(m, &msg); err != nil {
 		return msg, -1, errors.Trace(err)
 	}
