@@ -139,23 +139,43 @@ func (*suite) TestRead(c *gc.C) {
 
 func (*suite) TestInvalidRequest(c *gc.C) {
 	for i, test := range []struct {
-		msg        string
-		err	   string
+		msg string
+		err string
 	}{{
 		msg: `{"request-id": 1, "extra": "foo"}`,
 		err: `error receiving message: message had schema errors:
-additional property "extra" is not allowed
+(root) : additional property "extra" is not allowed, given {"extra":"foo","request-id":1}
 `,
 	}, {
 		msg: `{"type": "value"}`,
 		err: `error receiving message: message had schema errors:
-"request-id" property is missing and required
+(root) : "request-id" property is missing and required, given {"type":"value"}
 `,
 	}, {
 		msg: `{"invalid": "value"}`,
 		err: `error receiving message: message had schema errors:
-"request-id" property is missing and required
-additional property "invalid" is not allowed
+(root) : "request-id" property is missing and required, given {"invalid":"value"}
+(root) : additional property "invalid" is not allowed, given {"invalid":"value"}
+`,
+	}, {
+		msg: `{"request-id": 0}`,
+		err: `error receiving message: message had schema errors:
+(root).request-id : must be greater than 1, given "0"
+`,
+	}, {
+		msg: `{"request-id": "a"}`,
+		err: `error receiving message: message had schema errors:
+(root).request-id : must be of type integer, given "a"
+`,
+	}, {
+		msg: `{"request-id": 1.2}`,
+		err: `error receiving message: message had schema errors:
+(root).request-id : must be of type integer, given 1.2
+`,
+	}, {
+		msg: `{"request-id": 1, "version": -1}`,
+		err: `error receiving message: message had schema errors:
+(root).version : must be greater than 0, given "-1"
 `,
 	}} {
 		c.Logf("test %d", i)
@@ -164,7 +184,8 @@ additional property "invalid" is not allowed
 		})
 		var hdr rpc.Header
 		err := codec.ReadHeader(&hdr)
-		c.Assert(err.Error(), gc.Equals, test.err)
+		c.Assert(err, gc.NotNil)
+		c.Check(err.Error(), gc.Equals, test.err)
 	}
 }
 

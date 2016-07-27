@@ -125,26 +125,26 @@ description: |
     This is the format that was used for Juju 1.X, but for valid Juju 2.x communication
     the Juju RPC Message Schema v1 should be used. 
 type: object
-properties: 
-  RequestId: 
+properties:
+  RequestId:
     type: integer
-  Type: 
+  Type:
     type: string
-  Version: 
+  Version:
     type: integer
-  Id: 
+  Id:
     type: string
-  Request: 
+  Request:
     type: string
-  Params: 
+  Params:
     type: object
-  Error: 
+  Error:
     type: string
-  ErrorCode: 
+  ErrorCode:
     type: string
-  Response: 
+  Response:
     type: object
-required: 
+required:
   - RequestId
 `
 
@@ -156,26 +156,64 @@ title: "Juju Message Schema v1"
 description: |
     Format of valid Request and Response messages
 type: object
-properties: 
-  error: 
-    type: string
-  error-code: 
-    type: string
-  id: 
-    type: string
-  params: 
-    type: object
-  request: 
-    type: string
-  request-id: 
+properties:
+  request-id:
     type: integer
-  response: 
-    type: object
-  type: 
+    description: |
+      Unique identifier for this request. The response will be tagged with the
+      same value as the request id. Request identifiers should not be reused
+      within the lifetime of a connection.
+      Request-id is mandatory and must be a valid positive integer.
+    minimum: 1
+  type:
     type: string
-  version: 
+    description: |
+      Type gives the name of the Facade that we will be interacting with. A
+      Facade collects a set of methods, grouped together for a focused purpose.
+  version:
     type: integer
-required: 
+    description: |
+      The Version of the Facade that we are interacting with. Clients should
+      know what versions of Facades they support. Servers can expose multiple
+      versions of a Facade to allow compatibility with older clients.
+    minimum: 0
+  request:
+    type: string
+    description: |
+      The method on Facade that is being called. Request is only relevant for
+      the side initiating the request. Responses will not have a request field.
+  params:
+    type: object
+    description: |
+      Arguments can be seen as being passed to the Facade.Request(params). See
+      individual Methods for descriptions of what parameters need to be supplied.
+  error:
+    type: string
+    description: |
+      If there is something invalid about the request (malformed request, etc),
+      or if a client is accessing a facade that it does not have access to, an
+      error will be generated and returned. Error is inteded to be a human
+      readable string. Note that if you are making a bulk api call (that takes
+      a list of objects), errors are likely to be part of the Response. Since
+      if it is valid for you to make the request, but you ask about an object
+      you do not have access rights.
+  error-code:
+    type: string
+    description: |
+      Short, machine-readable string indicating there was a problem in the
+      request.
+  id:
+    type: string
+    description: |
+      Some Facades use an id as a distinguisher for what object you are
+      operating on (eg Watcher/NotifyWatcher). Most Facades do not use this
+      value.
+  response:
+    type: object
+    description: |
+      The result of making a request. Response should be omitted for requests.
+      See individual methods to determine what the response layout is.
+required:
   - request-id
 additionalProperties: false
 `
@@ -186,6 +224,9 @@ func MustParseYAMLSchema(schema string) *gojsonschema.Schema {
 	if err := yaml.Unmarshal([]byte(schema), &yamlDoc); err != nil {
 		panic(err)
 	} else {
+		// Convert the map[interface{}]interface{} back into
+		// map[string]interface{} which is what we need for JSON like
+		// things.
 		if asInterface, err := utils.ConformYAML(yamlDoc); err != nil {
 			panic(err)
 		} else {
@@ -287,7 +328,7 @@ func (c *Codec) readMessage(m json.RawMessage) (inMsgV1, int, error) {
 		}
 		// Not valid as V0 request either, so reject it.
 		for _, errDescr := range result.Errors() {
-			allErrors = append(allErrors, errDescr.Description)
+			allErrors = append(allErrors, errDescr.String())
 		}
 		return msg, -1, errors.Errorf("message had schema errors:\n%s\n", strings.Join(allErrors, "\n"))
 	}
