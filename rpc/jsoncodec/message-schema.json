@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "Juju Message Schema v1",
+  "description": "Format of valid Request and Response messages\n",
+  "type": "object",
+  "properties": {
+    "request-id": {
+      "type": "integer",
+      "description": "Unique identifier for this request. The response will be tagged with the\nsame value as the request id. Request identifiers should not be reused\nwithin the lifetime of a connection.\nRequest-id is mandatory and must be a valid positive integer.\n",
+      "minimum": 1
+    },
+    "type": {
+      "type": "string",
+      "description": "Type gives the name of the Facade that we will be interacting with. A\nFacade collects a set of methods, grouped together for a focused purpose.\n"
+    },
+    "version": {
+      "type": "integer",
+      "description": "The Version of the Facade that we are interacting with. Clients should\nknow what versions of Facades they support. Servers can expose multiple\nversions of a Facade to allow compatibility with older clients.\n",
+      "minimum": 0
+    },
+    "request": {
+      "type": "string",
+      "description": "The method on Facade that is being called. Request is only relevant for\nthe side initiating the request. Responses will not have a request field.\n"
+    },
+    "params": {
+      "type": "object",
+      "description": "Arguments can be seen as being passed to the Facade.Request(params). See\nindividual Methods for descriptions of what parameters need to be supplied.\n"
+    },
+    "error": {
+      "type": "string",
+      "description": "If there is something invalid about the request (malformed request, etc),\nor if a client is accessing a facade that it does not have access to, an\nerror will be generated and returned. Error is inteded to be a human\nreadable string. Note that if you are making a bulk api call (that takes\na list of objects), errors are likely to be part of the Response. Since\nif it is valid for you to make the request, but you ask about an object\nyou do not have access rights.\n"
+    },
+    "error-code": {
+      "type": "string",
+      "description": "Short, machine-readable string indicating there was a problem in the\nrequest.\n"
+    },
+    "id": {
+      "type": "string",
+      "description": "Some Facades use an id as a distinguisher for what object you are\noperating on (eg Watcher/NotifyWatcher). Most Facades do not use this\nvalue.\n"
+    },
+    "response": {
+      "type": "object",
+      "description": "The result of making a request. Response should be omitted for requests.\nSee individual methods to determine what the response layout is.\n"
+    }
+  },
+  "required": [
+    "request-id"
+  ],
+  "additionalProperties": false
+}
