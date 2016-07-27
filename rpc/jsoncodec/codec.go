@@ -77,7 +77,7 @@ type inMsgV1 struct {
 	Response  json.RawMessage `json:"response"`
 }
 
-const inMsgv1Schema = `
+const inMsgV1JSONSchema = `
 {
 	"$schema": "http://json-schema.org/draft-04/schema#",
 	"title": "Message Schema v1",
@@ -115,7 +115,7 @@ const inMsgv1Schema = `
 	"required": ["request-id", "type", "version", "id", "error", "error-code"]
 }
 `
-const inMsgv1YamlSchema = `
+const inMsgV1YAMLSchema = `
 $schema: "http://json-schema.org/draft-04/schema#"
 title: "Message Schema v1"
 description: |
@@ -149,6 +149,26 @@ required:
   - error-code
 `
 
+func MustParseYAMLSchema(schema string) *gojsonschema.Schema {
+	var yamlDoc map[interface{}]interface{}
+	var schemaDoc map[string]interface{}
+	if err := yaml.Unmarshal([]byte(schema), &yamlDoc); err != nil {
+		panic(err)
+	} else {
+		if asInterface, err := utils.ConformYAML(yamlDoc); err != nil {
+			panic(err)
+		} else {
+			schemaDoc = asInterface.(map[string]interface{})
+		}
+	}
+	schemaObj, err := gojsonschema.NewSchema(gojsonschema.NewGoLoader(schemaDoc))
+	if err != nil {
+		panic(err)
+	}
+	return schemaObj
+}
+
+var inMsgV1Schema = MustParseYAMLSchema(inMsgV1YAMLSchema)
 
 // outMsg holds an outgoing message.
 type outMsgV0 struct {
@@ -221,20 +241,8 @@ func (c *Codec) ReadHeader(hdr *rpc.Header) error {
 
 func (c *Codec) readMessage(m json.RawMessage) (inMsgV1, int, error) {
 	var msg inMsgV1
-	var yamlDoc map[interface{}]interface{}
-	var schemaDoc map[string]interface{}
-	if err := yaml.Unmarshal([]byte(inMsgv1Schema), &yamlDoc); err != nil {
-		return msg, -1, errors.Trace(err)
-	} else {
-		if asInterface, err := utils.ConformYAML(yamlDoc); err != nil {
-			return msg, -1, errors.Trace(err)
-		} else {
-			schemaDoc = asInterface.(map[string]interface{})
-		}
-	}
-	schemaLoader := gojsonschema.NewGoLoader(schemaDoc)
 	valueLoader := gojsonschema.NewStringLoader(string(m))
-	if _, err := gojsonschema.Validate(schemaLoader, valueLoader); err != nil {
+	if _, err := inMsgV1Schema.Validate(valueLoader); err != nil {
 		return msg, -1, errors.Trace(err)
 	}
 	if err := json.Unmarshal(m, &msg); err != nil {
