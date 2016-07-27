@@ -13,6 +13,8 @@ import (
 	"github.com/juju/errors"
 	"github.com/juju/gojsonschema"
 	"github.com/juju/loggo"
+	"github.com/juju/utils"
+	"gopkg.in/yaml.v2"
 
 	"github.com/juju/juju/rpc"
 )
@@ -113,6 +115,40 @@ const inMsgv1Schema = `
 	"required": ["request-id", "type", "version", "id", "error", "error-code"]
 }
 `
+const inMsgv1YamlSchema = `
+$schema: "http://json-schema.org/draft-04/schema#"
+title: "Message Schema v1"
+description: |
+    Format of valid Request and Response messages
+type: object
+properties: 
+  error: 
+    type: string
+  error-code: 
+    type: string
+  id: 
+    type: string
+  params: 
+    type: object
+  request: 
+    type: string
+  request-id: 
+    type: integer
+  response: 
+    type: object
+  type: 
+    type: string
+  version: 
+    type: integer
+required: 
+  - request-id
+  - type
+  - version
+  - id
+  - error
+  - error-code
+`
+
 
 // outMsg holds an outgoing message.
 type outMsgV0 struct {
@@ -185,7 +221,18 @@ func (c *Codec) ReadHeader(hdr *rpc.Header) error {
 
 func (c *Codec) readMessage(m json.RawMessage) (inMsgV1, int, error) {
 	var msg inMsgV1
-	schemaLoader := gojsonschema.NewStringLoader(inMsgv1Schema)
+	var yamlDoc map[interface{}]interface{}
+	var schemaDoc map[string]interface{}
+	if err := yaml.Unmarshal([]byte(inMsgv1Schema), &yamlDoc); err != nil {
+		return msg, -1, errors.Trace(err)
+	} else {
+		if asInterface, err := utils.ConformYAML(yamlDoc); err != nil {
+			return msg, -1, errors.Trace(err)
+		} else {
+			schemaDoc = asInterface.(map[string]interface{})
+		}
+	}
+	schemaLoader := gojsonschema.NewGoLoader(schemaDoc)
 	valueLoader := gojsonschema.NewStringLoader(string(m))
 	if _, err := gojsonschema.Validate(schemaLoader, valueLoader); err != nil {
 		return msg, -1, errors.Trace(err)
