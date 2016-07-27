@@ -137,6 +137,37 @@ func (*suite) TestRead(c *gc.C) {
 	}
 }
 
+func (*suite) TestInvalidRequest(c *gc.C) {
+	for i, test := range []struct {
+		msg        string
+		err	   string
+	}{{
+		msg: `{"request-id": 1, "extra": "foo"}`,
+		err: `error receiving message: message had schema errors:
+additional property "extra" is not allowed
+`,
+	}, {
+		msg: `{"type": "value"}`,
+		err: `error receiving message: message had schema errors:
+"request-id" property is missing and required
+`,
+	}, {
+		msg: `{"invalid": "value"}`,
+		err: `error receiving message: message had schema errors:
+"request-id" property is missing and required
+additional property "invalid" is not allowed
+`,
+	}} {
+		c.Logf("test %d", i)
+		codec := jsoncodec.New(&testConn{
+			readMsgs: []string{test.msg},
+		})
+		var hdr rpc.Header
+		err := codec.ReadHeader(&hdr)
+		c.Assert(err.Error(), gc.Equals, test.err)
+	}
+}
+
 func (*suite) TestErrorAfterClose(c *gc.C) {
 	conn := &testConn{
 		err: errors.New("some error"),

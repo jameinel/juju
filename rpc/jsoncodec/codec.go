@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 
 	"github.com/juju/errors"
@@ -77,7 +78,7 @@ type inMsgV1 struct {
 	Response  json.RawMessage `json:"response"`
 }
 
-const inMsgV1JSONSchema = `
+const msgV1JSONSchema = `
 {
 	"$schema": "http://json-schema.org/draft-04/schema#",
 	"title": "Message Schema v1",
@@ -112,12 +113,46 @@ const inMsgV1JSONSchema = `
 			"type": "object"
 		}
 	},
-	"required": ["request-id", "type", "version", "id", "error", "error-code"]
+	"required": ["request-id", "type", "version", "id", "error", "error-code"],
+	"additionalProperties": false
 }
 `
-const inMsgV1YAMLSchema = `
+const msgV0YAMLSchema = `
 $schema: "http://json-schema.org/draft-04/schema#"
-title: "Message Schema v1"
+title: "Juju RPC Message Schema v0"
+description: |
+    Format of valid Request and Response messages for Version 0 of the JSON RPC.
+    This is the format that was used for Juju 1.X, but for valid Juju 2.x communication
+    the Juju RPC Message Schema v1 should be used. 
+type: object
+properties: 
+  RequestId: 
+    type: integer
+  Type: 
+    type: string
+  Version: 
+    type: integer
+  Id: 
+    type: string
+  Request: 
+    type: string
+  Params: 
+    type: object
+  Error: 
+    type: string
+  ErrorCode: 
+    type: string
+  Response: 
+    type: object
+required: 
+  - RequestId
+`
+
+var msgV0Schema = MustParseYAMLSchema(msgV0YAMLSchema)
+
+const msgV1YAMLSchema = `
+$schema: "http://json-schema.org/draft-04/schema#"
+title: "Juju Message Schema v1"
 description: |
     Format of valid Request and Response messages
 type: object
@@ -142,11 +177,7 @@ properties:
     type: integer
 required: 
   - request-id
-  - type
-  - version
-  - id
-  - error
-  - error-code
+additionalProperties: false
 `
 
 func MustParseYAMLSchema(schema string) *gojsonschema.Schema {
@@ -168,7 +199,7 @@ func MustParseYAMLSchema(schema string) *gojsonschema.Schema {
 	return schemaObj
 }
 
-var inMsgV1Schema = MustParseYAMLSchema(inMsgV1YAMLSchema)
+var msgV1Schema = MustParseYAMLSchema(msgV1YAMLSchema)
 
 // outMsg holds an outgoing message.
 type outMsgV0 struct {
@@ -184,7 +215,7 @@ type outMsgV0 struct {
 }
 
 type outMsgV1 struct {
-	RequestId uint64      `json:"request-id,omitempty"`
+	RequestId uint64      `json:"request-id"`
 	Type      string      `json:"type,omitempty"`
 	Version   int         `json:"version,omitempty"`
 	Id        string      `json:"id,omitempty"`
@@ -241,19 +272,27 @@ func (c *Codec) ReadHeader(hdr *rpc.Header) error {
 
 func (c *Codec) readMessage(m json.RawMessage) (inMsgV1, int, error) {
 	var msg inMsgV1
-	valueLoader := gojsonschema.NewStringLoader(string(m))
-	if _, err := inMsgV1Schema.Validate(valueLoader); err != nil {
+	if result, err := msgV1Schema.Validate(gojsonschema.NewStringLoader(string(m))); err != nil {
+		// err is only not-nil if the content.loadJSON() fails (eg, its not JSON at all)
 		return msg, -1, errors.Trace(err)
+	} else if !result.Valid() {
+		var allErrors []string
+		if resultV0, err := msgV0Schema.Validate(gojsonschema.NewStringLoader(string(m))); err != nil {
+			// should never get here, as invalid JSON should be caught in the V1 check.
+			return msg, -1, errors.Trace(err)
+		} else if resultV0.Valid() {
+			// This is valid according to the old schema, but not
+			// the new schema, so treat it as an old request.
+			return c.readV0Message(m)
+		}
+		// Not valid as V0 request either, so reject it.
+		for _, errDescr := range result.Errors() {
+			allErrors = append(allErrors, errDescr.Description)
+		}
+		return msg, -1, errors.Errorf("message had schema errors:\n%s\n", strings.Join(allErrors, "\n"))
 	}
 	if err := json.Unmarshal(m, &msg); err != nil {
 		return msg, -1, errors.Trace(err)
-	}
-	// In order to support both new style tags (lowercase) and the old style tags (camelcase)
-	// we look at the request id. The request id is always greater than one. If the value is
-	// zero, it means that there wasn't a match for the "request-id" tag. This most likely
-	// means that it was "RequestId" which was from the old style.
-	if msg.RequestId == 0 {
-		return c.readV0Message(m)
 	}
 	return msg, 1, nil
 }
