@@ -19,7 +19,7 @@ has a UUID. To make a request to a particular model, you connect to the URL:
 
 The first request that any client should make is to the `Login` API. It takes
 the username and password that you are connecting as, and returns the list of
-API Facades and their associated versions.
+API Facades and their associated versions. 
 
 ### Macaroon based Auth
 
