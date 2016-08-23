@@ -231,7 +231,7 @@ func (m *Machine) DistributionGroup() ([]instance.Id, error) {
 // SetInstanceInfo sets the provider specific instance id, nonce, metadata,
 // network config for this machine. Once set, the instance id cannot be changed.
 func (m *Machine) SetInstanceInfo(
-	id instance.Id, nonce string, characteristics *instance.HardwareCharacteristics,
+	id instance.Id, dnsName, nonce string, characteristics *instance.HardwareCharacteristics,
 	networkConfig []params.NetworkConfig, volumes []params.Volume,
 	volumeAttachments map[string]params.VolumeAttachmentInfo,
 ) error {
@@ -239,6 +239,7 @@ func (m *Machine) SetInstanceInfo(
 	args := params.InstancesInfo{
 		Machines: []params.InstanceInfo{{
 			Tag:               m.tag.String(),
+			DNSName:           dnsName,
 			InstanceId:        id,
 			Nonce:             nonce,
 			Characteristics:   characteristics,

@@ -508,14 +508,18 @@ func makeMachineStatus(machine *state.Machine) (status params.MachineStatus) {
 	instid, err := machine.InstanceId()
 	if err == nil {
 		status.InstanceId = instid
-		addr, err := machine.PublicAddress()
-		if err != nil {
-			// Usually this indicates that no addresses have been set on the
-			// machine yet.
-			addr = network.Address{}
-			logger.Debugf("error fetching public address: %q", err)
+		if dnsName := machine.DNSName(); dnsName != "" {
+			status.DNSName = dnsName
+		} else {
+			addr, err := machine.PublicAddress()
+			if err != nil {
+				// Usually this indicates that no addresses have been set on the
+				// machine yet.
+				addr = network.Address{}
+				logger.Debugf("error fetching public address: %q", err)
+			}
+			status.DNSName = addr.Value
 		}
-		status.DNSName = addr.Value
 	} else {
 		if errors.IsNotProvisioned(err) {
 			status.InstanceId = "pending"

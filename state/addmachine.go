@@ -49,6 +49,8 @@ type MachineTemplate struct {
 	// come from link-layer device addresses.
 	Addresses []network.Address
 
+	DNSName string
+
 	// InstanceId holds the instance id to associate with the machine.
 	// If this is empty, the provisioner will try to provision the machine.
 	// If this is non-empty, the HardwareCharacteristics and Nonce
@@ -450,6 +452,7 @@ func (st *State) machineDocForTemplate(template MachineTemplate, id string) *mac
 		Principals:              template.principals,
 		Life:                    Alive,
 		Nonce:                   template.Nonce,
+		DNSName:                 template.DNSName,
 		Addresses:               fromNetworkAddresses(template.Addresses, OriginMachine),
 		PreferredPrivateAddress: fromNetworkAddress(privateAddr, OriginMachine),
 		PreferredPublicAddress:  fromNetworkAddress(publicAddr, OriginMachine),

@@ -129,6 +129,8 @@ type machineDoc struct {
 	// MachineAddresses is the set of addresses obtained from the machine itself.
 	MachineAddresses []address
 
+	DNSName string `bson:",omitempty"`
+
 	// PreferredPublicAddress is the preferred address to be used for
 	// the machine when a public address is requested.
 	PreferredPublicAddress address `bson:",omitempty"`
@@ -327,6 +329,10 @@ func (m *Machine) SetStopMongoUntilVersion(v mongo.Version) error {
 // is required for this machine to have mongo running.
 func (m *Machine) StopMongoUntilVersion() (mongo.Version, error) {
 	return mongo.NewVersion(m.doc.StopMongoUntilVersion)
+}
+
+func (m *Machine) DNSName() string {
+	return m.doc.DNSName
 }
 
 // IsManager returns true if the machine has JobManageModel.
@@ -1327,6 +1333,33 @@ func (m *Machine) SetProviderAddresses(addresses ...network.Address) (err error)
 		return fmt.Errorf("cannot set addresses of machine %v: %v", m, err)
 	}
 	m.doc.Addresses = mdoc.Addresses
+	return nil
+}
+
+func (m *Machine) SetDNSName(name string) (err error) {
+	defer errors.DeferredAnnotatef(&err, "cannot set dns-name %q for machine %q", name, m.Id())
+	ops := []txn.Op{{
+		C:      machinesC,
+		Id:     m.doc.DocID,
+		Assert: isAliveDoc,
+		Update: bson.D{{"$set", bson.D{{"dnsname", name}}}},
+	}}
+
+	buildTxn := func(attempt int) ([]txn.Op, error) {
+		if attempt > 0 {
+			if m, err = m.st.Machine(m.doc.Id); err != nil {
+				return nil, err
+			}
+		}
+		if m.doc.Life != Alive {
+			return nil, errNotAlive
+		}
+		return ops, nil
+	}
+	if err := m.st.run(buildTxn); err != nil {
+		return err
+	}
+	m.doc.DNSName = name
 	return nil
 }
 

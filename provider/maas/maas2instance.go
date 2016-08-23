@@ -53,6 +53,10 @@ func (mi *maas2Instance) Id() instance.Id {
 	return instance.Id(mi.machine.SystemID())
 }
 
+func (mi *maas2Instance) DNSName() (string, error) {
+	return mi.machine.FQDN(), nil
+}
+
 func (mi *maas2Instance) Addresses() ([]network.Address, error) {
 	machineAddresses := mi.machine.IPAddresses()
 	addresses := make([]network.Address, len(machineAddresses))

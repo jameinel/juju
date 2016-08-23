@@ -56,6 +56,11 @@ func (inst *environInstance) Addresses() ([]network.Address, error) {
 	return inst.base.Addresses(), nil
 }
 
+// DNSName implements instance.Instance.
+func (inst *environInstance) DNSName() (string, error) {
+	return "", nil
+}
+
 func findInst(id instance.Id, instances []instance.Instance) instance.Instance {
 	for _, inst := range instances {
 		if id == inst.Id() {

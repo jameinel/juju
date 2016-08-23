@@ -53,6 +53,10 @@ func (i sigmaInstance) Status() instance.InstanceStatus {
 
 }
 
+func (i sigmaInstance) DNSName() (string, error) {
+	return i.findIPv4(), nil
+}
+
 // Addresses returns a list of hostnames or ip addresses
 // associated with the instance. This will supercede DNSName
 // which can be implemented by selecting a preferred address.

@@ -358,6 +358,7 @@ type InstanceInfo struct {
 	Tag             string                            `json:"tag"`
 	InstanceId      instance.Id                       `json:"instance-id"`
 	Nonce           string                            `json:"nonce"`
+	DNSName         string                            `json:"dns-name"`
 	Characteristics *instance.HardwareCharacteristics `json:"characteristics"`
 	Volumes         []Volume                          `json:"volumes"`
 	// VolumeAttachments is a mapping from volume tag to

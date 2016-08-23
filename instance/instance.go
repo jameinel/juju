@@ -36,6 +36,9 @@ type Instance interface {
 	// Status returns the provider-specific status for the instance.
 	Status() InstanceStatus
 
+	// DNSName returns the DNS name associated with the instance.
+	DNSName() (string, error)
+
 	// Addresses returns a list of hostnames or ip addresses
 	// associated with the instance.
 	Addresses() ([]network.Address, error)

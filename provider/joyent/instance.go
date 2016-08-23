@@ -57,3 +57,7 @@ func (inst *joyentInstance) Addresses() ([]network.Address, error) {
 
 	return addresses, nil
 }
+
+func (inst *joyentInstance) DNSName() (string, error) {
+	return inst.machine.PrimaryIP, nil
+}

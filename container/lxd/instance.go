@@ -36,6 +36,10 @@ func (lxd *lxdInstance) Addresses() ([]network.Address, error) {
 	return nil, errors.NotImplementedf("lxdInstance.Addresses")
 }
 
+func (lxd *lxdInstance) DNSName() (string, error) {
+	return "", errors.NotImplementedf("lxdInstance.DNSName")
+}
+
 // Status implements instance.Instance.Status.
 func (lxd *lxdInstance) Status() instance.InstanceStatus {
 	jujuStatus := status.StatusPending

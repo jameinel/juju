@@ -725,8 +725,14 @@ func (task *provisionerTask) startMachine(
 	volumes := volumesToApiserver(result.Volumes)
 	volumeNameToAttachmentInfo := volumeAttachmentsToApiserver(result.VolumeAttachments)
 
+	dnsName, err2 := result.Instance.DNSName()
+	if err2 != nil {
+		logger.Errorf("getting instance %q dns-name: %v", result.Instance.Id(), err2)
+	}
+
 	if err := machine.SetInstanceInfo(
 		result.Instance.Id(),
+		dnsName,
 		startInstanceParams.InstanceConfig.MachineNonce,
 		result.Hardware,
 		networkConfig,

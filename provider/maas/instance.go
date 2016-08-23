@@ -96,6 +96,10 @@ func (mi *maas1Instance) Addresses() ([]network.Address, error) {
 	return interfaceAddresses, nil
 }
 
+func (mi *maas1Instance) DNSName() (string, error) {
+	return mi.hostname()
+}
+
 var refreshMAASObject = func(maasObject *gomaasapi.MAASObject) (gomaasapi.MAASObject, error) {
 	// Defined like this to allow patching in tests to overcome limitations of
 	// gomaasapi's test server.

@@ -54,6 +54,11 @@ func (inst *environInstance) Status() instance.InstanceStatus {
 
 }
 
+// DNSName implements instance.Instance.
+func (inst *environInstance) DNSName() (string, error) {
+	return "", nil
+}
+
 // Addresses implements instance.Instance.
 func (inst *environInstance) Addresses() ([]network.Address, error) {
 	return inst.env.raw.Addresses(inst.raw.Name)

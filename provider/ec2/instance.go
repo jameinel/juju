@@ -50,6 +50,11 @@ func (inst *ec2Instance) Status() instance.InstanceStatus {
 
 }
 
+// DNSName implements instance.Instance.
+func (inst *ec2Instance) DNSName() (string, error) {
+	return inst.Instance.DNSName, nil
+}
+
 // Addresses implements network.Addresses() returning generic address
 // details for the instance, and requerying the ec2 api if required.
 func (inst *ec2Instance) Addresses() ([]network.Address, error) {

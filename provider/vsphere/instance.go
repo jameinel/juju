@@ -63,6 +63,13 @@ func (inst *environInstance) Addresses() ([]network.Address, error) {
 	return res, nil
 }
 
+func (inst *environInstance) DNSName() (string, error) {
+	if inst.base.Guest != nil {
+		return inst.base.Guest.HostName, nil
+	}
+	return "", nil
+}
+
 func findInst(id instance.Id, instances []instance.Instance) instance.Instance {
 	for _, inst := range instances {
 		if id == inst.Id() {

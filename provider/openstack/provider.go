@@ -275,6 +275,10 @@ func (inst *openstackInstance) getAddresses() (map[string][]nova.IPAddress, erro
 	return addrs, nil
 }
 
+func (inst *openstackInstance) DNSName() (string, error) {
+	return "", nil
+}
+
 // Addresses implements network.Addresses() returning generic address
 // details for the instances, and calling the openstack api if needed.
 func (inst *openstackInstance) Addresses() ([]network.Address, error) {

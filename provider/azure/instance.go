@@ -123,6 +123,15 @@ func setInstanceAddresses(
 	return nil
 }
 
+func (inst *azureInstance) DNSName() (string, error) {
+	for _, pip := range inst.publicIPAddresses {
+		if pip.Properties.DNSSettings != nil && pip.Properties.DNSSettings.Fqdn != nil {
+			return to.String(pip.Properties.DNSSettings.Fqdn), nil
+		}
+	}
+	return "", nil
+}
+
 // Addresses is specified in the Instance interface.
 func (inst *azureInstance) Addresses() ([]jujunetwork.Address, error) {
 	addresses := make([]jujunetwork.Address, 0, len(inst.networkInterfaces)+len(inst.publicIPAddresses))

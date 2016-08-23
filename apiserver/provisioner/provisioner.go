@@ -495,6 +495,11 @@ func (p *ProvisionerAPI) SetInstanceInfo(args params.InstancesInfo) (params.Erro
 		if err != nil {
 			return errors.Annotatef(err, "cannot record provisioning info for %q", arg.InstanceId)
 		}
+
+		if err := machine.SetDNSName(arg.DNSName); err != nil {
+			return errors.Annotatef(err, "cannot set dns-name %q for %q", arg.DNSName, arg.InstanceId)
+		}
+
 		return nil
 	}
 	for i, arg := range args.Machines {

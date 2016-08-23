@@ -30,6 +30,10 @@ func (manualBootstrapInstance) Refresh() error {
 	return nil
 }
 
+func (inst manualBootstrapInstance) DNSName() (string, error) {
+	return inst.host, nil
+}
+
 func (inst manualBootstrapInstance) Addresses() (addresses []network.Address, err error) {
 	addr, err := manual.HostAddress(inst.host)
 	if err != nil {

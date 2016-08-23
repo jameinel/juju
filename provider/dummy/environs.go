@@ -1473,6 +1473,15 @@ func (inst *dummyInstance) checkBroken(method string) error {
 	return nil
 }
 
+func (inst *dummyInstance) DNSName() (string, error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if err := inst.checkBroken("DNSName"); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("inst-%s.dummy", inst.id), nil
+}
+
 func (inst *dummyInstance) Addresses() ([]network.Address, error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
