@@ -37,6 +37,8 @@ type InitializeStateParams struct {
 	// BootstrapMachineAddresses holds the bootstrap machine's addresses.
 	BootstrapMachineAddresses []network.Address
 
+	BootstrapMachineDNSName string
+
 	// BootstrapMachineJobs holds the jobs that the bootstrap machine
 	// agent will run.
 	BootstrapMachineJobs []multiwatcher.MachineJob
@@ -256,6 +258,7 @@ func initBootstrapMachine(c agent.ConfigSetter, st *state.State, args Initialize
 	}
 	m, err := st.AddOneMachine(state.MachineTemplate{
 		Addresses:               args.BootstrapMachineAddresses,
+		DNSName:                 args.BootstrapMachineDNSName,
 		Series:                  series.HostSeries(),
 		Nonce:                   agent.BootstrapNonce,
 		Constraints:             args.BootstrapMachineConstraints,

@@ -182,6 +182,11 @@ func (c *BootstrapCommand) Run(_ *cmd.Context) error {
 		return err
 	}
 
+	dnsName, err := instances[0].DNSName()
+	if err != nil {
+		logger.Errorf("ignoring DNSName error: %v", err)
+	}
+
 	// When machine addresses are reported from state, they have
 	// duplicates removed.  We should do the same here so that
 	// there is not unnecessary churn in the mongo replicaset.
@@ -260,6 +265,7 @@ func (c *BootstrapCommand) Run(_ *cmd.Context) error {
 			agentbootstrap.InitializeStateParams{
 				StateInitializationParams: args,
 				BootstrapMachineAddresses: addrs,
+				BootstrapMachineDNSName:   dnsName,
 				BootstrapMachineJobs:      jobs,
 				SharedSecret:              sharedSecret,
 				Provider:                  environs.Provider,

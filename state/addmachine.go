@@ -436,12 +436,35 @@ func (st *State) machineDocForTemplate(template MachineTemplate, id string) *mac
 	// no address is available, in which case the empty address is returned
 	// and setting the preferred address to an empty one is the correct
 	// thing to do when none is available.
-	privateAddr, _ := network.SelectInternalAddress(template.Addresses, false)
-	publicAddr, _ := network.SelectPublicAddress(template.Addresses)
+	var privateAddr, publicAddr address
+	if template.DNSName != "" {
+		preferredHostnameAddress, err := preferredAddressesFromDNSName(template.DNSName)
+		if err != nil {
+			logger.Errorf(
+				"skipping unresolvable hostname %q - not using for preferred addresses: %v",
+				template.DNSName, err,
+			)
+		} else {
+			privateAddr = *preferredHostnameAddress
+			publicAddr = *preferredHostnameAddress
+		}
+	}
+
+	if privateAddr.Value == "" {
+		netPrivateAddr, _ := network.SelectInternalAddress(template.Addresses, false)
+		privateAddr = fromNetworkAddress(netPrivateAddr, OriginMachine)
+	}
+
+	if publicAddr.Value == "" {
+		netPublicAddr, _ := network.SelectPublicAddress(template.Addresses)
+		publicAddr = fromNetworkAddress(netPublicAddr, OriginMachine)
+	}
+
 	logger.Infof(
 		"new machine %q has preferred addresses: private %q, public %q",
 		id, privateAddr, publicAddr,
 	)
+
 	return &machineDoc{
 		DocID:                   st.docID(id),
 		Id:                      id,
@@ -454,8 +477,8 @@ func (st *State) machineDocForTemplate(template MachineTemplate, id string) *mac
 		Nonce:                   template.Nonce,
 		DNSName:                 template.DNSName,
 		Addresses:               fromNetworkAddresses(template.Addresses, OriginMachine),
-		PreferredPrivateAddress: fromNetworkAddress(privateAddr, OriginMachine),
-		PreferredPublicAddress:  fromNetworkAddress(publicAddr, OriginMachine),
+		PreferredPrivateAddress: privateAddr,
+		PreferredPublicAddress:  publicAddr,
 		NoVote:                  template.NoVote,
 		Placement:               template.Placement,
 	}

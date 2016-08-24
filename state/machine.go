@@ -5,6 +5,7 @@ package state
 
 import (
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -1336,13 +1337,64 @@ func (m *Machine) SetProviderAddresses(addresses ...network.Address) (err error)
 	return nil
 }
 
-func (m *Machine) SetDNSName(name string) (err error) {
-	defer errors.DeferredAnnotatef(&err, "cannot set dns-name %q for machine %q", name, m.Id())
+func preferredAddressesFromDNSName(hostname string) (*address, error) {
+	ips, err := net.LookupHost(hostname)
+	if err != nil {
+		return nil, errors.Annotatef(err, "cannot resolve hostname %q", hostname)
+	}
+
+	var preferredAddress network.Address
+	for _, ip := range ips {
+		// Update preferred private and public address with the results,
+		// preferring IPv4 results.
+		if netIP := net.ParseIP(ip); netIP.To4() == nil {
+			logger.Infof("skipping IPv6 address %q resolved from hostname %q", netIP, hostname)
+			continue
+		}
+		if preferredAddress.Value != "" {
+			logger.Infof("preferred address so far %q, ignoring extra %q", preferredAddress, ip)
+			continue
+		}
+		preferredAddress = network.NewAddress(ip)
+	}
+
+	if preferredAddress.Value == "" {
+		return nil, errors.Errorf(
+			"cannot resolve %q to a suitable IPv4 address for private and public address, got: %v",
+			hostname, ips,
+		)
+	}
+
+	statePreferredAddress := fromNetworkAddress(preferredAddress, OriginProvider)
+	logger.Infof(
+		"hostname %q resolves to preferred private and public address %q",
+		hostname, preferredAddress,
+	)
+	return &statePreferredAddress, nil
+}
+
+func (m *Machine) SetDNSName(hostname string) (err error) {
+	defer errors.DeferredAnnotatef(&err, "cannot set dns-name %q for machine %q", hostname, m.Id())
+
+	logger.Infof(
+		"setting machine %q hostname %q and updating preferred public %q and private %q addresses",
+		m.Id(), hostname, m.doc.PreferredPublicAddress, m.doc.PreferredPrivateAddress,
+	)
+
+	statePreferredAddress, err := preferredAddressesFromDNSName(hostname)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	ops := []txn.Op{{
 		C:      machinesC,
 		Id:     m.doc.DocID,
 		Assert: isAliveDoc,
-		Update: bson.D{{"$set", bson.D{{"dnsname", name}}}},
+		Update: bson.D{{"$set", bson.D{
+			{"dnsname", hostname},
+			{"preferredpublicaddress", *statePreferredAddress},
+			{"preferredprivateaddress", *statePreferredAddress},
+		}}},
 	}}
 
 	buildTxn := func(attempt int) ([]txn.Op, error) {
@@ -1359,7 +1411,9 @@ func (m *Machine) SetDNSName(name string) (err error) {
 	if err := m.st.run(buildTxn); err != nil {
 		return err
 	}
-	m.doc.DNSName = name
+	m.doc.DNSName = hostname
+	m.doc.PreferredPrivateAddress = *statePreferredAddress
+	m.doc.PreferredPublicAddress = *statePreferredAddress
 	return nil
 }
 
