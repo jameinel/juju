@@ -462,7 +462,7 @@ func (st *State) machineDocForTemplate(template MachineTemplate, id string) *mac
 
 	logger.Infof(
 		"new machine %q has preferred addresses: private %q, public %q",
-		id, privateAddr, publicAddr,
+		id, privateAddr.networkAddress(), publicAddr.networkAddress(),
 	)
 
 	return &machineDoc{
