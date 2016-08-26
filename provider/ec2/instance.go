@@ -52,6 +52,7 @@ func (inst *ec2Instance) Status() instance.InstanceStatus {
 
 // DNSName implements instance.Instance.
 func (inst *ec2Instance) DNSName() (string, error) {
+	logger.Infof("instance %q DNSName %q; %#v", inst.Id(), inst.Instance.DNSName, inst.Instance)
 	return inst.Instance.DNSName, nil
 }
 

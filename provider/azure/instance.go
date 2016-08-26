@@ -124,6 +124,7 @@ func setInstanceAddresses(
 }
 
 func (inst *azureInstance) DNSName() (string, error) {
+	logger.Infof("instance %q DNSName: %#v", inst.Id(), inst)
 	for _, pip := range inst.publicIPAddresses {
 		if pip.Properties.DNSSettings != nil && pip.Properties.DNSSettings.Fqdn != nil {
 			return to.String(pip.Properties.DNSSettings.Fqdn), nil
