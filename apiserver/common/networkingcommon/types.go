@@ -194,27 +194,34 @@ func SortNetworkConfigsByParents(input []params.NetworkConfig) []params.NetworkC
 	return sortedInputCopy
 }
 
-type byInterfaceName []params.NetworkConfig
-
-func (c byInterfaceName) Len() int {
-	return len(c)
-}
-
-func (c byInterfaceName) Swap(i, j int) {
-	orgI, orgJ := c[i], c[j]
-	c[j], c[i] = orgI, orgJ
-}
-
-func (c byInterfaceName) Less(i, j int) bool {
-	return c[i].InterfaceName < c[j].InterfaceName
-}
-
 // SortNetworkConfigsByInterfaceName returns the given input sorted by
 // InterfaceName.
 func SortNetworkConfigsByInterfaceName(input []params.NetworkConfig) []params.NetworkConfig {
-	sortedInputCopy := CopyNetworkConfigs(input)
-	sort.Stable(byInterfaceName(sortedInputCopy))
-	return sortedInputCopy
+	var interfaceNames []string
+	inputByName := make(map[string][]params.NetworkConfig)
+	for _, iface := range input {
+		name := iface.InterfaceName
+		if iface.ParentInterfaceName != "" {
+			name = iface.ParentInterfaceName + "@" + name
+		} else if strings.HasPrefix(iface.InterfaceName, instancecfg.DefaultBridgePrefix) {
+			name = "000@" + name
+		}
+
+		interfaceNames = append(interfaceNames, name)
+		infos := inputByName[name]
+		infos = append(infos, iface)
+		inputByName[name] = infos
+	}
+	sortedNames := network.NaturallySortDeviceNames(interfaceNames...)
+
+	sortedInput := make([]params.NetworkConfig, len(input))
+	for i, name := range sortedNames {
+		infos := inputByName[name]
+		sortedInput[i] = infos[0]
+		infos = infos[1:]
+		inputByName[name] = infos
+	}
+	return sortedInput
 }
 
 // NetworkConfigsToIndentedJSON returns the given input as an indented JSON
@@ -303,24 +310,34 @@ func NetworkConfigsToStateArgs(networkConfig []params.NetworkConfig) (
 			devicesArgs = append(devicesArgs, args)
 		}
 
-		if netConfig.CIDR == "" || netConfig.Address == "" {
-			logger.Tracef(
-				"skipping empty CIDR %q and/or Address %q of %q",
-				netConfig.CIDR, netConfig.Address, netConfig.InterfaceName,
-			)
+		if netConfig.CIDR == "" && netConfig.Address == "" {
+			logger.Tracef("skipping empty CIDR and Address of interface %q", netConfig.InterfaceName)
 			continue
 		}
-		_, ipNet, err := net.ParseCIDR(netConfig.CIDR)
-		if err != nil {
-			logger.Warningf("FIXME: ignoring unexpected CIDR format %q: %v", netConfig.CIDR, err)
-			continue
+
+		var (
+			ipNet  *net.IPNet
+			ipAddr net.IP
+			err    error
+		)
+
+		if netConfig.CIDR != "" {
+			_, ipNet, err = net.ParseCIDR(netConfig.CIDR)
+			if err != nil {
+				logger.Warningf("FIXME: ignoring unexpected CIDR format %q: %v", netConfig.CIDR, err)
+				continue
+			}
 		}
-		ipAddr := net.ParseIP(netConfig.Address)
-		if ipAddr == nil {
-			logger.Warningf("FIXME: ignoring unexpected Address format %q", netConfig.Address)
-			continue
+
+		if netConfig.Address != "" {
+			ipAddr = net.ParseIP(netConfig.Address)
+			if ipAddr == nil {
+				logger.Warningf("FIXME: ignoring unexpected Address format %q", netConfig.Address)
+				continue
+			}
+			ipNet.IP = ipAddr
 		}
-		ipNet.IP = ipAddr
+
 		cidrAddress := ipNet.String()
 
 		var derivedConfigMethod state.AddressConfigMethod
@@ -431,6 +448,7 @@ func GetObservedNetworkConfig() ([]params.NetworkConfig, error) {
 		for _, addr := range addrs {
 			cidrAddress := addr.String()
 			if cidrAddress == "" {
+				logger.Warningf("no address %q on interface %q", addr, nic.Name)
 				continue
 			}
 			ip, ipNet, err := net.ParseCIDR(cidrAddress)
@@ -447,6 +465,7 @@ func GetObservedNetworkConfig() ([]params.NetworkConfig, error) {
 			}
 			if ip.To4() == nil {
 				logger.Debugf("skipping observed IPv6 address %q on %q: not fully supported yet", ip, nic.Name)
+				observedConfig = append(observedConfig, nicConfig)
 				continue
 			}
 
@@ -470,7 +489,7 @@ func GetObservedNetworkConfig() ([]params.NetworkConfig, error) {
 // configs after merging providerConfig with observedConfig.
 func MergeProviderAndObservedNetworkConfigs(providerConfigs, observedConfigs []params.NetworkConfig) ([]params.NetworkConfig, error) {
 	providerConfigsByName := make(map[string][]params.NetworkConfig)
-	sortedProviderConfigs := SortNetworkConfigsByParents(providerConfigs)
+	sortedProviderConfigs := SortNetworkConfigsByInterfaceName(providerConfigs)
 	for _, config := range sortedProviderConfigs {
 		name := config.InterfaceName
 		providerConfigsByName[name] = append(providerConfigsByName[name], config)
@@ -482,7 +501,7 @@ func MergeProviderAndObservedNetworkConfigs(providerConfigs, observedConfigs []p
 	}
 	logger.Debugf("provider network config of machine:\n%s", jsonProviderConfig)
 
-	sortedObservedConfigs := SortNetworkConfigsByParents(observedConfigs)
+	sortedObservedConfigs := SortNetworkConfigsByInterfaceName(observedConfigs)
 	jsonObservedConfig, err := NetworkConfigsToIndentedJSON(sortedObservedConfigs)
 	if err != nil {
 		return nil, errors.Annotatef(err, "cannot serialize observed config %#v as JSON", sortedObservedConfigs)
@@ -508,13 +527,23 @@ func MergeProviderAndObservedNetworkConfigs(providerConfigs, observedConfigs []p
 
 				var underlyingConfig params.NetworkConfig
 				for i, underlying := range underlyingConfigs {
-					if underlying.Address == config.Address {
+					matches := false
+					if underlying.Address == "" {
+						logger.Infof("underlying %q has no address, matching by MAC %q", underlying.InterfaceName, underlying.MACAddress)
+						matches = underlying.MACAddress == config.MACAddress
+					} else {
+						logger.Infof("matching underlying %q by address %q", underlying.InterfaceName, underlying.Address)
+						matches = underlying.Address == config.Address
+					}
+
+					if matches || underlying.Address == "" {
 						logger.Tracef("replacing undelying config %+v", underlying)
 						// Remove what we found before changing it below.
 						underlyingConfig = underlying
 						underlyingConfigs = append(underlyingConfigs[:i], underlyingConfigs[i+1:]...)
 						break
 					}
+					logger.Tracef("underlying %#v does not match observed %#v neither by MACAddress nor Address", underlying, config)
 				}
 				logger.Tracef("underlying provider config after update: %+v", underlyingConfigs)
 
@@ -527,14 +556,16 @@ func MergeProviderAndObservedNetworkConfigs(providerConfigs, observedConfigs []p
 				bridgeConfig.ProviderVLANId = underlyingConfig.ProviderVLANId
 				bridgeConfig.ProviderSubnetId = underlyingConfig.ProviderSubnetId
 				bridgeConfig.ProviderAddressId = underlyingConfig.ProviderAddressId
-				if underlyingParent := underlyingConfig.ParentInterfaceName; underlyingParent != "" {
+				bridgeConfig.CIDR = underlyingConfig.CIDR
+
+				underlyingParent := underlyingConfig.ParentInterfaceName
+				if underlyingParent != "" && !strings.HasPrefix(underlyingParent, instancecfg.DefaultBridgePrefix) {
 					bridgeConfig.ParentInterfaceName = instancecfg.DefaultBridgePrefix + underlyingParent
 				}
 
 				underlyingConfig.ConfigType = string(network.ConfigManual)
 				underlyingConfig.ParentInterfaceName = name
 				underlyingConfig.ProviderAddressId = ""
-				underlyingConfig.CIDR = ""
 				underlyingConfig.Address = ""
 
 				underlyingConfigs = append(underlyingConfigs, underlyingConfig)
@@ -547,7 +578,7 @@ func MergeProviderAndObservedNetworkConfigs(providerConfigs, observedConfigs []p
 		}
 
 		knownProviderConfigs, knownByProvider := providerConfigsByName[name]
-		if !knownByProvider {
+		if !knownByProvider && config.CIDR != "" {
 			// Not known by the provider and not a Juju-created bridge, so just
 			// use the observed config for it.
 			logger.Tracef("device %q not known to provider - adding only observed config: %+v", name, config)
@@ -557,10 +588,15 @@ func MergeProviderAndObservedNetworkConfigs(providerConfigs, observedConfigs []p
 		logger.Tracef("device %q has known provider network config: %+v", name, knownProviderConfigs)
 
 		for _, providerConfig := range knownProviderConfigs {
-			if providerConfig.Address == config.Address {
+			if providerConfig.Address == "" && providerConfig.MACAddress == "" {
+				logger.Infof("skipping provider interface %q with neither Address or MACAddress set", providerConfig.InterfaceName)
+				continue
+			}
+
+			if providerConfig.Address == config.Address || providerConfig.MACAddress == config.MACAddress {
 				logger.Tracef(
-					"device %q has observed address %q, index %d, and MTU %q; overriding index %d and MTU %d from provider config",
-					name, config.Address, config.DeviceIndex, config.MTU, providerConfig.DeviceIndex, providerConfig.MTU,
+					"device %q has observed address %q, MAC, %q, index %d, and MTU %q; overriding index %d and MTU %d from provider config",
+					name, config.Address, config.MACAddress, config.DeviceIndex, config.MTU, providerConfig.DeviceIndex, providerConfig.MTU,
 				)
 				// Prefer observed device indices and MTU values as more up-to-date.
 				providerConfig.DeviceIndex = config.DeviceIndex
@@ -572,7 +608,7 @@ func MergeProviderAndObservedNetworkConfigs(providerConfigs, observedConfigs []p
 		}
 	}
 
-	sortedMergedConfigs := SortNetworkConfigsByParents(mergedConfigs)
+	sortedMergedConfigs := SortNetworkConfigsByInterfaceName(mergedConfigs)
 
 	jsonMergedConfig, err := NetworkConfigsToIndentedJSON(sortedMergedConfigs)
 	if err != nil {

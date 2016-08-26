@@ -69,7 +69,9 @@ class LogicalInterface(object):
             options = []
         _, self.name, self.family, self.method = definition.split()
         self.options = options
+        self.is_loopback = self.method == 'loopback'
         self.is_bonded = [x for x in self.options if "bond-" in x]
+        self.has_bond_master_option = self.has_option(['bond-master'])
         self.is_alias = ":" in self.name
         self.is_vlan = [x for x in self.options if x.startswith("vlan-raw-device")]
         self.is_active = self.method == "dhcp" or self.method == "static"
@@ -79,6 +81,14 @@ class LogicalInterface(object):
 
     def __str__(self):
         return self.name
+
+    def has_option(self, options):
+        for o in self.options:
+            words = o.split()
+            ident = words[0]
+            if ident in options:
+                return True
+        return False
 
     @classmethod
     def prune_options(cls, options, invalid_options):
@@ -94,7 +104,7 @@ class LogicalInterface(object):
         if bridge_name is None:
             bridge_name = prefix + self.name
         # Note: the testing order here is significant.
-        if not self.is_active or self.is_bridged:
+        if self.is_loopback or self.is_bridged or self.has_bond_master_option:
             return self._bridge_unchanged()
         elif self.is_alias:
             if self.parent and self.parent.iface and (not self.parent.iface.is_active or self.parent.iface.is_bridged):

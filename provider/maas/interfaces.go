@@ -153,6 +153,12 @@ func maasObjectNetworkInterfaces(maasObject *gomaasapi.MAASObject, subnetsMap ma
 			NoAutoStart:         !iface.Enabled,
 		}
 
+		if len(iface.Links) == 0 {
+			logger.Debugf("interface %q has no links", iface.Name)
+			infos = append(infos, nicInfo)
+			continue
+		}
+
 		for _, link := range iface.Links {
 			switch link.Mode {
 			case modeUnknown:
@@ -256,6 +262,12 @@ func maas2NetworkInterfaces(instance *maas2Instance, subnetsMap map[string]netwo
 			ParentInterfaceName: parentName,
 			Disabled:            !iface.Enabled(),
 			NoAutoStart:         !iface.Enabled(),
+		}
+
+		if len(iface.Links()) == 0 {
+			logger.Debugf("interface %q has no links", iface.Name())
+			infos = append(infos, nicInfo)
+			continue
 		}
 
 		for _, link := range iface.Links() {
