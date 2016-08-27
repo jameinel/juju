@@ -727,7 +727,15 @@ func (task *provisionerTask) startMachine(
 
 	dnsName, err2 := result.Instance.DNSName()
 	if err2 != nil {
-		logger.Errorf("getting instance %q dns-name: %v", result.Instance.Id(), err2)
+		logger.Warningf("getting instance %q dns-name: %v", result.Instance.Id(), err2)
+
+		for _, info := range result.NetworkInfo {
+			if info.Address.Type == network.HostName {
+				dnsName = info.Address.Value
+				logger.Infof("instance %q primary hostname is %q", result.Instance.Id(), dnsName)
+				break
+			}
+		}
 	}
 
 	if err := machine.SetInstanceInfo(

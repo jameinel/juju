@@ -2171,7 +2171,6 @@ func (env *maasEnviron) allocateContainerAddresses2(hostInstanceID instance.Id, 
 	for _, nic := range preparedInfo {
 		nameToParentName[nic.InterfaceName] = nic.ParentInterfaceName
 		if nic.InterfaceName != primaryNICName {
-
 			createArgs := gomaasapi.CreateInterfaceArgs{
 				Name:       nic.InterfaceName,
 				MACAddress: nic.MACAddress,

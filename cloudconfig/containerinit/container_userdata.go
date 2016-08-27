@@ -145,6 +145,7 @@ type PreparedConfig struct {
 	DNSSearchDomains []string
 	NameToAddress    map[string]string
 	GatewayAddress   string
+	Hostnames        []string
 }
 
 // PrepareNetworkConfigFromInterfaces collects the necessary information to
@@ -156,12 +157,24 @@ func PrepareNetworkConfigFromInterfaces(interfaces []network.InterfaceInfo) *Pre
 	gatewayAddress := ""
 	namesInOrder := make([]string, 1, len(interfaces)+1)
 	nameToAddress := make(map[string]string)
+	var hostnames []string
 
 	// Always include the loopback.
 	namesInOrder[0] = "lo"
 	autoStarted := set.NewStrings("lo")
 
 	for _, info := range interfaces {
+		if info.Address.Type == network.HostName {
+			hostnames = append(hostnames, info.Address.Value)
+			logger.Infof("hostname %q found for interface %q", info.Address, info.InterfaceName)
+			continue
+		}
+
+		if _, ok := nameToAddress[info.InterfaceName]; ok {
+			logger.Infof("skipping duplicated interface %q", info.InterfaceName)
+			continue
+		}
+
 		if !info.NoAutoStart {
 			autoStarted.Add(info.InterfaceName)
 		}
@@ -192,6 +205,7 @@ func PrepareNetworkConfigFromInterfaces(interfaces []network.InterfaceInfo) *Pre
 		DNSServers:       dnsServers.SortedValues(),
 		DNSSearchDomains: dnsSearchDomains.SortedValues(),
 		GatewayAddress:   gatewayAddress,
+		Hostnames:        hostnames,
 	}
 
 	logger.Debugf("prepared network config for rendering: %+v", prepared)

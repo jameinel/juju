@@ -268,7 +268,8 @@ func (env *maasEnviron) deviceInterfaceInfo2(deviceID string, nameToParentName m
 	}
 	interfaces := devices[0].InterfaceSet()
 
-	interfaceInfo := make([]network.InterfaceInfo, 0, len(interfaces))
+	var primaryNICInfo network.InterfaceInfo
+	interfaceInfo := make([]network.InterfaceInfo, 0, len(interfaces)+1)
 	for _, nic := range interfaces {
 		vlanId := 0
 		vlanVid := 0
@@ -332,9 +333,18 @@ func (env *maasEnviron) deviceInterfaceInfo2(deviceID string, nameToParentName m
 				nicInfo.DNSServers = network.NewAddressesOnSpace(subnet.Space(), subnet.DNSServers()...)
 			}
 
+			if nic.Name() == "eth0" {
+				primaryNICInfo = nicInfo
+			}
+
 			interfaceInfo = append(interfaceInfo, nicInfo)
 		}
 	}
+
+	// Add the hostname based on the primary NIC at the top of the list.
+	primaryNICInfo.Address = network.NewScopedAddress(devices[0].FQDN(), network.ScopeCloudLocal)
+	interfaceInfo = append([]network.InterfaceInfo{primaryNICInfo}, interfaceInfo...)
+
 	logger.Debugf("device %q has interface info: %+v", deviceID, interfaceInfo)
 	return interfaceInfo, nil
 }
