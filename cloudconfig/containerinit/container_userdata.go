@@ -178,7 +178,7 @@ func PrepareNetworkConfigFromInterfaces(interfaces []network.InterfaceInfo) *Pre
 
 		dnsSearchDomains = dnsSearchDomains.Union(set.NewStrings(info.DNSSearchDomains...))
 
-		if gatewayAddress == "" && info.GatewayAddress.Value != "" {
+		if gatewayAddress == "" && info.GatewayAddress.Value != "" && info.InterfaceName == "eth0" {
 			gatewayAddress = info.GatewayAddress.Value
 		}
 

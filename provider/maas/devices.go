@@ -218,17 +218,24 @@ func (env *maasEnviron) deviceInterfaceInfo(deviceID instance.Id, nameToParentNa
 			case modeDHCP:
 				nicInfo.ConfigType = network.ConfigDHCP
 			case modeStatic, modeLinkUp:
-				nicInfo.ConfigType = network.ConfigStatic
+				if link.IPAddress != "" {
+					nicInfo.ConfigType = network.ConfigStatic
+				} else {
+					nicInfo.ConfigType = network.ConfigManual
+					nicInfo.NoAutoStart = true
+				}
 			default:
 				nicInfo.ConfigType = network.ConfigManual
 			}
 
 			if link.IPAddress == "" {
 				logger.Debugf("device %q interface %q has no address", deviceID, nic.Name)
+				interfaceInfo = append(interfaceInfo, nicInfo)
 				continue
 			}
 			if link.Subnet == nil {
 				logger.Debugf("device %q interface %q link %d missing subnet", deviceID, nic.Name, link.ID)
+				interfaceInfo = append(interfaceInfo, nicInfo)
 				continue
 			}
 
@@ -297,7 +304,12 @@ func (env *maasEnviron) deviceInterfaceInfo2(deviceID string, nameToParentName m
 			case modeDHCP:
 				nicInfo.ConfigType = network.ConfigDHCP
 			case modeStatic, modeLinkUp:
-				nicInfo.ConfigType = network.ConfigStatic
+				if link.IPAddress() != "" {
+					nicInfo.ConfigType = network.ConfigStatic
+				} else {
+					nicInfo.ConfigType = network.ConfigManual
+					nicInfo.NoAutoStart = true
+				}
 			default:
 				nicInfo.ConfigType = network.ConfigManual
 			}
@@ -305,6 +317,7 @@ func (env *maasEnviron) deviceInterfaceInfo2(deviceID string, nameToParentName m
 			subnet := link.Subnet()
 			if link.IPAddress() == "" || subnet == nil {
 				logger.Debugf("device %q interface %q has no address", deviceID, nic.Name())
+				interfaceInfo = append(interfaceInfo, nicInfo)
 				continue
 			}
 

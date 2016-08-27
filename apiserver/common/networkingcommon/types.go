@@ -5,6 +5,7 @@ package networkingcommon
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"regexp"
 	"sort"
@@ -287,6 +288,7 @@ func NetworkConfigsToStateArgs(networkConfig []params.NetworkConfig) (
 
 	logger.Tracef("transforming network config to state args: %+v", networkConfig)
 	seenDeviceNames := set.NewStrings()
+	seenAddrs := set.NewStrings()
 	for _, netConfig := range networkConfig {
 		logger.Tracef("transforming device %q", netConfig.InterfaceName)
 		if !seenDeviceNames.Contains(netConfig.InterfaceName) {
@@ -309,6 +311,16 @@ func NetworkConfigsToStateArgs(networkConfig []params.NetworkConfig) (
 			logger.Tracef("state device args for device: %+v", args)
 			devicesArgs = append(devicesArgs, args)
 		}
+
+		uniqueAddress := fmt.Sprintf("%s#%s#%s", netConfig.InterfaceName, netConfig.CIDR, netConfig.Address)
+		if seenAddrs.Contains(uniqueAddress) {
+			logger.Tracef(
+				"skipping duplicate CIDR %q and Address %q of interface %q",
+				netConfig.CIDR, netConfig.Address, netConfig.InterfaceName,
+			)
+			continue
+		}
+		seenAddrs.Add(uniqueAddress)
 
 		if netConfig.CIDR == "" && netConfig.Address == "" {
 			logger.Tracef("skipping empty CIDR and Address of interface %q", netConfig.InterfaceName)
@@ -440,6 +452,7 @@ func GetObservedNetworkConfig() ([]params.NetworkConfig, error) {
 		}
 
 		if len(addrs) == 0 {
+			nicConfig.ConfigType = string(network.ConfigManual)
 			observedConfig = append(observedConfig, nicConfig)
 			logger.Infof("no addresses observed on interface %q", nic.Name)
 			continue
@@ -479,7 +492,7 @@ func GetObservedNetworkConfig() ([]params.NetworkConfig, error) {
 			observedConfig = append(observedConfig, nicConfigCopy)
 		}
 	}
-	sortedConfig := SortNetworkConfigsByParents(observedConfig)
+	sortedConfig := SortNetworkConfigsByInterfaceName(observedConfig)
 
 	logger.Tracef("about to update network config with observed: %+v", sortedConfig)
 	return sortedConfig, nil
