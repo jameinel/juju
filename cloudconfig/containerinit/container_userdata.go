@@ -112,6 +112,11 @@ func GenerateNetworkConfig(networkConfig *container.NetworkConfig) (string, erro
 
 		output.WriteString("iface " + name + " inet static\n")
 		output.WriteString("  address " + address + "\n")
+
+		if mtu, ok := prepared.NameToMTU[name]; ok {
+			output.WriteString(fmt.Sprintf("  mtu %d\n", mtu))
+		}
+
 		if !gatewayHandled && prepared.GatewayAddress != "" {
 			_, network, err := net.ParseCIDR(address)
 			if err != nil {
@@ -144,6 +149,7 @@ type PreparedConfig struct {
 	DNSServers       []string
 	DNSSearchDomains []string
 	NameToAddress    map[string]string
+	NameToMTU        map[string]int
 	GatewayAddress   string
 	Hostnames        []string
 }
@@ -157,6 +163,7 @@ func PrepareNetworkConfigFromInterfaces(interfaces []network.InterfaceInfo) *Pre
 	gatewayAddress := ""
 	namesInOrder := make([]string, 1, len(interfaces)+1)
 	nameToAddress := make(map[string]string)
+	nameToMTU := make(map[string]int)
 	var hostnames []string
 
 	// Always include the loopback.
@@ -173,6 +180,10 @@ func PrepareNetworkConfigFromInterfaces(interfaces []network.InterfaceInfo) *Pre
 		if _, ok := nameToAddress[info.InterfaceName]; ok {
 			logger.Infof("skipping duplicated interface %q", info.InterfaceName)
 			continue
+		}
+
+		if info.MTU > 0 {
+			nameToMTU[info.InterfaceName] = info.MTU
 		}
 
 		if !info.NoAutoStart {
@@ -201,6 +212,7 @@ func PrepareNetworkConfigFromInterfaces(interfaces []network.InterfaceInfo) *Pre
 	prepared := &PreparedConfig{
 		InterfaceNames:   namesInOrder,
 		NameToAddress:    nameToAddress,
+		NameToMTU:        nameToMTU,
 		AutoStarted:      autoStarted.SortedValues(),
 		DNSServers:       dnsServers.SortedValues(),
 		DNSSearchDomains: dnsSearchDomains.SortedValues(),

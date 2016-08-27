@@ -2173,6 +2173,7 @@ func (env *maasEnviron) allocateContainerAddresses2(hostInstanceID instance.Id, 
 		if nic.InterfaceName != primaryNICName {
 			createArgs := gomaasapi.CreateInterfaceArgs{
 				Name:       nic.InterfaceName,
+				MTU:        nic.MTU,
 				MACAddress: nic.MACAddress,
 			}
 
@@ -2182,7 +2183,7 @@ func (env *maasEnviron) allocateContainerAddresses2(hostInstanceID instance.Id, 
 				createArgs.VLAN = primaryNICVLAN
 			} else {
 				createArgs.VLAN = subnet.VLAN()
-				logger.Infof("linking NIC %v to subnet %v - using static IP")
+				logger.Infof("linking NIC %v to subnet %v - using static IP", nic.InterfaceName, subnet.CIDR())
 			}
 			createdNIC, err := device.CreateInterface(createArgs)
 			if err != nil {

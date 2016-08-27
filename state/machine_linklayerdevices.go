@@ -934,11 +934,15 @@ func (m *Machine) SetContainerLinkLayerDevices(containerMachine *Machine) error 
 
 	for i, hostBridgeName := range sortedBridgeDeviceNames {
 		hostBridge := bridgeDevicesByName[hostBridgeName]
+		containerNICMTU := hostBridge.MTU()
+		if network.VLAN8021QInterfaceNameRegex.MatchString(hostBridgeName) {
+			containerNICMTU -= network.DecrementContainerInterfaceMTUForVLANs
+		}
 		containerDevicesArgs[i] = LinkLayerDeviceArgs{
 			Name:        fmt.Sprintf("eth%d", i),
 			Type:        EthernetDevice,
 			MACAddress:  generateMACAddress(),
-			MTU:         hostBridge.MTU(),
+			MTU:         containerNICMTU,
 			IsUp:        true,
 			IsAutoStart: true,
 			ParentName:  hostBridge.globalKey(),

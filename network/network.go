@@ -23,6 +23,15 @@ var logger = loggo.GetLogger("juju.network")
 // invalid characters.
 var SpaceInvalidChars = regexp.MustCompile("[^0-9a-z-]")
 
+// DecrementContainerInterfaceMTUForVLANs is the value to use when calculating
+// the MTU of a container interface, connected to a host bridge of type
+// VLAN_8021QInterface.
+const DecrementContainerInterfaceMTUForVLANs = 22
+
+// VLAN8021QInterfaceNameRegex matches interface names configured to tag traffic
+// according to IEEE 802.1Q VLAN trunking protocol.
+var VLAN8021QInterfaceNameRegex = regexp.MustCompile(`^.+\.[0-9]{1,4}[^0-9]?$`)
+
 // noAddress represents an error when an address is requested but not available.
 type noAddress struct {
 	errors.Err

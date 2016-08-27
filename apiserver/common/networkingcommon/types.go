@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -404,8 +403,6 @@ func NetworkingEnvironFromModelConfig(configGetter environs.EnvironConfigGetter)
 	return netEnviron, nil
 }
 
-var vlanInterfaceNameRegex = regexp.MustCompile(`^.+\.[0-9]{1,4}[^0-9]?$`)
-
 var (
 	netInterfaces  = net.Interfaces
 	interfaceAddrs = (*net.Interface).Addrs
@@ -431,7 +428,7 @@ func GetObservedNetworkConfig() ([]params.NetworkConfig, error) {
 		if nic.Flags&net.FlagLoopback > 0 {
 			derivedType = network.LoopbackInterface
 			derivedConfigType = string(network.ConfigLoopback)
-		} else if vlanInterfaceNameRegex.MatchString(nic.Name) {
+		} else if network.VLAN8021QInterfaceNameRegex.MatchString(nic.Name) {
 			derivedType = network.VLAN_8021QInterface
 		}
 
