@@ -85,6 +85,11 @@ func (w *unixConfigure) Configure() error {
 	return w.ConfigureJuju()
 }
 
+const (
+	nssPluginURL     = "https://github.com/frobware/nss-juju/releases/download/v0/libnss-juju_0.1-1_amd64.deb"
+	nssPluginPackage = "libnss-juju_0.1-1_amd64.deb"
+)
+
 // ConfigureBasic updates the provided cloudinit.Config with
 // basic configuration to initialise an OS image, such that it can
 // be connected to via SSH, and log to a standard location.
@@ -110,6 +115,11 @@ func (w *unixConfigure) ConfigureBasic() error {
 			}
 			w.addCleanShutdownJob(initSystem)
 		}
+		// Install the NSS Plugin to
+		w.conf.AddScripts(
+			"wget "+nssPluginURL,
+			"dpkg -i "+nssPluginPackage,
+		)
 	case os.CentOS:
 		w.conf.AddScripts(
 			// Mask and stop firewalld, if enabled, so it cannot start. See
