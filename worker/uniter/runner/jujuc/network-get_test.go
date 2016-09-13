@@ -62,10 +62,15 @@ func (s *NetworkGetSuite) TestNetworkGet(c *gc.C) {
 		args:    []string{""},
 		out:     `no binding name specified`,
 	}, {
-		summary: "binding name given, no --primary-address given",
+		summary: "binding name given, no --primary-address or --primary-hostname given",
 		code:    2,
 		args:    []string{"foo"},
-		out:     `--primary-address is currently required`,
+		out:     `--primary-address or --primary-hostname are currently required`,
+	}, {
+		summary: "binding name given, both --primary-address and --primary-hostname given",
+		code:    2,
+		args:    []string{"foo", "--primary-address", "--primary-hostname"},
+		out:     `--primary-address and --primary-hostname are mutually exclusive`,
 	}, {
 		summary: "unknown binding given, with --primary-address",
 		args:    []string{"unknown", "--primary-address"},
@@ -85,9 +90,17 @@ func (s *NetworkGetSuite) TestNetworkGet(c *gc.C) {
 		args:    []string{"known-relation", "--primary-address"},
 		out:     "10.10.0.23",
 	}, {
+		summary: "explicitly bound relation name given with --primary-hostname",
+		args:    []string{"known-relation", "--primary-hostname"},
+		out:     "juju-ip-10-10-0-23",
+	}, {
 		summary: "implicitly bound binding name given with --primary-address",
 		args:    []string{"known-unbound", "--primary-address"},
 		out:     "10.33.1.8", // preferred private address used for unspecified bindings.
+	}, {
+		summary: "implicitly bound binding name given with --primary-hostname",
+		args:    []string{"known-unbound", "--primary-hostname"},
+		out:     "juju-ip-10-33-1-8",
 	}} {
 		c.Logf("test %d: %s", i, t.summary)
 		com := s.createCommand(c)
@@ -112,7 +125,7 @@ func (s *NetworkGetSuite) TestNetworkGet(c *gc.C) {
 func (s *NetworkGetSuite) TestHelp(c *gc.C) {
 
 	var helpTemplate = `
-Usage: network-get [options] <binding-name> --primary-address
+Usage: network-get [options] <binding-name> --primary-address|--primary-hostname
 
 Summary:
 get network config
@@ -124,11 +137,17 @@ Options:
     Specify an output file
 --primary-address  (= false)
     get the primary address for the binding
+--primary-hostname  (= false)
+    get the primary hostname for the binding
 
 Details:
 network-get returns the network config for a given binding name. The only
-supported flag for now is --primary-address, which is required and returns
-the IP address the local unit should advertise as its endpoint to its peers.
+supported flags for now are --primary-address or --primary-hostname.
+One or the other must be specified. The first one returns the IP address
+the local unit should advertise as its endpoint to its peers. The second
+one returns the same IP address but as a hostname with the format:
+'juju-ip-10-20-30-40' assuming --primary-address returns 10.20.30.40.
+Those hostnames are resolved by the NSS Plugin Juju installs on each machine.
 `[1:]
 
 	com := s.createCommand(c)
