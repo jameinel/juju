@@ -9,8 +9,10 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charmrepo.v2-unstable"
+	csclientparams "gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
 
+	"github.com/juju/juju/api"
 	"github.com/juju/juju/api/annotations"
 	"github.com/juju/juju/api/application"
 	"github.com/juju/juju/api/charms"
@@ -67,7 +69,7 @@ func (s *RemoveServiceSuite) TestSuccess(c *gc.C) {
 
 func (s *RemoveServiceSuite) TestRemoveLocalMetered(c *gc.C) {
 	ch := testcharms.Repo.CharmArchivePath(s.CharmsPath, "metered")
-	deploy := NewDeployCommand()
+	deploy := NewDefaultDeployCommand()
 	_, err := testing.RunCommand(c, deploy, ch, "--series", "quantal")
 	c.Assert(err, jc.ErrorIsNil)
 	err = runRemoveService(c, "metered")
@@ -131,16 +133,8 @@ func (s *RemoveCharmStoreCharmsSuite) SetUpTest(c *gc.C) {
 	testcharms.UploadCharm(c, s.client, "cs:quantal/metered-1", "metered")
 	deployCmd := &DeployCommand{}
 	cmd := modelcmd.Wrap(deployCmd)
-	deployCmd.NewAPIRoot = func() (DeployAPI, error) {
-		apiRoot, err := deployCmd.ModelCommandBase.NewAPIRoot()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		bakeryClient, err := deployCmd.BakeryClient()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		cstoreClient := newCharmStoreClient(bakeryClient).WithChannel(deployCmd.Channel)
+	deployCmd.NewAPIRoot = func(apiRoot api.Connection, bakeryClient *httpbakery.Client, csChannel csclientparams.Channel) (DeployAPI, error) {
+		cstoreClient := newCharmStoreClient(bakeryClient).WithChannel(csChannel)
 		return &deployAPIAdapter{
 			Connection:        apiRoot,
 			apiClient:         &apiClient{Client: apiRoot.Client()},

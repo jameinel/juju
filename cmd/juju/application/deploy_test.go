@@ -68,7 +68,7 @@ func (s *DeploySuite) SetUpTest(c *gc.C) {
 }
 
 func runDeploy(c *gc.C, args ...string) error {
-	_, err := coretesting.RunCommand(c, NewDeployCommand(), args...)
+	_, err := coretesting.RunCommand(c, NewDefaultDeployCommand(), args...)
 	return err
 }
 
@@ -100,7 +100,7 @@ var initErrorTests = []struct {
 func (s *DeploySuite) TestInitErrors(c *gc.C) {
 	for i, t := range initErrorTests {
 		c.Logf("test %d", i)
-		err := coretesting.InitCommand(NewDeployCommand(), t.args)
+		err := coretesting.InitCommand(NewDefaultDeployCommand(), t.args)
 		c.Assert(err, gc.ErrorMatches, t.err)
 	}
 }
@@ -603,7 +603,7 @@ func (s *DeployCharmStoreSuite) TestDeployAuthorization(c *gc.C) {
 		if test.readPermUser != "" {
 			s.changeReadPerm(c, url, test.readPermUser)
 		}
-		_, err := coretesting.RunCommand(c, NewDeployCommand(), test.deployURL, fmt.Sprintf("wordpress%d", i))
+		_, err := coretesting.RunCommand(c, NewDefaultDeployCommand(), test.deployURL, fmt.Sprintf("wordpress%d", i))
 		if test.expectError != "" {
 			c.Check(err, gc.ErrorMatches, test.expectError)
 			continue
@@ -910,7 +910,7 @@ func (s *DeployCharmStoreSuite) TestAddMetricCredentials(c *gc.C) {
 
 	deploy := &DeployCommand{
 		Steps: []DeployStep{&RegisterMeteredCharm{RegisterURL: server.URL, QueryURL: server.URL}},
-		NewAPIRoot: func() (DeployAPI, error) {
+		NewAPIRoot: func(api.Connection, *httpbakery.Client, csclientparams.Channel) (DeployAPI, error) {
 			return fakeAPI, nil
 		},
 	}
@@ -958,7 +958,7 @@ func (s *DeployCharmStoreSuite) TestAddMetricCredentialsDefaultPlan(c *gc.C) {
 
 	deploy := &DeployCommand{
 		Steps: []DeployStep{&RegisterMeteredCharm{RegisterURL: server.URL, QueryURL: server.URL}},
-		NewAPIRoot: func() (DeployAPI, error) {
+		NewAPIRoot: func(api.Connection, *httpbakery.Client, csclientparams.Channel) (DeployAPI, error) {
 			return fakeAPI, nil
 		},
 	}
@@ -999,7 +999,7 @@ func (s *DeployCharmStoreSuite) TestSetMetricCredentialsNotCalledForUnmeteredCha
 
 	deploy := &DeployCommand{
 		Steps: []DeployStep{&RegisterMeteredCharm{}},
-		NewAPIRoot: func() (DeployAPI, error) {
+		NewAPIRoot: func(api.Connection, *httpbakery.Client, csclientparams.Channel) (DeployAPI, error) {
 			return fakeAPI, nil
 		},
 	}
@@ -1048,7 +1048,7 @@ summary: summary
 	defer server.Close()
 	deploy := &DeployCommand{
 		Steps: []DeployStep{&RegisterMeteredCharm{RegisterURL: server.URL, QueryURL: server.URL}},
-		NewAPIRoot: func() (DeployAPI, error) {
+		NewAPIRoot: func(api.Connection, *httpbakery.Client, csclientparams.Channel) (DeployAPI, error) {
 			return fakeAPI, nil
 		},
 	}
@@ -1092,7 +1092,7 @@ summary: summary
 	defer server.Close()
 	deploy := &DeployCommand{
 		Steps: []DeployStep{&RegisterMeteredCharm{RegisterURL: server.URL, QueryURL: server.URL}},
-		NewAPIRoot: func() (DeployAPI, error) {
+		NewAPIRoot: func(api.Connection, *httpbakery.Client, csclientparams.Channel) (DeployAPI, error) {
 			return fakeAPI, nil
 		},
 	}
@@ -1170,7 +1170,7 @@ func (s *DeployCharmStoreSuite) TestDeployCharmsEndpointNotImplemented(c *gc.C) 
 
 	deploy := &DeployCommand{
 		Steps: []DeployStep{&RegisterMeteredCharm{RegisterURL: server.URL, QueryURL: server.URL}},
-		NewAPIRoot: func() (DeployAPI, error) {
+		NewAPIRoot: func(api.Connection, *httpbakery.Client, csclientparams.Channel) (DeployAPI, error) {
 			return fakeAPI, nil
 		},
 	}
@@ -1283,9 +1283,9 @@ func (s *DeployUnitTestSuite) TestDeployLocalCharm_GivesCorrectUserMessage(c *gc
 	withLocalCharmDeployable(fakeAPI, dummyURL, charmDir)
 	withCharmDeployable(fakeAPI, dummyURL, "trusty", charmDir.Meta(), charmDir.Metrics(), false, 1)
 
-	cmd := NewDeployCommandWithAPI(func() (DeployAPI, error) {
+	cmd := NewDeployCommand(func(api.Connection, *httpbakery.Client, csclientparams.Channel) (DeployAPI, error) {
 		return fakeAPI, nil
-	})
+	}, nil)
 	context, err := jtesting.RunCommand(c, cmd, charmDir.Path, "--series", "trusty")
 	c.Assert(err, jc.ErrorIsNil)
 
@@ -1306,7 +1306,9 @@ func (s *DeployUnitTestSuite) TestAddMetricCredentialsDefaultForUnmeteredCharm(c
 	withLocalCharmDeployable(fakeAPI, dummyURL, charmDir)
 	withCharmDeployable(fakeAPI, dummyURL, "trusty", charmDir.Meta(), charmDir.Metrics(), true, 1)
 
-	deployCmd := NewDeployCommandWithAPI(func() (DeployAPI, error) { return fakeAPI, nil })
+	deployCmd := NewDeployCommand(func(api.Connection, *httpbakery.Client, csclientparams.Channel) (DeployAPI, error) {
+		return fakeAPI, nil
+	}, nil)
 	_, err := coretesting.RunCommand(c, deployCmd, charmDir.Path, "--series", "trusty")
 	c.Assert(err, jc.ErrorIsNil)
 
@@ -1331,7 +1333,9 @@ func (s *DeployUnitTestSuite) TestRedeployLocalCharm_SucceedsWhenDeployed(c *gc.
 	withLocalCharmDeployable(fakeAPI, dummyURL, charmDir)
 	withCharmDeployable(fakeAPI, dummyURL, "trusty", charmDir.Meta(), charmDir.Metrics(), false, 1)
 
-	deployCmd := NewDeployCommandWithAPI(func() (DeployAPI, error) { return fakeAPI, nil })
+	deployCmd := NewDeployCommand(func(api.Connection, *httpbakery.Client, csclientparams.Channel) (DeployAPI, error) {
+		return fakeAPI, nil
+	}, nil)
 	context, err := jtesting.RunCommand(c, deployCmd, dummyURL.String())
 	c.Assert(err, jc.ErrorIsNil)
 
@@ -1389,7 +1393,9 @@ func (s *DeployUnitTestSuite) TestDeployBundle_OutputsCorrectMessage(c *gc.C) {
 		error(nil),
 	)
 
-	deployCmd := NewDeployCommandWithAPI(func() (DeployAPI, error) { return fakeAPI, nil })
+	deployCmd := NewDeployCommand(func(api.Connection, *httpbakery.Client, csclientparams.Channel) (DeployAPI, error) {
+		return fakeAPI, nil
+	}, nil)
 	context, err := jtesting.RunCommand(c, deployCmd, "cs:bundle/wordpress-simple")
 	c.Assert(err, jc.ErrorIsNil)
 

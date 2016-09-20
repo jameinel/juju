@@ -190,54 +190,47 @@ func (a *deployAPIAdapter) SetAnnotation(annotations map[string]map[string]strin
 	return a.annotationsClient.Set(annotations)
 }
 
-type NewAPIRootFn func() (DeployAPI, error)
+type NewAPIRootFn func(api.Connection, *httpbakery.Client, params.Channel) (DeployAPI, error)
 
-func NewDeployCommand() cmd.Command {
-	deployCmd := newDeployCommand()
-	cmd := modelcmd.Wrap(deployCmd)
-	deployCmd.NewAPIRoot = func() (DeployAPI, error) {
-		apiRoot, err := deployCmd.ModelCommandBase.NewAPIRoot()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		bakeryClient, err := deployCmd.BakeryClient()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		cstoreClient := newCharmStoreClient(bakeryClient).WithChannel(deployCmd.Channel)
+// NewAPIRoot constructs the API root accessor for the provided command.
+func NewAPIRoot(apiRoot api.Connection, bakeryClient *httpbakery.Client, csChannel params.Channel) (DeployAPI, error) {
+	cstoreClient := newCharmStoreClient(bakeryClient).WithChannel(csChannel)
 
-		adapter := &deployAPIAdapter{
-			Connection:        apiRoot,
-			apiClient:         &apiClient{Client: apiRoot.Client()},
-			charmsClient:      &charmsClient{Client: apicharms.NewClient(apiRoot)},
-			applicationClient: &applicationClient{Client: application.NewClient(apiRoot)},
-			modelConfigClient: &modelConfigClient{Client: modelconfig.NewClient(apiRoot)},
-			charmstoreClient:  &charmstoreClient{Client: cstoreClient},
-			annotationsClient: &annotationsClient{Client: annotations.NewClient(apiRoot)},
-			charmRepoClient:   &charmRepoClient{CharmStore: charmrepo.NewCharmStoreFromClient(cstoreClient)},
-		}
-
-		return adapter, nil
+	adapter := &deployAPIAdapter{
+		Connection:        apiRoot,
+		apiClient:         &apiClient{Client: apiRoot.Client()},
+		charmsClient:      &charmsClient{Client: apicharms.NewClient(apiRoot)},
+		applicationClient: &applicationClient{Client: application.NewClient(apiRoot)},
+		modelConfigClient: &modelConfigClient{Client: modelconfig.NewClient(apiRoot)},
+		charmstoreClient:  &charmstoreClient{Client: cstoreClient},
+		annotationsClient: &annotationsClient{Client: annotations.NewClient(apiRoot)},
+		charmRepoClient:   &charmRepoClient{CharmStore: charmrepo.NewCharmStoreFromClient(cstoreClient)},
 	}
-	return cmd
+
+	return adapter, nil
 }
 
-// NewDeployCommand returns a command to deploy services.
-func NewDeployCommandWithAPI(newAPIRoot NewAPIRootFn) cmd.Command {
-	cmd := newDeployCommand()
-	cmd.NewAPIRoot = newAPIRoot
-	return modelcmd.Wrap(cmd)
-}
-
-func newDeployCommand() *DeployCommand {
-	return &DeployCommand{
+// NewDefaultDeployCommand returns a command to deploy services.
+func NewDefaultDeployCommand() cmd.Command {
+	deployCmd := &DeployCommand{
 		Steps: []DeployStep{
 			&RegisterMeteredCharm{
 				RegisterURL: planURL + "/plan/authorize",
 				QueryURL:    planURL + "/charm",
 			},
 		},
+		NewAPIRoot: NewAPIRoot,
 	}
+	return modelcmd.Wrap(deployCmd)
+}
+
+// NewDeployCommand returns a command to deploy services with custom API root accessor and deploy steps.
+func NewDeployCommand(newAPIRoot NewAPIRootFn, deploySteps []DeployStep) cmd.Command {
+	deployCmd := &DeployCommand{
+		Steps:      deploySteps,
+		NewAPIRoot: newAPIRoot,
+	}
+	return modelcmd.Wrap(deployCmd)
 }
 
 type DeployCommand struct {
@@ -677,7 +670,16 @@ func (c *DeployCommand) Run(ctx *cmd.Context) error {
 	if err != nil {
 		return err
 	}
-	apiRoot, err := c.NewAPIRoot()
+	apiConn, err := c.ModelCommandBase.NewAPIRoot()
+	if err != nil {
+		return err
+	}
+	bakeryClient, err := c.BakeryClient()
+	if err != nil {
+		return err
+	}
+
+	apiRoot, err := c.NewAPIRoot(apiConn, bakeryClient, c.Channel)
 	if err != nil {
 		return errors.Trace(err)
 	}
