@@ -4123,7 +4123,7 @@ func setAdminPassword(c *gc.C, inst *gitjujutesting.MgoInstance, owner names.Use
 
 func (s *SetAdminMongoPasswordSuite) TestSetAdminMongoPassword(c *gc.C) {
 	inst := &gitjujutesting.MgoInstance{EnableAuth: true}
-	err := inst.Start(testing.Certs)
+	err := inst.Start(nil) //testing.Certs)
 	c.Assert(err, jc.ErrorIsNil)
 	defer inst.DestroyWithLog()
 

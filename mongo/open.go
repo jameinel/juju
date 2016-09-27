@@ -133,13 +133,13 @@ func DialInfo(info Info, opts DialOpts) (*mgo.DialInfo, error) {
 			logger.Debugf("connection failed, will retry: %v", err)
 			return nil, err
 		}
-		cc := tls.Client(c, tlsConfig)
-		if err := cc.Handshake(); err != nil {
-			logger.Debugf("TLS handshake failed: %v", err)
-			return nil, err
-		}
+		// cc := tls.Client(c, tlsConfig)
+		// if err := cc.Handshake(); err != nil {
+		// 	logger.Debugf("TLS handshake failed: %v", err)
+		// 	return nil, err
+		// }
 		logger.Infof("dialled mongo successfully on address %q", addr)
-		return cc, nil
+		return c, nil
 	}
 
 	return &mgo.DialInfo{
