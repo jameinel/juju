@@ -63,7 +63,7 @@ func (s *RebootSuite) SetUpTest(c *gc.C) {
 	})
 
 	s.mgoInst.EnableAuth = true
-	err := s.mgoInst.Start(coretesting.Certs)
+	err := s.mgoInst.Start(nil)
 	c.Assert(err, jc.ErrorIsNil)
 
 	configParams := agent.AgentConfigParams{

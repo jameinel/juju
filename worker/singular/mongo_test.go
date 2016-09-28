@@ -545,7 +545,7 @@ func startReplicaSet(n int) (_ []*gitjujutesting.MgoInstance, err error) {
 
 func newMongoInstance() (*gitjujutesting.MgoInstance, error) {
 	inst := &gitjujutesting.MgoInstance{Params: []string{"--replSet", replicaSetName}}
-	if err := inst.Start(testing.Certs); err != nil {
+	if err := inst.Start(nil); err != nil {
 		return nil, fmt.Errorf("cannot start mongo server: %s", err.Error())
 	}
 	return inst, nil

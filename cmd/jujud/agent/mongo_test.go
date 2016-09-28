@@ -31,7 +31,7 @@ func (s *mongoSuite) testStateWorkerDialSetsWriteMajority(c *gc.C, configureRepl
 	inst := gitjujutesting.MgoInstance{
 		Params: []string{"--replSet", "juju"},
 	}
-	err := inst.Start(coretesting.Certs)
+	err := inst.Start(nil)
 	c.Assert(err, jc.ErrorIsNil)
 	defer inst.Destroy()
 

@@ -48,7 +48,7 @@ func (s *bootstrapSuite) SetUpTest(c *gc.C) {
 	// Don't use MgoSuite, because we need to ensure
 	// we have a fresh mongo for each test case.
 	s.mgoInst.EnableAuth = true
-	err := s.mgoInst.Start(testing.Certs)
+	err := s.mgoInst.Start(nil)
 	c.Assert(err, jc.ErrorIsNil)
 }
 

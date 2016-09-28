@@ -84,7 +84,7 @@ func (r *RestoreSuite) createTestFiles(c *gc.C) {
 
 func (r *RestoreSuite) TestReplicasetIsReset(c *gc.C) {
 	server := &gitjujutesting.MgoInstance{Params: []string{"--replSet", "juju"}}
-	err := server.Start(coretesting.Certs)
+	err := server.Start(nil)
 	c.Assert(err, jc.ErrorIsNil)
 	defer server.DestroyWithLog()
 	mgoAddr := server.Addr()
@@ -227,7 +227,7 @@ func (r *RestoreSuite) TestNewDialInfo(c *gc.C) {
 // mongo instances.
 func (r *RestoreSuite) TestUpdateMongoEntries(c *gc.C) {
 	server := &gitjujutesting.MgoInstance{}
-	err := server.Start(coretesting.Certs)
+	err := server.Start(nil)
 	c.Assert(err, jc.ErrorIsNil)
 	defer server.DestroyWithLog()
 	dialInfo := server.DialInfo()
@@ -259,7 +259,7 @@ func (r *RestoreSuite) TestUpdateMongoEntries(c *gc.C) {
 
 func (r *RestoreSuite) TestNewConnection(c *gc.C) {
 	server := &gitjujutesting.MgoInstance{}
-	err := server.Start(coretesting.Certs)
+	err := server.Start(nil)
 	c.Assert(err, jc.ErrorIsNil)
 	defer server.DestroyWithLog()
 

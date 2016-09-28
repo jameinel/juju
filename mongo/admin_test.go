@@ -32,7 +32,7 @@ func (s *adminSuite) SetUpTest(c *gc.C) {
 
 func (s *adminSuite) setUpMongo(c *gc.C) *mgo.DialInfo {
 	inst := &gitjujutesting.MgoInstance{}
-	err := inst.Start(coretesting.Certs)
+	err := inst.Start(nil)
 	c.Assert(err, jc.ErrorIsNil)
 	s.AddCleanup(func(*gc.C) { inst.Destroy() })
 	dialInfo := inst.DialInfo()
