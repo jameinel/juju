@@ -22,6 +22,7 @@ type certSuite struct {
 var _ = gc.Suite(&certSuite{})
 
 func (s *certSuite) TestUpdateCert(c *gc.C) {
+	c.Skip("can't update what you don't have")
 	config := s.sampleConfig(c)
 	certChanged := make(chan params.StateServingInfo)
 	config.CertChanged = certChanged

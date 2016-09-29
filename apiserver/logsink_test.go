@@ -207,12 +207,12 @@ func (s *logsinkSuite) dialWebsocket(c *gc.C) *websocket.Conn {
 }
 
 func (s *logsinkSuite) dialWebsocketInternal(c *gc.C, header http.Header) *websocket.Conn {
-	server := s.logsinkURL(c, "wss").String()
+	server := s.logsinkURL(c, "ws").String()
 	return dialWebsocketFromURL(c, server, header)
 }
 
 func (s *logsinkSuite) openWebsocketCustomPath(c *gc.C, path string) *bufio.Reader {
-	server := s.logsinkURL(c, "wss")
+	server := s.logsinkURL(c, "ws")
 	server.Path = path
 	conn := dialWebsocketFromURL(c, server.String(), s.makeAuthHeader())
 	s.AddCleanup(func(_ *gc.C) { conn.Close() })
