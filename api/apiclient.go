@@ -479,11 +479,11 @@ func dialWebsocket(addr, path string, opts DialOpts, tlsConfig *tls.Config, try 
 	// in websockets. We pass localhost to satisfy the API; it is
 	// inconsequential to us.
 	const origin = "http://localhost/"
-	cfg, err := websocket.NewConfig("wss://"+addr+path, origin)
+	cfg, err := websocket.NewConfig("ws://"+addr+path, origin)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	cfg.TlsConfig = tlsConfig
+	// cfg.TlsConfig = tlsConfig
 	return try.Start(newWebsocketDialer(cfg, opts))
 }
 

@@ -88,7 +88,7 @@ func (s *authHttpSuite) TearDownTest(c *gc.C) {
 func (s *authHttpSuite) baseURL(c *gc.C) *url.URL {
 	info := s.APIInfo(c)
 	return &url.URL{
-		Scheme: "https",
+		Scheme: "http",
 		Host:   info.Addrs[0],
 		Path:   "",
 	}

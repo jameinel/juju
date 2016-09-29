@@ -45,7 +45,7 @@ type Server struct {
 	wg                sync.WaitGroup
 	state             *state.State
 	statePool         *state.StatePool
-	lis               *changeCertListener
+	lis               net.Listener // changeCertListener
 	tag               names.Tag
 	dataDir           string
 	logDir            string
@@ -128,6 +128,7 @@ func newServer(s *state.State, lis *net.TCPListener, cfg ServerConfig) (_ *Serve
 	if err != nil {
 		return nil, err
 	}
+	_ = tlsCert
 	stPool := cfg.StatePool
 	if stPool == nil {
 		stPool = state.NewStatePool(s)
@@ -147,7 +148,7 @@ func newServer(s *state.State, lis *net.TCPListener, cfg ServerConfig) (_ *Serve
 			3: newAdminAPIV3,
 		},
 	}
-	srv.lis = srv.newChangeCertListener(lis, cfg.CertChanged, tlsCert)
+	srv.lis = lis // srv.newChangeCertListener(lis, cfg.CertChanged, tlsCert)
 	srv.authCtxt, err = newAuthContext(s)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -209,11 +210,11 @@ func (srv *Server) run() {
 		srv.tomb.Kill(srv.expireLocalLoginInteractions())
 	}()
 
-	srv.wg.Add(1)
-	go func() {
-		defer srv.wg.Done()
-		srv.tomb.Kill(srv.lis.processCertChanges())
-	}()
+	// srv.wg.Add(1)
+	// go func() {
+	// 	defer srv.wg.Done()
+	// 	srv.tomb.Kill(srv.lis.processCertChanges())
+	// }()
 
 	// for pat based handlers, they are matched in-order of being
 	// registered, first match wins. So more specific ones have to be

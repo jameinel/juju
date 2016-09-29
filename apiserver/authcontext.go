@@ -182,7 +182,7 @@ func (a authenticator) authenticatorForTag(tag names.Tag) (authentication.Entity
 // local users with either passwords or macaroons.
 func (a authenticator) localUserAuth() *authentication.UserAuthenticator {
 	localUserIdentityLocation := url.URL{
-		Scheme: "https",
+		Scheme: "http",
 		Host:   a.serverHost,
 		Path:   localUserIdentityLocationPath,
 	}

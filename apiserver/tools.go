@@ -231,7 +231,7 @@ func (h *toolsUploadHandler) getServerRoot(r *http.Request, query url.Values, st
 		}
 		uuid = env.UUID()
 	}
-	return fmt.Sprintf("https://%s/model/%s", r.Host, uuid), nil
+	return fmt.Sprintf("http://%s/model/%s", r.Host, uuid), nil
 }
 
 // handleUpload uploads the tools data from the reader to env storage as the specified version.

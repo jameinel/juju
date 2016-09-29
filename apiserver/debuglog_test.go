@@ -38,7 +38,7 @@ func (s *debugLogBaseSuite) TestWithHTTP(c *gc.C) {
 }
 
 func (s *debugLogBaseSuite) TestWithHTTPS(c *gc.C) {
-	uri := s.logURL(c, "https", nil).String()
+	uri := s.logURL(c, "http", nil).String()
 	response := s.sendRequest(c, httpRequestParams{method: "GET", url: uri})
 	c.Assert(response.StatusCode, gc.Equals, http.StatusBadRequest)
 }
