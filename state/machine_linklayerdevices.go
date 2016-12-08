@@ -859,7 +859,84 @@ func (m *Machine) AllNetworkAddresses() ([]network.Address, error) {
 	for i := range stateAddresses {
 		networkAddresses[i] = stateAddresses[i].NetworkAddress()
 	}
+	// TODO(jam): 20161130 NetworkAddress object has a SpaceName attribute.
+	// However, we are not filling in that information here.
 	return networkAddresses, nil
+}
+
+
+// Should this be NetworkInterface rather than NetworkInfo?
+type NetworkInfo struct {
+	// If the machine is in the given space, it should have a primary host
+	// device that is in that space, which should be bridged.
+	HostDevice *LinkLayerDevice
+	BridgeDevice *LinkLayerDevice
+}
+
+// BridgeDevicesForSpaces takes a list of spaces, and returns the associated
+// bridge that should be used for that space. If no bridge has been created on
+// the machine, it can return nil for the BridgeDevice, but it should return
+// the network device itself that is in that space.
+// TODO: Could we handle multiple bridges/devices associated with each space?
+func (m *Machine) BridgeDevicesForSpaces(spaces []string) (map[string]NetworkInfo, error) {
+	addresses, err := m.AllAddresses()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	requestedSpaces := set.NewStrings(spaces...)
+	spaceToDevices := make(map[string][]*LinkLayerDevice, 0)
+	// TODO(jam): 2016-12-08 We look up each subnet one-by-one, and then look
+	// up each Link-Layer-Device one-by-one, it feels like we should 
+	// 'aggregate all subnet CIDR' and then grab them in one pass, and then
+	// filter them to find the link layer devices we care about, and ask for
+	// them in a single pass again.
+	for _, addr := range addresses {
+		subnet, err := addr.Subnet()
+		if err != nil {
+			// XXX should we be omitting all other good records because this one was bad?
+			return nil, errors.Trace(err)
+		}
+		spaceName := subnet.SpaceName()
+		if !requestedSpaces.Contains(spaceName) {
+			continue
+		}
+		// TODO(jam): 2016-12-08 Dedup devices as well, since a single device
+		// might have multiple addresses (in the same spaceName?)
+		device, err := addr.Device()
+		if err != nil {
+			// XXX should we be omitting all other good records because this one was bad?
+			return nil, errors.Trace(err)
+		}
+		spaceToDevices[spaceName] = append(spaceToDevices[spaceName], device)
+	}
+	result := make(map[string]NetworkInfo, 0)
+	for spaceName, devices := range spaceToDevices {
+		ni := NetworkInfo{}
+		for _, device := range devices {
+			if device.Type() == BridgeDevice {
+				// TODO(jam): What to do if the host has 2 devices for the same
+				// space? We talked about 'exclusive mode' for a given binding,
+				// which would then allow us to say you can't bridge the other
+				// one.
+				if ni.BridgeDevice != nil {
+					logger.Warningf("Found >1 bridge devices for the same space: %s vs %s for %s",
+						ni.BridgeDevice.Name(), device.Name(), spaceName)
+				} else {
+					ni.BridgeDevice = device
+				}
+			} else {
+				// TODO(jam): What do do about bonds vs underlying devices, etc.
+				if ni.HostDevice != nil {
+					logger.Warningf("Found >1 host devices for the same space: %s vs %s for %s",
+						ni.HostDevice.Name(), device.Name(), spaceName)
+				} else {
+					ni.HostDevice = device
+				}
+			}
+		}
+		result[spaceName] = ni
+	}
+	return result, nil
 }
 
 // SetParentLinkLayerDevicesBeforeTheirChildren splits the given devicesArgs
