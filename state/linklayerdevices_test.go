@@ -665,21 +665,44 @@ func (s *linkLayerDevicesStateSuite) setupMachineWithOneNIC(c *gc.C) {
 }
 
 func (s *linkLayerDevicesStateSuite) setupMachineWithOneNICAndBridge(c *gc.C) {
-	s.setupMachineWithOneNIC(c)
-	err := s.machine.SetLinkLayerDevices(
+	_, err := s.State.AddSubnet(state.SubnetInfo{
+		CIDR:      "10.0.0.0/24",
+		SpaceName: "default",
+	})
+	c.Assert(err, jc.ErrorIsNil)
+	_, err = s.State.AddSubnet(state.SubnetInfo{
+		CIDR:      "10.10.0.0/24",
+		SpaceName: "dmz",
+	})
+	c.Assert(err, jc.ErrorIsNil)
+	err = s.machine.SetLinkLayerDevices(
 		state.LinkLayerDeviceArgs{
 			Name:       "br-eth0",
 			Type:       state.BridgeDevice,
-			ParentName: "eth0",
-			MACAddress: "01:23:45:67:89:ab:cd:ef", // Same as parent device
+			ParentName: "",
+			MACAddress: "01:23:45:67:89:ab:cd:ef", // Same as primary device
+			IsUp:       true,
+		},
+	)
+	err = s.machine.SetLinkLayerDevices(
+		state.LinkLayerDeviceArgs{
+			Name:       "eth0",
+			Type:       state.EthernetDevice,
+			MACAddress: "01:23:45:67:89:ab:cd:ef",
+			ParentName: "br-eth0",
 			IsUp:       true,
 		},
 	)
 	c.Assert(err, jc.ErrorIsNil)
 	err = s.machine.SetDevicesAddresses(
 		state.LinkLayerDeviceAddress{
+			DeviceName:   "eth0",
+			CIDRAddress:  "10.0.0.20/24",
+			ConfigMethod: state.StaticAddress,
+		},
+		state.LinkLayerDeviceAddress{
 			DeviceName:   "br-eth0",
-			CIDRAddress:  "10.0.0.20/24", // Same as the parent device
+			CIDRAddress:  "10.0.0.20/24", // Same as primary device
 			ConfigMethod: state.StaticAddress,
 		},
 	)
