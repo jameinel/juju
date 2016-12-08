@@ -864,12 +864,11 @@ func (m *Machine) AllNetworkAddresses() ([]network.Address, error) {
 	return networkAddresses, nil
 }
 
-
 // Should this be NetworkInterface rather than NetworkInfo?
 type NetworkInfo struct {
 	// If the machine is in the given space, it should have a primary host
 	// device that is in that space, which should be bridged.
-	HostDevice *LinkLayerDevice
+	HostDevice   *LinkLayerDevice
 	BridgeDevice *LinkLayerDevice
 }
 
@@ -886,7 +885,7 @@ func (m *Machine) BridgeDevicesForSpaces(spaces []string) (map[string]NetworkInf
 	requestedSpaces := set.NewStrings(spaces...)
 	spaceToDevices := make(map[string][]*LinkLayerDevice, 0)
 	// TODO(jam): 2016-12-08 We look up each subnet one-by-one, and then look
-	// up each Link-Layer-Device one-by-one, it feels like we should 
+	// up each Link-Layer-Device one-by-one, it feels like we should
 	// 'aggregate all subnet CIDR' and then grab them in one pass, and then
 	// filter them to find the link layer devices we care about, and ask for
 	// them in a single pass again.
