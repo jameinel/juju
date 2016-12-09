@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	stderrors "errors"
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/juju/errors"
@@ -126,30 +125,30 @@ func DialInfo(info Info, opts DialOpts) (*mgo.DialInfo, error) {
 	tlsConfig.RootCAs = pool
 	tlsConfig.ServerName = "juju-mongodb"
 
-	dial := func(server *mgo.ServerAddr) (net.Conn, error) {
-		addr := server.TCPAddr().String()
-		c, err := net.DialTimeout("tcp", addr, opts.Timeout)
-		if err != nil {
-			logger.Warningf("mongodb connection failed, will retry: %v", err)
-			return nil, err
-		}
-		cc := tls.Client(c, tlsConfig)
-		if err := cc.Handshake(); err != nil {
-			logger.Warningf("TLS handshake failed: %v", err)
-			if err := c.Close(); err != nil {
-				logger.Warningf("failed to close connection: %v", err)
-			}
-			return nil, err
-		}
-		logger.Debugf("dialled mongodb server at %q", addr)
-		return cc, nil
-	}
+	// dial := func(server *mgo.ServerAddr) (net.Conn, error) {
+	// 	addr := server.TCPAddr().String()
+	// 	c, err := net.DialTimeout("tcp", addr, opts.Timeout)
+	// 	if err != nil {
+	// 		logger.Warningf("mongodb connection failed, will retry: %v", err)
+	// 		return nil, err
+	// 	}
+	// 	cc := tls.Client(c, tlsConfig)
+	// 	// if err := cc.Handshake(); err != nil {
+	// 	// 	logger.Warningf("TLS handshake failed: %v", err)
+	// 	// 	if err := c.Close(); err != nil {
+	// 	// 		logger.Warningf("failed to close connection: %v", err)
+	// 	// 	}
+	// 	// 	return nil, err
+	// 	// }
+	// 	logger.Debugf("dialled mongodb server at %q", addr)
+	// 	return cc, nil
+	// }
 
 	return &mgo.DialInfo{
-		Addrs:      info.Addrs,
-		Timeout:    opts.Timeout,
-		DialServer: dial,
-		Direct:     opts.Direct,
+		Addrs:   info.Addrs,
+		Timeout: opts.Timeout,
+		//DialServer: dial,
+		Direct: opts.Direct,
 	}, nil
 }
 
@@ -162,12 +161,12 @@ func DialWithInfo(info Info, opts DialOpts) (*mgo.Session, error) {
 
 	dialInfo, err := DialInfo(info, opts)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	session, err := mgo.DialWithInfo(dialInfo)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	if opts.SocketTimeout == 0 {

@@ -312,20 +312,20 @@ func Reset(c *gc.C) {
 		}
 		s.destroy()
 	}
-	if mongoAlive() {
-		err := retry.Call(retry.CallArgs{
-			Func: gitjujutesting.MgoServer.Reset,
-			// Only interested in retrying the intermittent
-			// 'unexpected message'.
-			IsFatalError: func(err error) bool {
-				return !strings.HasSuffix(err.Error(), "unexpected message")
-			},
-			Delay:    time.Millisecond,
-			Clock:    clock.WallClock,
-			Attempts: 5,
-		})
-		c.Assert(err, jc.ErrorIsNil)
-	}
+	// if mongoAlive() {
+	err := retry.Call(retry.CallArgs{
+		Func: gitjujutesting.MgoServer.Reset,
+		// Only interested in retrying the intermittent
+		// 'unexpected message'.
+		IsFatalError: func(err error) bool {
+			return !strings.HasSuffix(err.Error(), "unexpected message")
+		},
+		Delay:    time.Second,
+		Clock:    clock.WallClock,
+		Attempts: 5,
+	})
+	c.Assert(err, jc.ErrorIsNil)
+	// }
 }
 
 func (state *environState) destroy() {
@@ -371,9 +371,9 @@ func (state *environState) destroyLocked() {
 		}
 	}
 
-	if mongoAlive() {
-		gitjujutesting.MgoServer.Reset()
-	}
+	// if mongoAlive() {
+	gitjujutesting.MgoServer.Reset()
+	// }
 }
 
 // mongoAlive reports whether the mongo server is
