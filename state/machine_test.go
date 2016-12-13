@@ -768,25 +768,25 @@ func (s *MachineSuite) TestAllSpacesSimpleConstraints(c *gc.C) {
 }
 
 func (s *MachineSuite) TestAllSpacesEndpoints(c *gc.C) {
-	_, err := s.State.AddSpace("space", "", nil, true)
+	_, err := s.State.AddSpace("db", "", nil, true)
 	c.Assert(err, jc.ErrorIsNil)
 	machine, err := s.State.AddMachine("quantal", state.JobHostUnits)
 	c.Assert(err, jc.ErrorIsNil)
 	svc := s.AddTestingServiceWithBindings(c, "mysql",
-		s.AddTestingCharm(c, "mysql"), map[string]string{"server": "space"})
+		s.AddTestingCharm(c, "mysql"), map[string]string{"server": "db"})
 	unit, err := svc.AddUnit()
 	c.Assert(err, jc.ErrorIsNil)
 	err = unit.AssignToMachine(machine)
 	c.Assert(err, jc.ErrorIsNil)
 	spaces, err := machine.AllSpaces()
 	c.Assert(err, jc.ErrorIsNil)
-	c.Check(spaces.SortedValues(), gc.DeepEquals, []string{"space"})
+	c.Check(spaces.SortedValues(), gc.DeepEquals, []string{"db"})
 }
 
 func (s *MachineSuite) TestAllSpacesEndpointsAndConstraints(c *gc.C) {
 	_, err := s.State.AddSpace("foo", "", nil, true)
 	c.Assert(err, jc.ErrorIsNil)
-	_, err = s.State.AddSpace("space", "", nil, true)
+	_, err = s.State.AddSpace("db", "", nil, true)
 	c.Assert(err, jc.ErrorIsNil)
 	machine, err := s.State.AddMachine("quantal", state.JobHostUnits)
 	c.Assert(err, jc.ErrorIsNil)
@@ -795,14 +795,14 @@ func (s *MachineSuite) TestAllSpacesEndpointsAndConstraints(c *gc.C) {
 	})
 	c.Assert(err, jc.ErrorIsNil)
 	svc := s.AddTestingServiceWithBindings(c, "mysql",
-		s.AddTestingCharm(c, "mysql"), map[string]string{"server": "space"})
+		s.AddTestingCharm(c, "mysql"), map[string]string{"server": "db"})
 	unit, err := svc.AddUnit()
 	c.Assert(err, jc.ErrorIsNil)
 	err = unit.AssignToMachine(machine)
 	c.Assert(err, jc.ErrorIsNil)
 	spaces, err := machine.AllSpaces()
 	c.Assert(err, jc.ErrorIsNil)
-	c.Check(spaces.SortedValues(), gc.DeepEquals, []string{"foo", "space"})
+	c.Check(spaces.SortedValues(), gc.DeepEquals, []string{"foo", "db"})
 }
 
 func (s *MachineSuite) TestMachineSetProvisionedUpdatesCharacteristics(c *gc.C) {

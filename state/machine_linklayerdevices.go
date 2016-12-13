@@ -918,7 +918,7 @@ func (m *Machine) BridgeDevicesForSpaces(spaces []string) (map[string]NetworkInf
 				// which would then allow us to say you can't bridge the other
 				// one.
 				if ni.BridgeDevice != nil {
-					logger.Warningf("Found >1 bridge devices for the same space: %s vs %s for %s",
+					logger.Warningf("Found >1 bridge devices for the same space: %q vs %q for %q",
 						ni.BridgeDevice.Name(), device.Name(), spaceName)
 				} else {
 					ni.BridgeDevice = device
@@ -926,7 +926,7 @@ func (m *Machine) BridgeDevicesForSpaces(spaces []string) (map[string]NetworkInf
 			} else {
 				// TODO(jam): What do do about bonds vs underlying devices, etc.
 				if ni.HostDevice != nil {
-					logger.Warningf("Found >1 host devices for the same space: %s vs %s for %s",
+					logger.Warningf("Found >1 host devices for the same space: %q vs %q for %q",
 						ni.HostDevice.Name(), device.Name(), spaceName)
 				} else {
 					ni.HostDevice = device
