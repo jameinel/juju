@@ -90,8 +90,11 @@ func (t *lastRevnoTracker) ensureCollection(collection string) *collectionRevnos
 	// Create a new set for this collection
 	coll = &collectionRevnos{
 		name:            collection,
-		opaque:          make(map[interface{}]int64),
-		modelUUIDRevnos: make(map[string]*modelRevnos),
+		// We late allocate opaque or modelUUIDRevnos. This is because for
+		// a given collection, we are unlikely to ever need both, as either
+		// all keys are modelUUID prefixed or none are.
+		// opaque:          make(map[interface{}]int64),
+		// modelUUIDRevnos: make(map[string]*modelRevnos),
 	}
 	t.byCollection[collection] = coll
 	return coll
@@ -102,6 +105,9 @@ func (t *lastRevnoTracker) updateAsOpaque(collection string, id interface{}, rev
 	lastRevno, found := coll.opaque[id]
 	if !found {
 		lastRevno = -1
+	}
+	if coll.opaque == nil {
+		coll.opaque = make(map[interface{}]int64)
 	}
 	coll.opaque[id] = revno
 	return lastRevno != revno
@@ -116,6 +122,9 @@ func (t *lastRevnoTracker) ensureModel(collection, modelUUID string) *modelRevno
 	model = &modelRevnos{
 		uuid:   modelUUID,
 		revnos: make(map[string]int64),
+	}
+	if coll.modelUUIDRevnos == nil {
+		coll.modelUUIDRevnos = make(map[string]*modelRevnos)
 	}
 	coll.modelUUIDRevnos[modelUUID] = model
 	return model
