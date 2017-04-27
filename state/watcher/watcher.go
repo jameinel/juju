@@ -31,7 +31,7 @@ type Watcher struct {
 	// current holds the current txn-revno values for all the observed
 	// documents known to exist. Documents not observed or deleted are
 	// omitted from this map and are considered to have revno -1.
-	current map[watchKey]int64
+	current *lastRevnoTracker
 
 	// needSync is set when a synchronization should take
 	// place.
@@ -109,7 +109,7 @@ func New(changelog *mgo.Collection) *Watcher {
 	w := &Watcher{
 		log:     changelog,
 		watches: make(map[watchKey][]watchInfo),
-		current: make(map[watchKey]int64),
+		current: NewRevnoTracker(),
 		request: make(chan interface{}),
 	}
 	go func() {
@@ -310,9 +310,10 @@ func (w *Watcher) handle(req interface{}) {
 				panic(fmt.Errorf("tried to re-add channel %v for %s", info.ch, r.key))
 			}
 		}
-		if revno, ok := w.current[r.key]; ok && (revno > r.info.revno || revno == -1 && r.info.revno >= 0) {
-			r.info.revno = revno
-			w.requestEvents = append(w.requestEvents, event{r.info.ch, r.key, revno})
+		curRevno, found := w.current.Find(r.key.c, r.key.id)
+		if found && (curRevno > r.info.revno || curRevno == -1 && r.info.revno >= 0) {
+			r.info.revno = curRevno
+			w.requestEvents = append(w.requestEvents, event{r.info.ch, r.key, curRevno})
 		}
 		w.watches[r.key] = append(w.watches[r.key], r.info)
 	case reqUnwatch:
@@ -417,10 +418,10 @@ func (w *Watcher) sync() error {
 				if revno < 0 {
 					revno = -1
 				}
-				if w.current[key] == revno {
+				if !w.current.Update(key.c, key.id, revno) {
+					// Nothing changed
 					continue
 				}
-				w.current[key] = revno
 				// Queue notifications for per-collection watches.
 				for _, info := range w.watches[watchKey{c.Name, nil}] {
 					if info.filter != nil && !info.filter(d[i]) {
