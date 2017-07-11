@@ -94,6 +94,16 @@ func assertAlive(c *gc.C, w *presence.Watcher, key string, expAlive bool) {
 	c.Assert(realAlive, gc.Equals, expAlive)
 }
 
+func assertAliveMulti(c *gc.C, w *presence.Watcher, expAlive map[string]bool) {
+	keys := make([]string, 0, len(expAlive))
+	for key, _ := range expAlive {
+		keys = append(keys, key)
+	}
+	realAlive, err := w.AliveMulti(keys)
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(realAlive, gc.DeepEquals, expAlive)
+}
+
 // assertStopped stops a worker and waits until it reports stopped.
 // Use this method in favor of defer w.Stop() because you _must_ ensure
 // that the worker has stopped, and thus is no longer using its mgo
@@ -131,6 +141,8 @@ func (s *PresenceSuite) TestAliveError(c *gc.C) {
 	w.Wait()
 }
 
+type aliveMap map[string]bool
+
 func (s *PresenceSuite) TestWorkflow(c *gc.C) {
 	w := presence.NewWatcher(s.presence, s.modelTag)
 	pa := presence.NewPinger(s.presence, s.modelTag, "a", presence.DirectRecordFunc(s.presence))
@@ -141,6 +153,7 @@ func (s *PresenceSuite) TestWorkflow(c *gc.C) {
 
 	assertAlive(c, w, "a", false)
 	assertAlive(c, w, "b", false)
+	assertAliveMulti(c, w, aliveMap{"a": false, "b": false})
 
 	// Buffer one entry to avoid blocking the watcher here.
 	cha := make(chan presence.Change, 1)
@@ -151,6 +164,7 @@ func (s *PresenceSuite) TestWorkflow(c *gc.C) {
 	// Initial events with current status.
 	assertChange(c, cha, presence.Change{"a", false})
 	assertChange(c, chb, presence.Change{"b", false})
+	assertAliveMulti(c, w, aliveMap{"a": false, "b": false})
 
 	w.StartSync()
 	assertNoChange(c, cha)
@@ -165,6 +179,7 @@ func (s *PresenceSuite) TestWorkflow(c *gc.C) {
 
 	assertAlive(c, w, "a", true)
 	assertAlive(c, w, "b", false)
+	assertAliveMulti(c, w, aliveMap{"a": true, "b": false})
 
 	// Changes while the channel is out are not observed.
 	w.Unwatch("a", cha)
@@ -179,6 +194,7 @@ func (s *PresenceSuite) TestWorkflow(c *gc.C) {
 	// We can still query it manually, though.
 	assertAlive(c, w, "a", true)
 	assertAlive(c, w, "b", false)
+	assertAliveMulti(c, w, aliveMap{"a": true, "b": false})
 
 	// Initial positive event. No refresh needed.
 	w.Watch("a", cha)
@@ -190,6 +206,7 @@ func (s *PresenceSuite) TestWorkflow(c *gc.C) {
 	assertChange(c, chb, presence.Change{"b", true})
 	assertNoChange(c, cha)
 	assertNoChange(c, chb)
+	assertAliveMulti(c, w, aliveMap{"a": true, "b": true, "unknown": false})
 
 	c.Assert(pa.Stop(), gc.IsNil)
 
@@ -204,6 +221,7 @@ func (s *PresenceSuite) TestWorkflow(c *gc.C) {
 	w.StartSync()
 	assertChange(c, cha, presence.Change{"a", false})
 	assertChange(c, chb, presence.Change{"b", false})
+	assertAliveMulti(c, w, aliveMap{"a": false, "b": false})
 
 	assertStopped(c, w)
 }

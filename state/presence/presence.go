@@ -11,11 +11,13 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/juju/loggo"
+	"github.com/juju/utils"
 	"gopkg.in/juju/names.v2"
 	"gopkg.in/juju/worker.v1"
 	"gopkg.in/mgo.v2"
@@ -238,6 +240,11 @@ type reqAlive struct {
 	result chan bool
 }
 
+type reqAliveMulti struct {
+	keys   []string
+	result chan map[string]bool
+}
+
 func (w *Watcher) sendReq(req interface{}) {
 	select {
 	case w.request <- req:
@@ -287,6 +294,36 @@ func (w *Watcher) Alive(key string) (bool, error) {
 		return false, errors.Errorf("cannot check liveness: watcher is dying")
 	}
 	logger.Tracef("[%s] Alive(%q) -> %v", w.modelUUID[:6], key, alive)
+	return alive, nil
+}
+
+// AliveMulti allows you to ask about many entities at the same time.
+func (w *Watcher) AliveMulti(keys []string) (map[string]bool, error) {
+	result := make(chan map[string]bool, 1)
+	w.sendReq(reqAliveMulti{
+		keys:   keys,
+		result: result,
+	})
+	var alive map[string]bool
+	select {
+	case alive = <-result:
+	case <-w.tomb.Dying():
+		return nil, errors.Errorf("cannot check liveness: watcher is dying")
+	}
+	if logger.IsTraceEnabled() {
+		// nice formatting of a map
+		keys := make([]string, 0, len(alive))
+		for key, _ := range alive {
+			keys = append(keys, key)
+		}
+		utils.SortStringsNaturally(keys)
+		out := []string{}
+		for _, key := range keys {
+			out = append(out, fmt.Sprintf("  %v: %v", key, alive[key]))
+		}
+
+		logger.Tracef("[%s] AliveMulti ->\n%v", w.modelUUID[:6], strings.Join(out, "\n"))
+	}
 	return alive, nil
 }
 
@@ -405,6 +442,13 @@ func (w *Watcher) handle(req interface{}) {
 	case reqAlive:
 		_, alive := w.beingSeq[r.key]
 		r.result <- alive
+	case reqAliveMulti:
+		out := make(map[string]bool, len(r.keys))
+		for _, key := range r.keys {
+			_, alive := w.beingSeq[key]
+			out[key] = alive
+		}
+		r.result <- out
 	default:
 		panic(fmt.Errorf("unknown request: %T", req))
 	}
