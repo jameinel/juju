@@ -29,9 +29,9 @@ type peerGroupInfo struct {
 // specifying whether that machine has been configured as voting. It will
 // return a nil member list and error if the current group is already
 // correct, though the voting map will be still be returned in that case.
-func desiredPeerGroup(info *peerGroupInfo) ([]replicaset.Member, map[*machineTracker]bool, error) {
+func desiredPeerGroup(info *peerGroupInfo) ([]replicaset.Member, map[*machineTracker]bool, bool, error) {
 	if len(info.members) == 0 {
-		return nil, nil, fmt.Errorf("current member set is empty")
+		return nil, nil, false, fmt.Errorf("current member set is empty")
 	}
 	changed := false
 	members, extra, maxId := info.membersMap()
@@ -61,12 +61,12 @@ func desiredPeerGroup(info *peerGroupInfo) ([]replicaset.Member, map[*machineTra
 	// 4) do nothing "nothing to see here"
 	for _, member := range extra {
 		if member.Votes == nil || *member.Votes > 0 {
-			return nil, nil, fmt.Errorf("voting non-machine member %#v found in peer group", member)
+			return nil, nil, false, fmt.Errorf("voting non-machine member %#v found in peer group", member)
 		}
 		changed = true
 	}
 
-	toRemoveVote, toAddVote, toKeep := possiblePeerGroupChanges(info, members)
+	toRemoveVote, toAddVote, toKeep, stepDownPrimary := possiblePeerGroupChanges(info, members)
 
 	// Set up initial record of machine votes. Any changes after
 	// this will trigger a peer group election.
@@ -86,14 +86,19 @@ func desiredPeerGroup(info *peerGroupInfo) ([]replicaset.Member, map[*machineTra
 	if updateAddresses(members, info.machineTrackers, info.mongoSpace) {
 		changed = true
 	}
+	if stepDownPrimary && len(members) <= 1 {
+		// We won't be making any changes, even though the primary wants
+		// to give up its vote, we have nobody else to give it to.
+		stepDownPrimary = false
+	}
 	if !changed {
-		return nil, machineVoting, nil
+		return nil, machineVoting, stepDownPrimary, nil
 	}
 	var memberSet []replicaset.Member
 	for _, member := range members {
 		memberSet = append(memberSet, *member)
 	}
-	return memberSet, machineVoting, nil
+	return memberSet, machineVoting, stepDownPrimary, nil
 }
 
 func isVotingMember(member *replicaset.Member) bool {
@@ -111,8 +116,10 @@ func isVotingMember(member *replicaset.Member) bool {
 func possiblePeerGroupChanges(
 	info *peerGroupInfo,
 	members map[*machineTracker]*replicaset.Member,
-) (toRemoveVote, toAddVote, toKeep []*machineTracker) {
+) (toRemoveVote, toAddVote, toKeep []*machineTracker, stepDownPrimary bool) {
 	statuses := info.statusesMap(members)
+	// By default we don't ask the primary to step down
+	stepDownPrimary = false
 
 	logger.Debugf("assessing possible peer group changes:")
 	for _, m := range info.machineTrackers {
@@ -133,7 +140,15 @@ func possiblePeerGroupChanges(
 			}
 		case !wantsVote && isVoting:
 			logger.Debugf("machine %q is a potential non-voter", m.Id())
-			toRemoveVote = append(toRemoveVote, m)
+			if status, ok := statuses[m]; ok && status.State == replicaset.PrimaryState {
+				logger.Debugf("machine %q is currently the primary, will be requested to step down", m.Id())
+				// Mongo 3+ no longer allows you to remove the PRIMARY from the peer group, instead you must first ask
+				// it to step down, but you first need to have other members for it to hand off authority to.
+				toKeep = append(toKeep, m)
+				stepDownPrimary = true
+			} else {
+				toRemoveVote = append(toRemoveVote, m)
+			}
 		case !wantsVote && !isVoting:
 			logger.Debugf("machine %q does not want the vote", m.Id())
 			toKeep = append(toKeep, m)
@@ -147,7 +162,7 @@ func possiblePeerGroupChanges(
 	sort.Sort(byId(toRemoveVote))
 	sort.Sort(byId(toAddVote))
 	sort.Sort(byId(toKeep))
-	return toRemoveVote, toAddVote, toKeep
+	return toRemoveVote, toAddVote, toKeep, stepDownPrimary
 }
 
 // updateAddresses updates the members' addresses from the machines' addresses.
@@ -235,7 +250,7 @@ func addNewMembers(
 			members[m] = member
 			setVoting(m, false)
 		} else if !hasAddress {
-			logger.Debugf("ignoring machine %q with no address", m.Id())
+			logger.Debugf("ignoring machine %q with no address in space: %s", m.Id(), mongoSpace)
 		}
 	}
 }
@@ -264,15 +279,15 @@ func (l byId) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
 func (l byId) Less(i, j int) bool { return l[i].Id() < l[j].Id() }
 
 // membersMap returns the replica-set members inside info keyed
-// by machine. Any members that do not have a corresponding
+// by machineTracker. Any members that do not have a corresponding
 // machine are returned in extra.
 // The maximum replica-set id is returned in maxId.
 func (info *peerGroupInfo) membersMap() (
 	members map[*machineTracker]*replicaset.Member,
 	extra []replicaset.Member,
-	maxId int,
+	maxReplicaSetId int,
 ) {
-	maxId = -1
+	maxReplicaSetId = -1
 	members = make(map[*machineTracker]*replicaset.Member)
 	for key := range info.members {
 		// key is used instead of value to have a loop scoped member value
@@ -287,11 +302,11 @@ func (info *peerGroupInfo) membersMap() (
 		} else {
 			extra = append(extra, member)
 		}
-		if member.Id > maxId {
-			maxId = member.Id
+		if member.Id > maxReplicaSetId {
+			maxReplicaSetId = member.Id
 		}
 	}
-	return members, extra, maxId
+	return members, extra, maxReplicaSetId
 }
 
 // statusesMap returns the statuses inside info keyed by machine.

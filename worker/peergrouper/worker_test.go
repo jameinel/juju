@@ -141,7 +141,8 @@ func (s *workerSuite) TestSetsAndUpdatesMembers(c *gc.C) {
 	logger.SetLogLevel(loggo.TRACE)
 	loggo.GetLogger("juju.mongo").SetLogLevel(loggo.INFO)
 	loggo.GetLogger("juju.network").SetLogLevel(loggo.INFO)
-	DoTestForIPv4AndIPv6(c, s, func(ipVersion TestIPVersion) {
+	// DoTestForIPv4AndIPv6(c, s, func(ipVersion TestIPVersion) {
+	ipVersion := testIPv4
 		c.Logf("\n\nTestSetsAndUpdatesMembers: %s", ipVersion.version)
 		st := NewFakeState()
 		InitState(c, st, 3, ipVersion)
@@ -224,7 +225,7 @@ func (s *workerSuite) TestSetsAndUpdatesMembers(c *gc.C) {
 		c.Logf("\nwaiting for removal")
 		mustNext(c, memberWatcher)
 		assertMembers(c, memberWatcher.Value(), mkMembers("1v 2v 3v", ipVersion))
-	})
+	// })
 }
 
 func (s *workerSuite) TestHasVoteMaintainedEvenWhenReplicaSetFails(c *gc.C) {
@@ -326,6 +327,10 @@ func (s *workerSuite) TestHasVoteMaintainedEvenWhenReplicaSetFails(c *gc.C) {
 		}
 	})
 }
+
+func (s *workerSuite) TestAsksPrimaryToStepDownDuringRevoting(c *gc.C) {
+}
+
 
 func (s *workerSuite) TestAddressChange(c *gc.C) {
 	DoTestForIPv4AndIPv6(c, s, func(ipVersion TestIPVersion) {
