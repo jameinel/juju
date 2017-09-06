@@ -6,6 +6,7 @@ package peergrouper
 import (
 	"github.com/juju/replicaset"
 	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/juju/network"
 	"github.com/juju/juju/state"
@@ -73,4 +74,12 @@ func (s mongoSessionShim) CurrentMembers() ([]replicaset.Member, error) {
 
 func (s mongoSessionShim) Set(members []replicaset.Member) error {
 	return replicaset.Set(s.session, members)
+}
+
+// StepDownPrimary asks the current Mongo primary machine to step down and not try to be reelected for the requested
+// number of seconds.
+func (s mongoSessionShim) StepDownPrimary() error {
+	// TODO (jam): 2017-09-06 this logic should be moved into github.com/juju/replicaset
+	adminDB := s.session.DB("admin")
+	return adminDB.Run(bson.D{{"replSetStepDown", stepDownDuration.Seconds()}}, nil)
 }

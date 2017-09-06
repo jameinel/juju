@@ -503,6 +503,43 @@ func (session *fakeMongoSession) Set(members []replicaset.Member) error {
 	return nil
 }
 
+// StepDownPrimary implements mongoSession.StepDownPrimary
+func (session *fakeMongoSession) StepDownPrimary() error {
+	statuses := session.status.Get().(*replicaset.Status)
+	curPrimary := -1
+	for i, m := range statuses.Members {
+		if m.State == replicaset.PrimaryState {
+			curPrimary = i
+			break
+		}
+	}
+	// we use a simple voting algorithm, the next member that can vote is set to primary
+	// if we wrap all the way around, presumably the original will become primary again, but
+	// we need to handle the case where there is nobody else to give primary to anyway.
+	members := session.members.Get().([]replicaset.Member)
+	newPrimary := curPrimary
+	for {
+		newPrimary++
+		if newPrimary > len(members) {
+			newPrimary = 0
+		}
+		maybePrimary := members[newPrimary]
+		if maybePrimary.Votes == nil || *maybePrimary.Votes > 0 {
+			// If you don't set Votes to 0 it counts as being 1.
+			// either way, we can pick this one to be the new primary
+			break
+		}
+		// we made it all the way around
+		if newPrimary == curPrimary {
+			break
+		}
+	}
+	// TODO: (jam) 2017-09-06 test this, and do some specific tests around curPrimary being weird
+	statuses.Members[curPrimary].State = replicaset.SecondaryState
+	statuses.Members[newPrimary].State = replicaset.PrimaryState
+	return nil
+}
+
 // deepCopy makes a deep copy of any type by marshalling
 // it as JSON, then unmarshalling it.
 func deepCopy(x interface{}) interface{} {

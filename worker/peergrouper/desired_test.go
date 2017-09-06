@@ -36,6 +36,7 @@ type desiredPeerGroupTest struct {
 
 	expectMembers []replicaset.Member
 	expectVoting  []bool
+	expectStepDown bool
 	expectErr     string
 }
 
@@ -88,6 +89,10 @@ func desiredPeerGroupTests(ipVersion TestIPVersion) []desiredPeerGroupTest {
 			expectVoting:  []bool{true, false},
 			expectMembers: mkMembers("1v 2", ipVersion),
 		}, {
+			// TODO: (jam) 2017-09-06 I think this should ultimately change. No-vote on 2 means that if 2 dies, 1 can
+			// stay primary (which is good), but if 1 dies, then 2 cannot ever get PRIMARY, such that you can then add
+			// a machine 3 to get it back into a happy state, you must recover machine 1. Its a little unclear, since you
+			// need manual intervention either way
 			about:         "one machine has become ready to vote (-> no change)",
 			machines:      mkMachines("11v 12v", ipVersion),
 			members:       mkMembers("1v 2", ipVersion),
@@ -121,14 +126,62 @@ func desiredPeerGroupTests(ipVersion TestIPVersion) []desiredPeerGroupTest {
 			members:       mkMembers("1v", ipVersion),
 			statuses:      mkStatuses("1p", ipVersion),
 			expectVoting:  []bool{true},
+			expectStepDown: false, // can't step down a primary if there is nobody to replace them
 			expectMembers: nil,
 		}, {
-			about:         "two machines ready to lose vote -> votes removed",
+			// TODO(jam): 2017-09-06 These would be the logical changes to change the controller from one machine to
+			// another machine, but it requires going to an even number of voting machines, and is out of scope for 2.2.*
+/*			about:         "one machine ready to lose vote with only one other -> vote added, primary stepping down",
+			machines:      mkmachines("11 12v", ipversion),
+			members:       mkmembers("1v 2", ipversion),
+			statuses:      mkstatuses("1p 2s", ipversion),
+			expectvoting:  []bool{false, true},
+			expectstepdown: true,
+			expectmembers: mkmembers("1v 2v", ipversion),
+		}, {
+			about:         "primary ready to lose vote with only one other -> stepping down requested",
+			machines:      mkmachines("11 12v", ipversion),
+			members:       mkmembers("1v 2v", ipversion),
+			statuses:      mkstatuses("1p 2s", ipversion),
+			expectvoting:  []bool{true, true},
+			expectstepdown: true,
+			expectmembers: mkmembers("1v 2v", ipversion),
+		}, {
+			about:         "machine ready to lose vote with only primary -> vote dropped",
+			machines:      mkmachines("11 12v", ipversion),
+			members:       mkmembers("1v 2v", ipversion),
+			statuses:      mkstatuses("1s 2p", ipversion),
+			expectvoting:  []bool{false, true},
+			expectstepdown: false,
+			expectmembers: mkmembers("1 2v", ipversion),
+		}, {*/
+			about:         "primary asked to step down rather than be removed from voting set",
+			machines:      mkMachines("11 12v 13v 14v", ipVersion),
+			members:       mkMembers("1v 2v 3v 4", ipVersion),
+			statuses:      mkStatuses("1p 2s 3s 4s", ipVersion),
+			expectVoting:  []bool{true, true, true, false},
+			expectStepDown: true,
+			// TODO (jam): 2017-09-06 Out-of-scope for 2.2, but consider including 4 in the voting set
+			// when we ask 1 to stepDown. We want to minimize the number of interruptions from Mongo.
+			// expectMembers: mkMembers("1v 2v 3v 4?", ipVersion),
+			expectMembers: nil,
+		}, {
+			about:         "two machines ready to lose vote (not primary)-> votes removed",
 			machines:      mkMachines("11 12v 13", ipVersion),
 			members:       mkMembers("1v 2v 3v", ipVersion),
-			statuses:      mkStatuses("1p 2p 3p", ipVersion),
+			statuses:      mkStatuses("1s 2p 3s", ipVersion),
 			expectVoting:  []bool{false, true, false},
 			expectMembers: mkMembers("1 2v 3", ipVersion),
+		}, {
+			about:         "two machines ready to lose vote (one primary) -> vote removed, primary stepping down",
+			machines:      mkMachines("11 12v 13", ipVersion),
+			members:       mkMembers("1v 2v 3v", ipVersion),
+			statuses:      mkStatuses("1p 2s 3s", ipVersion),
+			expectVoting:  []bool{true, true, true},
+			expectStepDown: true,
+			// TODO (jam): 2017-09-06 we could remove 3 from the voting set immediately
+			// expectMembers: mkMembers("1v 2v 3", ipVersion),
+			expectMembers: nil,
 		}, {
 			about:         "machines removed as controller -> removed from members",
 			machines:      mkMachines("11v", ipVersion),
@@ -164,6 +217,7 @@ func desiredPeerGroupTests(ipVersion TestIPVersion) []desiredPeerGroupTest {
 					Port: 1234,
 				}},
 			}),
+			// TODO: This shows machine 12 and 13 are both primaries (replicaset ids 2,3)
 			statuses:     mkStatuses("1s 2p 3p", ipVersion),
 			members:      mkMembers("1v 2v 3v", ipVersion),
 			expectVoting: []bool{true, true, true},
@@ -200,23 +254,24 @@ func (s *desiredPeerGroupSuite) TestDesiredPeerGroup(c *gc.C) {
 				statuses:        test.statuses,
 				members:         test.members,
 			}
-			members, voting, err := desiredPeerGroup(info)
+			members, voting, stepDownPrimary, err := desiredPeerGroup(info)
 			if test.expectErr != "" {
 				c.Assert(err, gc.ErrorMatches, test.expectErr)
 				c.Assert(members, gc.IsNil)
 				continue
 			}
 			c.Assert(err, jc.ErrorIsNil)
+			c.Assert(stepDownPrimary, gc.Equals, test.expectStepDown)
 
 			sort.Sort(membersById(members))
 			c.Assert(members, jc.DeepEquals, test.expectMembers)
-			if len(members) == 0 {
-				continue
-			}
 			for i, m := range test.machines {
 				vote, votePresent := voting[m]
 				c.Check(votePresent, jc.IsTrue)
 				c.Check(vote, gc.Equals, test.expectVoting[i], gc.Commentf("machine %s", m.Id()))
+			}
+			if len(members) == 0 {
+				continue
 			}
 			// Assure ourselves that the total number of desired votes is odd in
 			// all circumstances.
@@ -226,7 +281,7 @@ func (s *desiredPeerGroupSuite) TestDesiredPeerGroup(c *gc.C) {
 			// required, that there's no further change
 			// if desiredPeerGroup is called again.
 			info.members = members
-			members, voting, err = desiredPeerGroup(info)
+			members, voting, stepDownPrimary, err = desiredPeerGroup(info)
 			c.Assert(members, gc.IsNil)
 			for i, m := range test.machines {
 				vote, votePresent := voting[m]

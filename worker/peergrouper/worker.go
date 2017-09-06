@@ -52,6 +52,7 @@ type mongoSession interface {
 	CurrentStatus() (*replicaset.Status, error)
 	CurrentMembers() ([]replicaset.Member, error)
 	Set([]replicaset.Member) error
+	StepDownPrimary() error
 }
 
 type publisherInterface interface {
@@ -77,6 +78,11 @@ var (
 	// to State. This enables us to make changes to members
 	// that are triggered by changes to member status.
 	pollInterval = 1 * time.Minute
+
+	// stepDownDuration is how long we ask the current primary to step down and not ask for reelection.
+	// This is generally used when we want to remove the current primary from the replicaset. So it should be longer
+	// than pollInterval to ensure we won't get re-elected before we come back
+	stepDownDuration = 2 * time.Minute
 )
 
 // Hub defines the only method of the apiserver centralhub that
@@ -426,6 +432,9 @@ func (w *pgWorker) getMongoSpace(addrs [][]network.Address) (network.SpaceName, 
 		// We want to find a space that contains all Mongo servers so we can
 		// use it to look up the IP address of each Mongo server to be used
 		// to set up the peer group.
+		// TODO: (jam) 2017-08-29 This should really be configuration from the Admin, as the state servers *might* be
+		// all in the same set of multiple spaces, but they still want to configure only one of those spaces for Mongo
+		// traffic.
 		spaceStats := generateSpaceStats(addrs)
 		if spaceStats.LargestSpaceContainsAll == false {
 			err := w.st.SetMongoSpaceState(state.MongoSpaceInvalid)
@@ -479,7 +488,7 @@ func (w *pgWorker) updateReplicaset() error {
 	if err != nil {
 		return errors.Annotate(err, "cannot get peergrouper info")
 	}
-	members, voting, err := desiredPeerGroup(info)
+	members, voting, stepDownPrimary, err := desiredPeerGroup(info)
 	if err != nil {
 		return fmt.Errorf("cannot compute desired peer group: %v", err)
 	}
@@ -492,6 +501,9 @@ func (w *pgWorker) updateReplicaset() error {
 				output = append(output, fmt.Sprintf("  %s: %v", m.id, v))
 			}
 			logger.Debugf("no change in desired peer group, voting: \n%s", strings.Join(output, "\n"))
+		}
+		if stepDownPrimary {
+			logger.Debugf("primary mongo replica being asked to step down")
 		}
 	}
 
@@ -542,6 +554,12 @@ func (w *pgWorker) updateReplicaset() error {
 	}
 	if err := setHasVote(removed, false); err != nil {
 		return errors.Annotate(err, "cannot set HasVote removed")
+	}
+	if stepDownPrimary {
+		err := w.st.MongoSession().StepDownPrimary()
+		if err != nil {
+			return errors.Annotate(err, "failed to ask the Mongo primary to step down")
+		}
 	}
 	return nil
 }
