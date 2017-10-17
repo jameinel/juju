@@ -54,11 +54,9 @@ func NewSuperCommand() cmd.Command {
 	metadatacmd.Register(newToolsMetadataCommand())
 	metadatacmd.Register(newValidateToolsMetadataCommand())
 	metadatacmd.Register(newSignMetadataCommand())
-	if featureflag.Enabled(feature.ImageMetadata) {
-		metadatacmd.Register(newListImagesCommand())
-		metadatacmd.Register(newAddImageMetadataCommand())
-		metadatacmd.Register(newDeleteImageMetadataCommand())
-	}
+	metadatacmd.Register(newListImagesCommand())
+	metadatacmd.Register(newAddImageMetadataCommand())
+	metadatacmd.Register(newDeleteImageMetadataCommand())
 	return metadatacmd
 }
 

@@ -1,8 +1,8 @@
 // Copyright 2015 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package imagemetadata
+package imagecommon
 
 var (
-	CreateAPI     = createAPI
+	ProcessErrors = processErrors
 )

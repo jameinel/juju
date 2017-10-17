@@ -1,7 +1,7 @@
 // Copyright 2015 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package imagemetadata_test
+package imagecommon_test
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 
-	"github.com/juju/juju/apiserver/facades/controller/imagemetadata"
+	"github.com/juju/juju/apiserver/common/imagecommon"
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/testing"
 )
@@ -67,12 +67,12 @@ saving some image metadata:
 	s.assertProcessErrors(c, errs, expected)
 }
 
-var process = imagemetadata.ProcessErrors
+var process = imagecommon.ProcessErrors
 
 func (s *funcMetadataSuite) assertProcessErrorsNone(c *gc.C, errs []params.ErrorResult) {
-	c.Assert(process(errs), jc.ErrorIsNil)
+	c.Assert(imagecommon.ProcessErrors(errs), jc.ErrorIsNil)
 }
 
 func (s *funcMetadataSuite) assertProcessErrors(c *gc.C, errs []params.ErrorResult, expected string) {
-	c.Assert(process(errs), gc.ErrorMatches, expected)
+	c.Assert(imagecommon.ProcessErrors(errs), gc.ErrorMatches, expected)
 }

@@ -160,9 +160,7 @@ func AllFacades() *facade.Registry {
 	reg("ImageManager", 2, imagemanager.NewImageManagerAPI)
 	reg("ImageMetadata", 3, imagemetadata.NewAPI)
 
-	if featureflag.Enabled(feature.ImageMetadata) {
-		reg("ImageMetadataManager", 1, imagemetadatamanager.NewAPI)
-	}
+	reg("ImageMetadataManager", 1, imagemetadatamanager.NewAPI)
 
 	reg("InstancePoller", 3, instancepoller.NewFacade)
 	reg("KeyManager", 1, keymanager.NewKeyManagerAPI)
