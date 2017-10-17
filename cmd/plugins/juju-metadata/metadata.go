@@ -10,7 +10,6 @@ import (
 	"github.com/juju/loggo"
 	"github.com/juju/utils/featureflag"
 
-	"github.com/juju/juju/feature"
 	"github.com/juju/juju/juju"
 	"github.com/juju/juju/juju/osenv"
 	_ "github.com/juju/juju/provider/all"
