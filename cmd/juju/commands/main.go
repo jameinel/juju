@@ -36,6 +36,7 @@ import (
 	"github.com/juju/juju/cmd/juju/firewall"
 	"github.com/juju/juju/cmd/juju/gui"
 	"github.com/juju/juju/cmd/juju/machine"
+	"github.com/juju/juju/cmd/juju/metadata"
 	"github.com/juju/juju/cmd/juju/metricsdebug"
 	"github.com/juju/juju/cmd/juju/model"
 	"github.com/juju/juju/cmd/juju/resource"
@@ -456,6 +457,9 @@ func registerCommands(r commandRegistry, ctx *cmd.Context) {
 	r.Register(cloud.NewAddCredentialCommand())
 	r.Register(cloud.NewRemoveCredentialCommand())
 	r.Register(cloud.NewUpdateCredentialCommand())
+
+	// Manage image metadata commands
+	r.Register(metadata.NewListImageMetadataCommand())
 
 	// CAAS commands
 	if featureflag.Enabled(feature.CAAS) {
