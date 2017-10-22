@@ -13,6 +13,7 @@ import (
 	"github.com/juju/juju/juju"
 	"github.com/juju/juju/juju/osenv"
 	_ "github.com/juju/juju/provider/all"
+	"github.com/juju/juju/feature"
 )
 
 var logger = loggo.GetLogger("juju.plugins.metadata")
@@ -54,8 +55,10 @@ func NewSuperCommand() cmd.Command {
 	metadatacmd.Register(newValidateToolsMetadataCommand())
 	metadatacmd.Register(newSignMetadataCommand())
 	metadatacmd.Register(newListImagesCommand())
-	metadatacmd.Register(newAddImageMetadataCommand())
-	metadatacmd.Register(newDeleteImageMetadataCommand())
+	if featureflag.Enabled(feature.ImageMetadata) {
+		metadatacmd.Register(newAddImageMetadataCommand())
+		metadatacmd.Register(newDeleteImageMetadataCommand())
+	}
 	return metadatacmd
 }
 
