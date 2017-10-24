@@ -94,6 +94,8 @@ type UpdaterFromPublished struct {
 }
 
 func (updater *UpdaterFromPublished) Update() error {
+	// XXX(jam): We're creating a whole "Environ" object here, but only making use of ImageMetadataSources
+	// and whether the environment HasRegion. Certainly we could do that more cheaply.
 	env, err := updater.newEnviron()
 	if err != nil {
 		return errors.Annotatef(err, "getting environ")

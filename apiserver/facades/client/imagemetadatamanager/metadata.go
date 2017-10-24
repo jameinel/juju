@@ -117,6 +117,12 @@ func (api *API) Delete(images params.MetadataImageIds) (params.ErrorResults, err
 	return params.ErrorResults{Results: all}, nil
 }
 
+// UpdateFromPublishedImages triggers the controller to re-read all of the images from the underlying stream locations.
+func (api *API) UpdateFromPublishedImages() (error) {
+
+	return nil
+}
+
 func parseMetadataToParams(p cloudimagemetadata.Metadata) params.CloudImageMetadata {
 	result := params.CloudImageMetadata{
 		ImageId:         p.ImageId,
