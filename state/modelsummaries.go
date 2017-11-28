@@ -140,7 +140,9 @@ func (p *modelSummaryProcessor) fillInFromConfig() error {
 	for iter.Next(&doc) {
 		idx, ok := p.indexByUUID[doc.ModelUUID]
 		if !ok {
-			// How could it return a doc that we don't have?
+			// TODO(jam): 2017-11-27 For all of the checks on p.indexByUUID, add a Warning message, since they should never happen
+			logger.Warningf(`db.settings.find({"_id": {"$in": %v}}) return a modelUUID we weren't expecting': %v`,
+				settingIds, doc.ModelUUID)
 			continue
 		}
 		remaining.Remove(doc.ModelUUID)
@@ -148,6 +150,9 @@ func (p *modelSummaryProcessor) fillInFromConfig() error {
 		cfg, err := config.New(config.NoDefaults, doc.Settings)
 		if err != nil {
 			// err on one model should kill all the other ones?
+			// TODO(jam): 2017-11-27 Add a test case for a model that exists in 'models' but has an invalid Settings
+			// document. Update the ModelSummary.Status field to indicate that data was broken/missing, but don't fail
+			// with an error.
 			return errors.Trace(err)
 		}
 		detail := &(p.summaries[idx])
@@ -161,7 +166,9 @@ func (p *modelSummaryProcessor) fillInFromConfig() error {
 		return errors.Trace(err)
 	}
 	if !remaining.IsEmpty() {
-		// XXX: What error is appropriate? Do we need to care about models that its ok to be missing?
+		// TODO(jam): 2017-11-27 Add a test case for a model that exists in 'models' but is missing the settings
+		// document. Update the ModelSummary.Status field to indicate that data was missing, but don't fail with
+		// an error.
 		return errors.Errorf("could not find settings/config for models: %v", remaining.SortedValues())
 	}
 	return nil

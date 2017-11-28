@@ -254,10 +254,12 @@ func (st *State) modelQueryForUser(user names.UserTag, isSuperuser bool) (mongo.
 			closer()
 			return nil, nil, errors.Trace(err)
 		}
+		// Note: even if a model is in modeluser, if it is not in models we just consider it to be gone.
 		modelQuery = models.Find(bson.M{
 			"_id":            bson.M{"$in": modelUUIDs},
 			"migration-mode": bson.M{"$ne": MigrationModeImporting},
 		})
+		// TODO(jam): 2017-11-27 Add a test for a model UUID in modeluser but *not* in models.
 	}
 	modelQuery.Sort("name", "owner")
 	return modelQuery, closer, nil
