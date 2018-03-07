@@ -377,7 +377,6 @@ func (s *clientSuite) newFakeClient(roundTripper soap.RoundTripper, dc string) *
 	if err != nil {
 		panic(err)
 	}
-
 	vimClient := &vim25.Client{
 		Client:         soap.NewClient(soapURL, true),
 		ServiceContent: s.serviceContent,
@@ -419,6 +418,9 @@ func (s *clientSuite) TestClose(c *gc.C) {
 	err := client.Close(context.Background())
 	c.Assert(err, jc.ErrorIsNil)
 	s.roundTripper.CheckCallNames(c, "Logout")
+}
+
+func (s *clientSuite) TestChecksMinimumAPIVersion(c *gc.C) {
 }
 
 func (s *clientSuite) TestComputeResources(c *gc.C) {

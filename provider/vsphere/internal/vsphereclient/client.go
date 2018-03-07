@@ -25,11 +25,9 @@ import (
 // Client encapsulates a vSphere client, exposing the subset of
 // functionality that we require in the Juju provider.
 type Client struct {
-	client         *govmomi.Client
-	datacenter     string
-	serviceContent types.ServiceContent
-	apiVersion     Version
-	logger         loggo.Logger
+	client     *govmomi.Client
+	datacenter string
+	logger     loggo.Logger
 }
 
 // Dial dials a new vSphere client connection using the given URL,
@@ -46,18 +44,23 @@ func Dial(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	serviceContent, err := methods.GetServiceContent(ctx, client)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	apiVersion, err := ParseVersion(serviceContent.About.ApiVersion)
 	return &Client{
-		client:         client,
-		datacenter:     datacenter,
-		logger:         logger,
-		serviceContent: serviceContent,
-		apiVersion:     apiVersion,
+		client:     client,
+		datacenter: datacenter,
+		logger:     logger,
 	}, nil
+}
+
+func (c *Client) CheckAPIVersion() error {
+	version, err := ParseVersion(c.client.Client.ServiceContent.About.ApiVersion)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if version.Compare(MinimumAPIVersion) < 0 {
+		return errors.Errorf("VSphere API Version %s is older than our minimum supported version %s",
+			version.String(), MinimumAPIVersion.String())
+	}
+	return nil
 }
 
 // Close logs out and closes the client connection.

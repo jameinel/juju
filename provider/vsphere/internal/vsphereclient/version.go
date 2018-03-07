@@ -12,6 +12,18 @@ import (
 // Version tracks the 1.2.3 style versions for API versioning in vsphere
 type Version []int
 
+var MinimumAPIVersion = MustParseVersion("5.5")
+
+// MustParseVersion treats errors as panic. It is only suitable for constants defined in code,
+// not for anything you would parse from live data
+func MustParseVersion(s string) Version {
+	v, err := ParseVersion(s)
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
 // ParseVersion maps the string version "1.2.3" to a Version tuple [1, 2, 3]
 func ParseVersion(s string) (Version, error) {
 	v := make(Version, 0)
@@ -64,4 +76,12 @@ func (v Version) Compare(u Version) int {
 		}
 	}
 	return 0
+}
+
+func (v Version) String() string {
+	out := make([]string, len(v))
+	for i := range v {
+		out[i] = strconv.Itoa(v[i])
+	}
+	return strings.Join(out, ".")
 }

@@ -323,7 +323,8 @@ func (c *Client) createImportSpec(
 		return nil, errors.New(spec.Error[0].LocalizedMessage)
 	}
 	importSpec := spec.ImportSpec.(*types.VirtualMachineImportSpec)
-	s := &spec.ImportSpec.(*types.VirtualMachineImportSpec).ConfigSpec
+	s := &importSpec.ConfigSpec
+	c.logger.Criticalf("importSpec: %s", pretty.Sprint(s))
 
 	// Apply resource constraints.
 	if args.Constraints.HasCpuCores() {

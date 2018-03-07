@@ -59,6 +59,7 @@ func (s *versionSuite) TestParse(c *gc.C) {
 		if test.Error == "" {
 			c.Assert(err, jc.ErrorIsNil)
 			c.Check(parsed, gc.DeepEquals, test.Parsed)
+			c.Check(parsed.String(), gc.Equals, test.Version)
 		} else {
 			c.Assert(err, gc.ErrorMatches, test.Error)
 		}
