@@ -30,7 +30,7 @@ type BaseWatcher interface {
 	Dead() <-chan struct{}
 	Err() error
 
-	Watch(collection string, id interface{}, revno int64, ch chan<- Change)
+	Watch(collection string, id interface{}, ch chan<- Change)
 	WatchCollection(collection string, ch chan<- Change)
 	WatchCollectionWithFilter(collection string, ch chan<- Change, filter func(interface{}) bool)
 	Unwatch(collection string, id interface{}, ch chan<- Change)
@@ -47,11 +47,6 @@ type Watcher struct {
 
 	// watches holds the observers managed by Watch/Unwatch.
 	watches map[watchKey][]watchInfo
-
-	// current holds the current txn-revno values for all the observed
-	// documents known to exist. Documents not observed or deleted are
-	// omitted from this map and are considered to have revno -1.
-	current map[watchKey]int64
 
 	// needSync is set when a synchronization should take
 	// place.
@@ -78,9 +73,9 @@ type Change struct {
 	C  string
 	Id interface{}
 
-	// Revno is the latest known value for the document's txn-revno
-	// field, or -1 if the document was deleted.
-	Revno int64
+	// IsDeleted is set to true if this document is definitely deleted.
+	// It is possible that we send IsDeleted == false, but the document is already gone.
+	IsDeleted bool
 }
 
 type watchKey struct {
@@ -113,14 +108,13 @@ func (k watchKey) match(k1 watchKey) bool {
 
 type watchInfo struct {
 	ch     chan<- Change
-	revno  int64
 	filter func(interface{}) bool
 }
 
 type event struct {
-	ch    chan<- Change
-	key   watchKey
-	revno int64
+	ch        chan<- Change
+	key       watchKey
+	isDeleted bool
 }
 
 // Period is the delay between each sync.
@@ -138,7 +132,6 @@ func newWatcher(changelog *mgo.Collection, iteratorFunc func() mongo.Iterator) *
 		log:          changelog,
 		iteratorFunc: iteratorFunc,
 		watches:      make(map[watchKey][]watchInfo),
-		current:      make(map[watchKey]int64),
 		request:      make(chan interface{}),
 	}
 	if w.iteratorFunc == nil {
@@ -218,11 +211,11 @@ func (w *Watcher) sendReq(req interface{}) {
 // field is observed to change after a transaction is applied. The revno
 // parameter holds the currently known revision number for the document.
 // Non-existent documents are represented by a -1 revno.
-func (w *Watcher) Watch(collection string, id interface{}, revno int64, ch chan<- Change) {
+func (w *Watcher) Watch(collection string, id interface{}, ch chan<- Change) {
 	if id == nil {
 		panic("watcher: cannot watch a document with nil id")
 	}
-	w.sendReq(reqWatch{watchKey{collection, id}, watchInfo{ch, revno, nil}})
+	w.sendReq(reqWatch{watchKey{collection, id}, watchInfo{ch: ch, filter: nil}})
 }
 
 // WatchCollection starts watching the given collection.
@@ -237,7 +230,7 @@ func (w *Watcher) WatchCollection(collection string, ch chan<- Change) {
 // to change after a transaction is applied for any document in the collection, so long as the
 // specified filter function returns true when called with the document id value.
 func (w *Watcher) WatchCollectionWithFilter(collection string, ch chan<- Change, filter func(interface{}) bool) {
-	w.sendReq(reqWatch{watchKey{collection, nil}, watchInfo{ch, 0, filter}})
+	w.sendReq(reqWatch{watchKey{collection, nil}, watchInfo{ch: ch, filter: filter}})
 }
 
 // Unwatch stops watching the given collection and document id via ch.
@@ -297,7 +290,8 @@ func (w *Watcher) loop(period time.Duration) error {
 
 // flush sends all pending events to their respective channels.
 func (w *Watcher) flush() {
-	// refreshEvents are stored newest first.
+	// syncEvents are stored newest first, but we don't run a sync() only potentially new requests during this loop,
+	// so it cannot grow.
 	for i := len(w.syncEvents) - 1; i >= 0; i-- {
 		e := &w.syncEvents[i]
 		for e.ch != nil {
@@ -307,7 +301,7 @@ func (w *Watcher) flush() {
 			case req := <-w.request:
 				w.handle(req)
 				continue
-			case e.ch <- Change{e.key.c, e.key.id, e.revno}:
+			case e.ch <- Change{C: e.key.c, Id: e.key.id, IsDeleted: e.isDeleted}:
 			}
 			break
 		}
@@ -323,7 +317,7 @@ func (w *Watcher) flush() {
 			case req := <-w.request:
 				w.handle(req)
 				continue
-			case e.ch <- Change{e.key.c, e.key.id, e.revno}:
+			case e.ch <- Change{C: e.key.c, Id: e.key.id, IsDeleted: e.isDeleted}:
 			}
 			break
 		}
@@ -345,10 +339,8 @@ func (w *Watcher) handle(req interface{}) {
 				panic(fmt.Errorf("tried to re-add channel %v for %s", info.ch, r.key))
 			}
 		}
-		if revno, ok := w.current[r.key]; ok && (revno > r.info.revno || revno == -1 && r.info.revno >= 0) {
-			r.info.revno = revno
-			w.requestEvents = append(w.requestEvents, event{r.info.ch, r.key, revno})
-		}
+		// TODO(jam): consider if we are asked to watch a document which is already deleted...?
+		w.requestEvents = append(w.requestEvents, event{ch: r.info.ch, key: r.key, isDeleted: false})
 		w.watches[r.key] = append(w.watches[r.key], r.info)
 	case reqUnwatch:
 		watches := w.watches[r.key]
@@ -357,6 +349,7 @@ func (w *Watcher) handle(req interface{}) {
 			if info.ch == r.ch {
 				watches[i] = watches[len(watches)-1]
 				w.watches[r.key] = watches[:len(watches)-1]
+				// TODO(jam): 2018-11-15 if this is the last watch, remove w.watches[r.key] entirely
 				removed = true
 				break
 			}
@@ -455,27 +448,20 @@ func (w *Watcher) sync() error {
 					logger.Warningf("changelog has revno with type %T: %#v", r[i], r[i])
 					continue
 				}
-				if revno < 0 {
-					revno = -1
-				}
-				if w.current[key] == revno {
-					continue
-				}
-				w.current[key] = revno
+				isDeleted := (revno < 0)
+				// TODO(jam) 2018-11-15, are we worried about seeing a change event happen 2x. Should we be caching
+				// the current revno for docs when we generate an event?
 				// Queue notifications for per-collection watches.
 				for _, info := range w.watches[watchKey{c.Name, nil}] {
 					if info.filter != nil && !info.filter(d[i]) {
 						continue
 					}
-					w.syncEvents = append(w.syncEvents, event{info.ch, key, revno})
+					w.syncEvents = append(w.syncEvents, event{ch: info.ch, key: key, isDeleted: isDeleted})
 				}
 				// Queue notifications for per-document watches.
 				infos := w.watches[key]
-				for i, info := range infos {
-					if revno > info.revno || revno < 0 && info.revno >= 0 {
-						infos[i].revno = revno
-						w.syncEvents = append(w.syncEvents, event{info.ch, key, revno})
-					}
+				for _, info := range infos {
+					w.syncEvents = append(w.syncEvents, event{ch: info.ch, key: key, isDeleted: isDeleted})
 				}
 			}
 		}

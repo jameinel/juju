@@ -349,13 +349,11 @@ func (w *TxnWatcher) sync() (bool, error) {
 					w.logger.Warningf("changelog has revno with type %T: %#v", r[i], r[i])
 					continue
 				}
-				if revno < 0 {
-					revno = -1
-				}
+				isDeleted := (revno < 0)
 				w.syncEvents = append(w.syncEvents, Change{
-					C:     c.Name,
-					Id:    d[i],
-					Revno: revno,
+					C:         c.Name,
+					Id:        d[i],
+					IsDeleted: isDeleted,
 				})
 				w.changesCount++
 				added = true

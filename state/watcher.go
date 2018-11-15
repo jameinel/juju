@@ -137,7 +137,7 @@ func collect(one watcher.Change, more <-chan watcher.Change, stop <-chan struct{
 	result := map[interface{}]bool{}
 	handle := func(ch watcher.Change) {
 		count++
-		result[ch.Id] = ch.Revno != -1
+		result[ch.Id] = !ch.IsDeleted
 	}
 	handle(one)
 	// TODO(fwereade): 2016-03-17 lp:1558657
@@ -660,7 +660,7 @@ func (w *minUnitsWatcher) initial() (set.Strings, error) {
 
 func (w *minUnitsWatcher) merge(applicationnames set.Strings, change watcher.Change) error {
 	applicationname := w.backend.localID(change.Id.(string))
-	if change.Revno == -1 {
+	if change.IsDeleted {
 		delete(w.known, applicationname)
 		applicationnames.Remove(applicationname)
 		return nil
@@ -1007,11 +1007,12 @@ func (w *relationUnitsWatcher) mergeScope(changes *params.RelationUnitsChange, c
 		key := w.sw.prefix + name
 		docID := w.backend.docID(key)
 		revno, err := w.mergeSettings(changes, key)
+		_ = revno // XXX:
 		if err != nil {
 			return errors.Annotatef(err, "while merging settings for %q entering relation scope", name)
 		}
 		changes.Departed = remove(changes.Departed, name)
-		w.watcher.Watch(settingsC, docID, revno, w.updates)
+		w.watcher.Watch(settingsC, docID, w.updates)
 		w.watching.Add(docID)
 	}
 	for _, name := range c.Left {
@@ -1371,7 +1372,7 @@ func (w *unitsWatcher) initial() ([]string, error) {
 		changes = append(changes, unitName)
 		if doc.Life != Dead {
 			w.life[unitName] = doc.Life
-			w.watcher.Watch(unitsC, doc.Id, doc.TxnRevno, w.in)
+			w.watcher.Watch(unitsC, doc.Id, w.in)
 		}
 	}
 	return changes, nil
@@ -1428,7 +1429,7 @@ func (w *unitsWatcher) merge(changes []string, name string) ([]string, error) {
 		delete(w.life, name)
 		w.watcher.Unwatch(unitsC, unitDocID, w.in)
 	case !known && !gone:
-		w.watcher.Watch(unitsC, unitDocID, doc.TxnRevno, w.in)
+		w.watcher.Watch(unitsC, unitDocID, w.in)
 		w.life[name] = doc.Life
 	case known && life != doc.Life:
 		w.life[name] = doc.Life
@@ -1444,12 +1445,13 @@ func (w *unitsWatcher) merge(changes []string, name string) ([]string, error) {
 func (w *unitsWatcher) loop(coll, id string) error {
 	collection, closer := w.db.GetCollection(coll)
 	revno, err := getTxnRevno(collection, id)
+	_ = revno // XXX:
 	closer()
 	if err != nil {
 		return err
 	}
 
-	w.watcher.Watch(coll, id, revno, w.in)
+	w.watcher.Watch(coll, id, w.in)
 	defer func() {
 		w.watcher.Unwatch(coll, id, w.in)
 		for name := range w.life {
@@ -1698,11 +1700,14 @@ func (w *docWatcher) loop(docKeys []docKey) error {
 	for _, k := range docKeys {
 		coll, closer := w.db.GetCollection(k.coll)
 		txnRevno, err := getTxnRevno(coll, k.docId)
+		// TODO(jam): 2018-11-15 This looks to be a Watcher that *doesn't* send an initial event for each document
+		// that you asked to watch. That doesn't seem correct as it leaves open a race.
+		_ = txnRevno // XXX
 		closer()
 		if err != nil {
 			return err
 		}
-		w.watcher.Watch(coll.Name(), k.docId, txnRevno, in)
+		w.watcher.Watch(coll.Name(), k.docId, in)
 		defer w.watcher.Unwatch(coll.Name(), k.docId, in)
 	}
 	out := w.out
@@ -1814,7 +1819,7 @@ func (w *machineUnitsWatcher) merge(pending []string, unitName string) (new []st
 		return pending, nil
 	}
 	if !known {
-		w.watcher.Watch(unitsC, doc.DocID, doc.TxnRevno, w.in)
+		w.watcher.Watch(unitsC, doc.DocID, w.in)
 		pending = append(pending, unitName)
 	} else if life != doc.Life && !hasString(pending, unitName) {
 		pending = append(pending, unitName)
@@ -1840,12 +1845,13 @@ func (w *machineUnitsWatcher) loop() error {
 
 	machines, closer := w.db.GetCollection(machinesC)
 	revno, err := getTxnRevno(machines, w.machine.doc.DocID)
+	_ = revno // XXX:
 	closer()
 	if err != nil {
 		return err
 	}
 	machineCh := make(chan watcher.Change)
-	w.watcher.Watch(machinesC, w.machine.doc.DocID, revno, machineCh)
+	w.watcher.Watch(machinesC, w.machine.doc.DocID, machineCh)
 	defer w.watcher.Unwatch(machinesC, w.machine.doc.DocID, machineCh)
 	changes, err := w.updateMachine([]string(nil))
 	if err != nil {
@@ -1920,12 +1926,13 @@ func (w *machineAddressesWatcher) Changes() <-chan struct{} {
 func (w *machineAddressesWatcher) loop() error {
 	machines, closer := w.db.GetCollection(machinesC)
 	revno, err := getTxnRevno(machines, w.machine.doc.DocID)
+	_ = revno // XXX:
 	closer()
 	if err != nil {
 		return err
 	}
 	machineCh := make(chan watcher.Change)
-	w.watcher.Watch(machinesC, w.machine.doc.DocID, revno, machineCh)
+	w.watcher.Watch(machinesC, w.machine.doc.DocID, machineCh)
 	defer w.watcher.Unwatch(machinesC, w.machine.doc.DocID, machineCh)
 	addresses := w.machine.Addresses()
 	out := w.out
@@ -2571,7 +2578,7 @@ func (w *openedPortsWatcher) merge(ids set.Strings, change watcher.Change) error
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if change.Revno == -1 {
+	if change.IsDeleted {
 		delete(w.known, localID)
 		if changeID, err := w.transformID(localID); err != nil {
 			logger.Errorf(err.Error())
@@ -2652,12 +2659,13 @@ func (w *blockDevicesWatcher) loop() error {
 	docID := w.backend.docID(w.machineId)
 	coll, closer := w.db.GetCollection(blockDevicesC)
 	revno, err := getTxnRevno(coll, docID)
+	_ = revno // XXX:
 	closer()
 	if err != nil {
 		return errors.Trace(err)
 	}
 	changes := make(chan watcher.Change)
-	w.watcher.Watch(blockDevicesC, docID, revno, changes)
+	w.watcher.Watch(blockDevicesC, docID, changes)
 	defer w.watcher.Unwatch(blockDevicesC, docID, changes)
 	blockDevices, err := getBlockDevices(w.db, w.machineId)
 	if err != nil {
@@ -2721,13 +2729,14 @@ func (w *migrationActiveWatcher) Changes() <-chan struct{} {
 func (w *migrationActiveWatcher) loop() error {
 	collection, closer := w.db.GetCollection(w.collName)
 	revno, err := getTxnRevno(collection, w.id)
+	_ = revno // XXX:
 	closer()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	in := make(chan watcher.Change)
-	w.watcher.Watch(w.collName, w.id, revno, in)
+	w.watcher.Watch(w.collName, w.id, in)
 	defer w.watcher.Unwatch(w.collName, w.id, in)
 
 	out := w.sink
@@ -3193,12 +3202,13 @@ func (w *containerAddressesWatcher) loop() error {
 	id := w.backend.docID(w.unit.globalKey())
 	continers, closer := w.db.GetCollection(cloudContainersC)
 	revno, err := getTxnRevno(continers, id)
+	_ = revno // XXX:
 	closer()
 	if err != nil {
 		return err
 	}
 	containerCh := make(chan watcher.Change)
-	w.watcher.Watch(cloudContainersC, id, revno, containerCh)
+	w.watcher.Watch(cloudContainersC, id, containerCh)
 	defer w.watcher.Unwatch(cloudContainersC, id, containerCh)
 
 	var currentAddress *address
