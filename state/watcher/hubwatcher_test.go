@@ -93,7 +93,7 @@ func (s *HubWatcherSuite) TestTxnWatcherStartingKillsWorker(c *gc.C) {
 }
 
 func (s *HubWatcherSuite) TestWatchBeforeKnown(c *gc.C) {
-	s.w.Watch("test", "a", -1, s.ch)
+	s.w.Watch("test", "a", s.ch)
 	assertNoChange(c, s.ch)
 
 	change := watcher.Change{"test", "a", 5}
