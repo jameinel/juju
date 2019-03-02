@@ -271,6 +271,14 @@ func (s *WorkerSuite) TestDisappearingAddresses(c *gc.C) {
 		"1": "",
 		"2": machine2Address,
 	})
+
+	// Once we publish an update with one machine removed, it should accept the change
+	// and remove the vote from whoever is not the current primary
+	if raft1.Leader() == raft.ServerAddress(machine0Address) {
+		expectedConfiguration[2].Suffrage = raft.Nonvoter
+	} else {
+		expectedConfiguration[0].Suffrage = raft.Nonvoter
+	}
 	rafttest.CheckConfiguration(c, raft1, []raft.Server{
 		expectedConfiguration[0],
 		expectedConfiguration[2],
