@@ -2947,7 +2947,7 @@ func ReplaceNeverSetWithUnset(pool *StatePool) (err error) {
 			})
 			if len(ops) > MaxDocOps {
 				totalOps += len(ops)
-				upgradesLogger.Infof("updating %d statuses (%d total)", len(ops), totalOps)
+				upgradesLogger.Infof("flushing updated %d statuses (%d total)", len(ops), totalOps)
 				err = st.db().RunTransaction(ops)
 				if err != nil {
 					return errors.Trace(err)
