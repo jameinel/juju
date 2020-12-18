@@ -15,6 +15,7 @@ import (
 	"github.com/juju/names/v4"
 	jujutxn "github.com/juju/txn"
 	"github.com/juju/utils/v2"
+	"github.com/kr/pretty"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 	"gopkg.in/mgo.v2/txn"
@@ -171,7 +172,7 @@ func (op *RemoveOfferOperation) Build(attempt int) ([]txn.Op, error) {
 		return nil, jujutxn.ErrNoOperations
 	}
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Annotatef(err, "trying to remove %v", op.offerName)
 	}
 	// When 'force' is set on the operation, this call will return needed operations
 	// and accumulate all operational errors encountered in the operation.
@@ -195,10 +196,7 @@ func (op *RemoveOfferOperation) Build(attempt int) ([]txn.Op, error) {
 // Done is part of the ModelOperation interface.
 func (op *RemoveOfferOperation) Done(err error) error {
 	if err != nil {
-		if !op.Force {
-			return errors.Annotatef(err, "cannot delete application offer %q", op.offerName)
-		}
-		op.AddError(errors.Errorf("forced offer %v removal but proceeded despite encountering ERROR %v", op.offerName, err))
+            return errors.Annotatef(err, "cannot delete application offer %q", op.offerName)
 	}
 	return nil
 }
@@ -218,11 +216,11 @@ func (op *RemoveOfferOperation) internalRemove(offer *crossmodel.ApplicationOffe
 	// so we can do a consistency check on relation count.
 	app, err := op.offers.st.Application(offer.ApplicationName)
 	if err != nil {
-		return nil, errors.Trace(err)
+            return nil, errors.Annotatef(err, "removing offer error finding application: %s", offer.ApplicationName)
 	}
 	conns, err := op.offers.st.OfferConnections(offer.OfferUUID)
 	if err != nil {
-		return nil, errors.Trace(err)
+            return nil, errors.Annotatef(err, "removing offer error finding connections: %s", offer.OfferUUID)
 	}
 	if len(conns) > 0 && !op.Force {
 		return nil, errors.Errorf("offer has %d relation%s", len(conns), plural(len(conns)))
@@ -233,7 +231,7 @@ func (op *RemoveOfferOperation) internalRemove(offer *crossmodel.ApplicationOffe
 	// remove the relations, depending on whether force=true.
 	rels, err := app.Relations()
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Annotate(err, "removing offer could not find relations")
 	}
 	if len(rels) != app.doc.RelationCount {
 		return nil, jujutxn.ErrTransientFailure
@@ -246,7 +244,7 @@ func (op *RemoveOfferOperation) internalRemove(offer *crossmodel.ApplicationOffe
 	for _, rel := range rels {
 		remoteApp, isCrossModel, err := rel.RemoteApplication()
 		if err != nil {
-			return nil, errors.Trace(err)
+                        return nil, errors.Annotate(err, "removing offer error looking up RemoteApplication")
 		}
 		if isCrossModel && !op.Force {
 			return nil, jujutxn.ErrTransientFailure
@@ -259,7 +257,7 @@ func (op *RemoveOfferOperation) internalRemove(offer *crossmodel.ApplicationOffe
 			if err := rel.Refresh(); errors.IsNotFound(err) {
 				continue
 			} else if err != nil {
-				return nil, err
+				return nil, errors.Annotatef(err, "removing offer refreshing relation %s failed", rel)
 			}
 
 			logger.Debugf("forcing cleanup of remote application %v", remoteApp.Name())
@@ -274,7 +272,7 @@ func (op *RemoveOfferOperation) internalRemove(offer *crossmodel.ApplicationOffe
 			logger.Debugf("forcing cleanup of units for %v", remoteApp.Name())
 			remoteUnits, err := rel.AllRemoteUnits(remoteApp.Name())
 			if err != nil {
-				return nil, errors.Trace(err)
+				return nil, errors.Annotate(err, "removing offer loading remote units failed")
 			}
 			logger.Debugf("got %v relation units to clean", len(remoteUnits))
 			for _, ru := range remoteUnits {
@@ -292,7 +290,7 @@ func (op *RemoveOfferOperation) internalRemove(offer *crossmodel.ApplicationOffe
 			if err == errAlreadyDying {
 				continue
 			} else if err != nil {
-				return nil, errors.Trace(err)
+				return nil, errors.Annotate(err, "removing offer building destroy ops")
 			}
 			ops = append(ops, relOps...)
 		} else {
@@ -305,7 +303,7 @@ func (op *RemoveOfferOperation) internalRemove(offer *crossmodel.ApplicationOffe
 	}
 	decRefOp, err := decApplicationOffersRefOp(op.offers.st, offer.ApplicationName)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Annotatef(err, "removing offer %v error decrementing references", offer.ApplicationName)
 	}
 	ops = append(ops, txn.Op{
 		C:      applicationOffersC,
@@ -313,6 +311,7 @@ func (op *RemoveOfferOperation) internalRemove(offer *crossmodel.ApplicationOffe
 		Assert: txn.DocExists,
 		Remove: true,
 	}, decRefOp)
+        logger.Criticalf("RemoveApplicationOffer ops: %# v", pretty.Formatter(ops))
 	return ops, nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/juju/names/v4"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/txn"
+	"github.com/kr/pretty"
 	gc "gopkg.in/check.v1"
 
 	"github.com/juju/juju/core/crossmodel"
@@ -648,6 +649,9 @@ func (s *applicationOffersSuite) TestRemoveOffersWithConnectionsForce(c *gc.C) {
 
 	mysql, err := s.State.Application("mysql")
 	c.Assert(err, jc.ErrorIsNil)
+        rels, err := mysql.Relations()
+	c.Assert(err, jc.ErrorIsNil)
+        c.Logf("Relations after default offer: %v", rels)
 	mysqlUnit, err := mysql.AddUnit(state.AddUnitParams{})
 	c.Assert(err, jc.ErrorIsNil)
 	mysqlEP, err := mysql.Endpoint("server")
@@ -667,11 +671,17 @@ func (s *applicationOffersSuite) TestRemoveOffersWithConnectionsForce(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 	s.assertInScope(c, wpru, true)
 
+        rels, err = mysql.Relations()
+	c.Assert(err, jc.ErrorIsNil)
+        c.Logf("Relations after adding remote unit: %v", rels)
+
+        // Create a Connection which would normally block removal, but force removal anyway.
 	s.addOfferConnection(c, offer.OfferUUID)
 	ao := state.NewApplicationOffers(s.State)
 	err = ao.Remove("hosted-mysql", true)
 	c.Assert(err, jc.ErrorIsNil)
-	_, err = ao.ApplicationOffer("hosted-mysql")
+        a, err := ao.ApplicationOffer("hosted-mysql")
+        c.Logf("ApplicationOffer after remove: %# v", pretty.Formatter(a))
 	c.Assert(err, jc.Satisfies, errors.IsNotFound)
 	conn, err := s.State.OfferConnections(offer.OfferUUID)
 	c.Assert(err, jc.ErrorIsNil)
@@ -681,6 +691,7 @@ func (s *applicationOffersSuite) TestRemoveOffersWithConnectionsForce(c *gc.C) {
 	err = wordpress.Refresh()
 	c.Assert(err, jc.ErrorIsNil)
 	assertLife(c, wordpress, state.Dying)
+        c.Fail()
 }
 
 func (s *applicationOffersSuite) TestRemovingApplicationFailsRace(c *gc.C) {

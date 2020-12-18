@@ -136,8 +136,8 @@ func newState(
 	// plus txn.Op slices that are wrong, eg insert dup or missing asserts.
 	// Related test failures here:
 	// https://jenkins.juju.canonical.com/job/github-make-check-juju/9317/testReport/
-	sstxn = false
 
+        sstxn = false
 	if sstxn {
 		logger.Infof("using server-side transactions")
 	} else {
