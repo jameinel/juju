@@ -72,7 +72,7 @@ func (c *operationClientMetrics) Collect(ch chan<- prometheus.Metric) {
 // fsmMetricsCollector is a prometheus.Collector that collects metrics
 // from the backend for leases
 type fsmMetricsCollector struct {
-	requests    *prometheus.SummaryVec
+	commands    *prometheus.SummaryVec
 	expirations prometheus.Gauge
 	clock       clock.Clock
 }
@@ -84,7 +84,7 @@ func NewFSMMetricsCollector(clock clock.Clock) *fsmMetricsCollector {
 			Name:      "fsm_expirations",
 			Help:      "The number of leases that have not been extended before expiring",
 		}),
-		requests: prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		commands: prometheus.NewSummaryVec(prometheus.SummaryOpts{
 			Namespace: metricsNamespace,
 			Name:      "fsm_commands",
 			Help:      "Backend processing time for lease store operations in ms",
@@ -108,7 +108,7 @@ func (c *fsmMetricsCollector) StartOperation() time.Time {
 }
 func (c *fsmMetricsCollector) RecordOperation(operation, result string, start time.Time) {
 	elapsedMS := float64(c.clock.Now().Sub(start)) / float64(time.Millisecond)
-	c.requests.With(prometheus.Labels{
+	c.commands.With(prometheus.Labels{
 		"operation": operation,
 		"result":    result,
 	}).Observe(elapsedMS)
@@ -119,10 +119,12 @@ func (c *fsmMetricsCollector) RecordExpirations(count int) {
 
 // Describe is part of prometheus.Collector.
 func (c *fsmMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
+	c.commands.Describe(ch)
 	c.expirations.Describe(ch)
 }
 
 // Collect is part of prometheus.Collector.
 func (c *fsmMetricsCollector) Collect(ch chan<- prometheus.Metric) {
+	c.commands.Collect(ch)
 	c.expirations.Collect(ch)
 }
