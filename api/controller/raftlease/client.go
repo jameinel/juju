@@ -47,6 +47,7 @@ type Remote interface {
 
 // ClientMetrics represents the metrics during a client request.
 type ClientMetrics interface {
+	StartOperation() time.Time
 	RecordOperation(string, string, time.Time)
 }
 
@@ -145,7 +146,7 @@ func NewClient(config Config) (*Client, error) {
 
 // Request attempts to perform a raft lease command against the leader.
 func (c *Client) Request(ctx context.Context, command *raftlease.Command) error {
-	start := c.config.Clock.Now()
+	start := c.config.ClientMetrics.StartOperation()
 	timeout := c.config.Clock.After(c.config.ForwardTimeout)
 
 	remote, err := c.selectRemote()
@@ -160,7 +161,7 @@ func (c *Client) Request(ctx context.Context, command *raftlease.Command) error 
 	}
 
 	// Attempt to request at least 3 times. This isn't a retry of the request
-	// against the same api controller. Instead this is should attempt to find
+	// against the same api controller. Instead, this should attempt to find
 	// a new api controller to hit.
 	err = retry.Call(retry.CallArgs{
 		Func: func() error {

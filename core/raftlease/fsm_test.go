@@ -5,6 +5,7 @@ package raftlease_test
 
 import (
 	"bytes"
+	"github.com/golang/mock/gomock"
 	"io"
 	"time"
 
@@ -52,7 +53,19 @@ type singularFSMSuite struct {
 
 func (s *singularFSMSuite) SetUpTest(c *gc.C) {
 	s.fsmSuite.SetUpTest(c)
-	s.fsmSuite.fsm = raftlease.NewFSM()
+	// TODO: (jam) 2022-06-10 It isn't a good idea to set up a gomock Controller in SetUpTest
+	//  because the gc.C that is passed in doesn't have the right lifetime.
+	//  It is only safe here because we actually don't care what metrics are called
+	ctrl := gomock.NewController(c)
+	mockMetrics := raftlease.NewMockFSMMetrics(ctrl)
+	mockMetrics.EXPECT().StartOperation().AnyTimes()
+	mockMetrics.EXPECT().RecordOperation(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockMetrics.EXPECT().RecordExpirations(gomock.Any()).AnyTimes()
+	s.AddCleanup(func(c *gc.C) {
+		ctrl.Finish()
+	})
+
+	s.fsmSuite.fsm = raftlease.NewFSM(mockMetrics)
 	s.fsmSuite.apply = s.apply
 }
 
@@ -73,9 +86,21 @@ type batchFSMSuite struct {
 var _ = gc.Suite(&batchFSMSuite{})
 
 func (s *batchFSMSuite) SetUpTest(c *gc.C) {
-	s.batchFSM = raftlease.NewBatchFSM(raftlease.NewFSM())
-
 	s.fsmSuite.SetUpTest(c)
+	// TODO: (jam) 2022-06-10 It isn't a good idea to set up a gomock Controller in SetUpTest
+	//  because the gc.C that is passed in doesn't have the right lifetime.
+	//  It is only safe here because we actually don't care what metrics are called
+	ctrl := gomock.NewController(c)
+	mockMetrics := raftlease.NewMockFSMMetrics(ctrl)
+	mockMetrics.EXPECT().StartOperation().AnyTimes()
+	mockMetrics.EXPECT().RecordOperation(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockMetrics.EXPECT().RecordExpirations(gomock.Any()).AnyTimes()
+	s.AddCleanup(func(c *gc.C) {
+		ctrl.Finish()
+	})
+
+	s.batchFSM = raftlease.NewBatchFSM(raftlease.NewFSM(mockMetrics))
+
 	s.fsmSuite.fsm = s.batchFSM
 	s.fsmSuite.apply = s.apply
 }

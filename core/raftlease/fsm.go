@@ -52,6 +52,12 @@ const (
 	OperationUnpin = "unpin"
 )
 
+type FSMMetrics interface {
+	StartOperation() time.Time
+	RecordOperation(operation, result string, start time.Time)
+	RecordExpirations(count int)
+}
+
 // FSMResponse defines what will be available on the return value from
 // FSM apply calls.
 type FSMResponse interface {
@@ -82,10 +88,11 @@ func groupKeyFor(key lease.Key) groupKey {
 }
 
 // NewFSM returns a new FSM to store lease information.
-func NewFSM() *FSM {
+func NewFSM(metrics FSMMetrics) *FSM {
 	return &FSM{
-		groups: make(map[groupKey]map[lease.Key]*entry),
-		pinned: make(map[lease.Key]set.Strings),
+		groups:  make(map[groupKey]map[lease.Key]*entry),
+		pinned:  make(map[lease.Key]set.Strings),
+		metrics: metrics,
 	}
 }
 
@@ -102,7 +109,8 @@ type FSM struct {
 	// their own pins. It is done to avoid restoring normal expiration
 	// to a lease pinned by another concern operating under the
 	// assumption that the lease-holder will not change.
-	pinned map[lease.Key]set.Strings
+	pinned  map[lease.Key]set.Strings
+	metrics FSMMetrics
 }
 
 func (f *FSM) getGroup(key lease.Key) (map[lease.Key]*entry, bool) {
@@ -244,6 +252,7 @@ func (f *FSM) removeExpired(newTime time.Time) []Expired {
 			delete(f.groups, gKey)
 		}
 	}
+	f.metrics.RecordExpirations(len(expired))
 	return expired
 }
 
@@ -449,22 +458,32 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 // FSM can make use of the same logic.
 // The caller is expected hold the lock before calling apply.
 func (f *FSM) apply(command Command) *response {
+	opStart := f.metrics.StartOperation()
+	var resp *response
 	switch command.Operation {
 	case OperationClaim:
-		return f.claim(command.LeaseKey(), command.Holder, command.Duration)
+		resp = f.claim(command.LeaseKey(), command.Holder, command.Duration)
 	case OperationExtend:
-		return f.extend(command.LeaseKey(), command.Holder, command.Duration)
+		resp = f.extend(command.LeaseKey(), command.Holder, command.Duration)
 	case OperationRevoke:
-		return f.revoke(command.LeaseKey(), command.Holder)
+		resp = f.revoke(command.LeaseKey(), command.Holder)
 	case OperationPin:
-		return f.pin(command.LeaseKey(), command.PinEntity)
+		resp = f.pin(command.LeaseKey(), command.PinEntity)
 	case OperationUnpin:
-		return f.unpin(command.LeaseKey(), command.PinEntity)
+		resp = f.unpin(command.LeaseKey(), command.PinEntity)
 	case OperationSetTime:
-		return f.setTime(command.OldTime, command.NewTime)
+		resp = f.setTime(command.OldTime, command.NewTime)
 	default:
-		return &response{err: errors.NotValidf("operation %q", command.Operation)}
+		resp = &response{err: errors.NotValidf("operation %q", command.Operation)}
 	}
+	status := "success"
+	if resp.err != nil {
+		// At this level, we don't do any timeout checking,
+		//so that cannot be one of the status codes.
+		status = "error"
+	}
+	f.metrics.RecordOperation(command.Operation, status, opStart)
+	return resp
 }
 
 func unmarshalCommand(log *raft.Log) (Command, error) {

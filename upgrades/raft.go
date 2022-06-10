@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/go-msgpack/codec"
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
+	"github.com/juju/clock"
 	"github.com/juju/errors"
 	"github.com/juju/replicaset/v2"
 
@@ -259,13 +260,14 @@ func leasesInStore(logStore raft.LogStore, snapshotStore raft.SnapshotStore) (bo
 		return false, errors.Annotate(err, "listing snapshots")
 	}
 	if len(snapshots) > 0 {
+		metrics := raftlease.NewFSMMetricsCollector(clock.WallClock)
 		snapshot := snapshots[0]
 		_, source, err := snapshotStore.Open(snapshot.ID)
 		if err != nil {
 			return false, errors.Annotatef(err, "opening snapshot %q", snapshot.ID)
 		}
 		defer source.Close()
-		fsm := raftlease.NewFSM()
+		fsm := raftlease.NewFSM(metrics)
 		if fsm.Restore(source) == nil {
 			// The fact that the snapshot could be loaded into the FSM
 			// means that there are leases stored.

@@ -265,7 +265,7 @@ const (
 // we have to create this type.
 // TODO (stickupkid): Remove this once API Client type is battle tested and
 // we've deprecated pubsub client.
-type ClientFunc = func(ClientType, *api.Info, *pubsub.StructuredHub, string, clock.Clock, *raftlease.OperationClientMetrics, Logger) (raftlease.Client, error)
+type ClientFunc = func(ClientType, *api.Info, *pubsub.StructuredHub, string, clock.Clock, raftlease.ClientMetrics, Logger) (raftlease.Client, error)
 
 // NewClientFunc returns a client depending on the type of feature flag
 // enablement.
@@ -273,7 +273,7 @@ func NewClientFunc(clientType ClientType, apiInfo *api.Info,
 	hub *pubsub.StructuredHub,
 	requestTopic string,
 	clock clock.Clock,
-	metrics *raftlease.OperationClientMetrics,
+	metrics raftlease.ClientMetrics,
 	logger Logger) (raftlease.Client, error) {
 
 	logger.Infof("Using lease client type %q for raft lease transport", clientType)

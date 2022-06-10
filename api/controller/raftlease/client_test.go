@@ -625,4 +625,5 @@ func (fakeLogger) Tracef(string, ...interface{})   {}
 
 type fakeClientMetrics struct{}
 
+func (fakeClientMetrics) StartOperation() time.Time                 { return time.Now() }
 func (fakeClientMetrics) RecordOperation(string, string, time.Time) {}

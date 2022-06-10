@@ -574,6 +574,7 @@ func (a *MachineAgent) makeEngineCreator(
 		registerIntrospectionHandlers := func(handle func(path string, h http.Handler)) {
 			handle("/metrics/", promhttp.HandlerFor(a.prometheusRegistry, promhttp.HandlerOpts{}))
 		}
+		fsmMetrics := raftlease.NewFSMMetricsCollector(clock.WallClock)
 
 		manifoldsCfg := machine.ManifoldsConfig{
 			PreviousAgentVersion:    previousAgentVersion,
@@ -617,7 +618,7 @@ func (a *MachineAgent) makeEngineCreator(
 				return engineConfigFunc(controllerMetricsSink)
 			},
 			SetupLogging:            agentconf.SetupAgentLogging,
-			LeaseFSM:                raftlease.NewFSM(),
+			LeaseFSM:                raftlease.NewFSM(fsmMetrics),
 			RaftOpQueue:             queue.NewOpQueue(clock.WallClock),
 			DependencyEngineMetrics: metrics,
 		}
@@ -652,7 +653,8 @@ func (a *MachineAgent) makeEngineCreator(
 			// and the agent is controlled by by the OS to only have one.
 			logger.Errorf("failed to start introspection worker: %v", err)
 		}
-		if err := addons.RegisterEngineMetrics(a.prometheusRegistry, metrics, engine, controllerMetricsSink); err != nil {
+		if err := addons.RegisterEngineMetrics(a.prometheusRegistry, metrics, engine,
+			controllerMetricsSink, fsmMetrics); err != nil {
 			// If the dependency engine metrics fail, continue on. This is unlikely
 			// to happen in the real world, but should't stop or bring down an
 			// agent.

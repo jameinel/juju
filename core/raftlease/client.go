@@ -14,7 +14,6 @@ import (
 	"github.com/juju/juju/core/lease"
 	"github.com/juju/pubsub/v2"
 	"github.com/juju/utils/v3"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Client defines the methods for broadcasting a command.
@@ -24,6 +23,7 @@ type Client interface {
 
 // ClientMetrics represents the metrics during a client request.
 type ClientMetrics interface {
+	StartOperation() time.Time
 	RecordOperation(string, string, time.Time)
 }
 
@@ -62,7 +62,7 @@ func (c *PubsubClient) Request(ctx context.Context, command *Command) error {
 		return errors.Trace(err)
 	}
 
-	start := time.Now()
+	start := c.metrics.StartOperation()
 
 	// Ensure that we namespace the response topic so we can easily filter it
 	// out for metric reporting.
@@ -139,36 +139,6 @@ func (c *PubsubClient) Request(ctx context.Context, command *Command) error {
 
 func (c PubsubClient) record(operation, result string, start time.Time) {
 	c.metrics.RecordOperation(operation, result, start)
-}
-
-type OperationClientMetrics struct {
-	metrics *metricsCollector
-	clock   clock.Clock
-}
-
-func NewOperationClientMetrics(clock clock.Clock) *OperationClientMetrics {
-	return &OperationClientMetrics{
-		metrics: newMetricsCollector(),
-		clock:   clock,
-	}
-}
-
-func (m OperationClientMetrics) RecordOperation(operation, result string, start time.Time) {
-	elapsedMS := float64(m.clock.Now().Sub(start)) / float64(time.Millisecond)
-	m.metrics.requests.With(prometheus.Labels{
-		"operation": operation,
-		"result":    result,
-	}).Observe(elapsedMS)
-}
-
-// Describe is part of prometheus.Collector.
-func (c *OperationClientMetrics) Describe(ch chan<- *prometheus.Desc) {
-	c.metrics.Describe(ch)
-}
-
-// Collect is part of prometheus.Collector.
-func (c *OperationClientMetrics) Collect(ch chan<- prometheus.Metric) {
-	c.metrics.Collect(ch)
 }
 
 // ForwardRequest is a message sent over the hub to the raft forwarder

@@ -104,9 +104,15 @@ func NewPrometheusRegistry() (*prometheus.Registry, error) {
 	return r, nil
 }
 
-// RegisterEngineMetrics registers the metrics sink on a prometheus registerer,
+// RegisterEngineMetrics registers our active metrics metrics sink on a prometheus registerer,
 // ensuring that we cleanup when the worker has stopped.
-func RegisterEngineMetrics(registry prometheus.Registerer, metrics prometheus.Collector, worker worker.Worker, sink engine.MetricSink) error {
+func RegisterEngineMetrics(
+	registry prometheus.Registerer,
+	metrics prometheus.Collector,
+	worker worker.Worker,
+	sink engine.MetricSink,
+	fsmMetrics prometheus.Collector,
+) error {
 	if err := registry.Register(metrics); err != nil {
 		return errors.Annotatef(err, "failed to register engine metrics")
 	}
@@ -114,6 +120,7 @@ func RegisterEngineMetrics(registry prometheus.Registerer, metrics prometheus.Co
 	go func() {
 		_ = worker.Wait()
 		_ = sink.Unregister()
+		_ = registry.Unregister(fsmMetrics)
 		_ = registry.Unregister(metrics)
 	}()
 	return nil
