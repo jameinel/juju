@@ -275,7 +275,8 @@ func (op *CaasOperatorAgent) Workers() (worker.Worker, error) {
 		// and the agent is controlled by by the OS to only have one.
 		logger.Errorf("failed to start introspection worker: %v", err)
 	}
-	if err := addons.RegisterEngineMetrics(op.prometheusRegistry, metrics, engine, workerMetricsSink); err != nil {
+        /// XXX This feels wrong that Machine ends up having raftlease worker attached but CAAS doesn't
+	if err := addons.RegisterEngineMetrics(op.prometheusRegistry, metrics, engine, workerMetricsSink, nil); err != nil {
 		// If the dependency engine metrics fail, continue on. This is unlikely
 		// to happen in the real world, but should't stop or bring down an
 		// agent.

@@ -618,10 +618,18 @@ func (a *MachineAgent) makeEngineCreator(
 				return engineConfigFunc(controllerMetricsSink)
 			},
 			SetupLogging:            agentconf.SetupAgentLogging,
+                        // XXX: This seems wrong, we seem to be instantiating
+                        //   raftlease.NewFSM for all machine agents, not just
+                        //   for the controllers. Most likely LeaseFSM needs to
+                        //   become a Worker itself, and put into the
+                        //   dependency engine.
 			LeaseFSM:                raftlease.NewFSM(fsmMetrics),
 			RaftOpQueue:             queue.NewOpQueue(clock.WallClock),
 			DependencyEngineMetrics: metrics,
 		}
+                // XXX: jam do we really want to instantiate all of the
+                //  iaasMachineManifolds just to replace it with
+                //  caasMachineManifolds immediately thereafter?
 		manifolds := iaasMachineManifolds(manifoldsCfg)
 		if a.isCaasAgent {
 			manifolds = caasMachineManifolds(manifoldsCfg)

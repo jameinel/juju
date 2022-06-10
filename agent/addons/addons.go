@@ -116,11 +116,19 @@ func RegisterEngineMetrics(
 	if err := registry.Register(metrics); err != nil {
 		return errors.Annotatef(err, "failed to register engine metrics")
 	}
+        // XXX: Ugly hack, and introduces a bug if metrics registers but fsmmetrics doesn't
+        if fsmMetrics != nil {
+            if err := registry.Register(fsmMetrics); err != nil {
+                return errors.Annotatef(err, "failed to register engine fsm metrics")
+            }
+        }
 
 	go func() {
 		_ = worker.Wait()
 		_ = sink.Unregister()
-		_ = registry.Unregister(fsmMetrics)
+                if fsmMetrics != nil {
+                    _ = registry.Unregister(fsmMetrics)
+                }
 		_ = registry.Unregister(metrics)
 	}()
 	return nil
