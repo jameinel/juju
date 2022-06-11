@@ -458,6 +458,9 @@ func (f *FSM) Apply(log *raft.Log) interface{} {
 // FSM can make use of the same logic.
 // The caller is expected hold the lock before calling apply.
 func (f *FSM) apply(command Command) *response {
+	// TODO: (jam) 2022-06-11 I tried adding metrics for 'time spent' doing FSM updates,
+	// but our actual FSM changes are just 'tweak these values in a map' which are generally
+	// trivial and we spend virtually no time on them (metrics say 0ms)
 	opStart := f.metrics.StartOperation()
 	var resp *response
 	switch command.Operation {
@@ -597,10 +600,9 @@ func (f *FSM) Restore(reader io.ReadCloser) error {
 	return nil
 }
 
-// BatchFSM creates a FSM that allows for batching operations. Raft takes
+// BatchFSM creates an FSM that allows for batching operations. Raft takes
 // care of applying the batches in chunked sizes, which allows for restoring
-// and snapshotting a the library level. Those should be transparent to the
-// the FSM.
+// and snapshotting at the library level. Those should be transparent to the FSM.
 type BatchFSM struct {
 	*FSM
 }
@@ -628,7 +630,7 @@ func NewBatchFSM(fsm *FSM) *BatchFSM {
 // ApplyBatch is part of raft.BatchingFSM.
 func (f *BatchFSM) ApplyBatch(logs []*raft.Log) interface{} {
 	// Unmarshal all the logs up front, we can validate them without
-	// stealing the lock. Additionally we can ensure that we get the correct
+	// stealing the lock. Additionally, we can ensure that we get the correct
 	// type of log.
 	commands := make([]Command, len(logs))
 	responses := make([]interface{}, len(logs))

@@ -42,7 +42,7 @@ func NewOperationClientMetrics(clock clock.Clock) *operationClientMetrics {
 				0.99: 0.001,
 			},
 		}, []string{
-			"operation", // claim, extend, pin, unpin or setTime
+			"operation", // claim, extend, pin, unpin or [setTime]
 			"result",    // success, failure, delivery timeout, response timeout, or error
 		}),
 	}
@@ -87,7 +87,7 @@ func NewFSMMetricsCollector(clock clock.Clock) *fsmMetricsCollector {
 		commands: prometheus.NewSummaryVec(prometheus.SummaryOpts{
 			Namespace: metricsNamespace,
 			Name:      "fsm_commands",
-			Help:      "Backend processing time for lease store operations in ms",
+			Help:      "Backend processing time for lease store operations in us",
 			Objectives: map[float64]float64{
 				0.5:  0.05,
 				0.9:  0.01,
@@ -107,7 +107,7 @@ func (c *fsmMetricsCollector) StartOperation() time.Time {
 	return c.clock.Now()
 }
 func (c *fsmMetricsCollector) RecordOperation(operation, result string, start time.Time) {
-	elapsedMS := float64(c.clock.Now().Sub(start)) / float64(time.Millisecond)
+	elapsedMS := float64(c.clock.Now().Sub(start)) / float64(time.Microsecond)
 	c.commands.With(prometheus.Labels{
 		"operation": operation,
 		"result":    result,
