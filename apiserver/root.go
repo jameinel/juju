@@ -16,10 +16,13 @@ import (
 	"github.com/juju/names/v4"
 	"github.com/juju/rpcreflect"
 	"github.com/juju/version/v2"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 
 	"github.com/juju/juju/apiserver/common"
+	apiservererrors "github.com/juju/juju/apiserver/errors"
 	"github.com/juju/juju/apiserver/facade"
 	"github.com/juju/juju/core/cache"
+	coredatabase "github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/leadership"
 	"github.com/juju/juju/core/lease"
 	"github.com/juju/juju/core/multiwatcher"
@@ -54,6 +57,10 @@ type apiHandler struct {
 	resources *common.Resources
 	shared    *sharedServerContext
 	entity    state.Entity
+
+	// A JWT may be used for auth.
+	authTokenString string
+	authToken       jwt.Token
 
 	// An empty modelUUID means that the user has logged in through the
 	// root of the API server rather than the /model/:model-uuid/api
@@ -593,14 +600,6 @@ func (ctx *facadeContext) SingularClaimer() (lease.Claimer, error) {
 	)
 }
 
-func (ctx *facadeContext) Raft() facade.RaftContext {
-	return &raftMediator{
-		queue:  ctx.r.shared.raftOpQueue,
-		logger: ctx.r.shared.logger,
-		clock:  ctx.r.clock,
-	}
-}
-
 func (ctx *facadeContext) HTTPClient(purpose facade.HTTPClientPurpose) facade.HTTPClient {
 	switch purpose {
 	case facade.CharmhubHTTPClient:
@@ -608,6 +607,12 @@ func (ctx *facadeContext) HTTPClient(purpose facade.HTTPClientPurpose) facade.HT
 	default:
 		return nil
 	}
+}
+
+// ControllerDB returns a TrackedDB reference for the controller database.
+func (ctx *facadeContext) ControllerDB() (coredatabase.TrackedDB, error) {
+	db, err := ctx.r.shared.dbGetter.GetDB(coredatabase.ControllerNS)
+	return db, errors.Trace(err)
 }
 
 // adminRoot dispatches API calls to those available to an anonymous connection
@@ -707,14 +712,38 @@ func (r *apiHandler) ConnectedModel() string {
 	return r.modelUUID
 }
 
-// HasPermission returns true if the logged in user can perform <operation> on <target>.
-func (r *apiHandler) HasPermission(operation permission.Access, target names.Tag) (bool, error) {
-	return common.HasPermission(r.state.UserPermission, r.entity.Tag(), operation, target)
+func (r *apiHandler) userPermission(subject names.UserTag, target names.Tag) (permission.Access, error) {
+	if r.authToken == nil {
+		return r.state.UserPermission(subject, target)
+	}
+	return permissionFromToken(r.authToken, target)
 }
 
-// UserHasPermission returns true if the passed in user can perform <operation> on <target>.
-func (r *apiHandler) UserHasPermission(user names.UserTag, operation permission.Access, target names.Tag) (bool, error) {
-	return common.HasPermission(r.state.UserPermission, user, operation, target)
+type entityHasPermissionFunc func(entity names.Tag, operation permission.Access, target names.Tag) (bool, error)
+
+// HasPermission returns true if the logged in user can perform <operation> on <target>.
+// If a login token is used to specify user and access, and the operaton is not allowed, an
+// AccessRequiredError is returned with the required permissions.
+func (r *apiHandler) HasPermission(operation permission.Access, target names.Tag) (bool, error) {
+	return r.EntityHasPermission(r.entity.Tag(), operation, target)
+}
+
+// EntityHasPermission returns true if the passed in entity can perform <operation> on <target>.
+func (r *apiHandler) EntityHasPermission(entity names.Tag, operation permission.Access, target names.Tag) (bool, error) {
+	has, err := common.HasPermission(r.userPermission, entity, operation, target)
+	if r.authToken == nil || err != nil || has {
+		return has, err
+	}
+	return false, &apiservererrors.AccessRequiredError{
+		RequiredAccess: map[names.Tag]permission.Access{
+			target: operation,
+		},
+	}
+}
+
+// AuthTokenString returns the jwt passed to login.
+func (r *apiHandler) AuthTokenString() string {
+	return r.authTokenString
 }
 
 // DescribeFacades returns the list of available Facades and their Versions

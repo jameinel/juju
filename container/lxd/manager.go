@@ -11,7 +11,6 @@ import (
 	"github.com/juju/errors"
 	"github.com/juju/loggo"
 	jujuarch "github.com/juju/utils/v3/arch"
-	"github.com/lxc/lxd/shared"
 	"github.com/lxc/lxd/shared/api"
 
 	"github.com/juju/juju/cloudconfig/cloudinit"
@@ -184,7 +183,7 @@ func (m *containerManager) ensureInitialized() error {
 // IsInitialized implements container.Manager.
 // It returns true if we can find a LXD socket on this host.
 func (m *containerManager) IsInitialized() bool {
-	return SocketPath(shared.IsUnixSocket) != ""
+	return SocketPath(IsUnixSocket) != ""
 }
 
 // getContainerSpec generates a spec for creating a new container.
@@ -263,9 +262,14 @@ func (m *containerManager) getContainerSpec(
 		networkConfig.Interfaces = interfaces
 	}
 
+	cloudConfig, err := cloudinit.New(instanceConfig.Base.OS, cloudinit.WithDisableNetplanMACMatch)
+	if err != nil {
+		return ContainerSpec{}, errors.Trace(err)
+	}
+
 	// CloudInitUserData creates our own ENI/netplan.
 	// We need to disable cloud-init networking to make it work.
-	userData, err := containerinit.CloudInitUserData(instanceConfig, networkConfig)
+	userData, err := containerinit.CloudInitUserData(cloudConfig, instanceConfig, networkConfig)
 	if err != nil {
 		return ContainerSpec{}, errors.Trace(err)
 	}

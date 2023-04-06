@@ -12,6 +12,7 @@ import (
 
 	"github.com/juju/charm/v10"
 	"github.com/juju/collections/set"
+	"github.com/juju/collections/transform"
 	"github.com/juju/description/v4"
 	"github.com/juju/errors"
 	"github.com/juju/loggo"
@@ -219,6 +220,9 @@ func (ctrl *Controller) Import(model description.Model) (_ *Model, _ *State, err
 	if err := restore.secrets(); err != nil {
 		return nil, nil, errors.Annotate(err, "secrets")
 	}
+	if err := restore.remoteSecrets(); err != nil {
+		return nil, nil, errors.Annotate(err, "remote secrets")
+	}
 
 	// NOTE: at the end of the import make sure that the mode of the model
 	// is set to "imported" not "active" (or whatever we call it). This way
@@ -298,7 +302,6 @@ type ImportStateMigration struct {
 	src                 description.Model
 	dst                 Database
 	knownSecretBackends set.Strings
-	importer            *importer
 	migrations          []func() error
 }
 
@@ -524,7 +527,7 @@ func (i *importer) machine(m description.Machine) error {
 	// 4. gather prereqs and machine op, run ops.
 	ops := append(prereqOps, machineOp)
 
-	// 5. add any ops that we may need to add the opened ports information.
+	// 5. add any ops that we may need to add the opened ports information for the machine.
 	ops = append(ops, i.machinePortsOp(m))
 
 	if err := i.st.db().RunTransaction(ops); err != nil {
@@ -612,6 +615,35 @@ func (i *importer) machinePortsOp(m description.Machine) txn.Op {
 	return txn.Op{
 		C:      openedPortsC,
 		Id:     machineID,
+		Assert: txn.DocMissing,
+		Insert: portRangeDoc,
+	}
+}
+
+func (i *importer) applicationPortsOp(a description.Application) txn.Op {
+	modelUUID := i.st.ModelUUID()
+	appName := a.Name()
+	docID := i.st.docID(applicationGlobalKey(appName))
+
+	portRangeDoc := newApplicationPortRangesDoc(docID, modelUUID, appName)
+	for unitName, unitPorts := range a.OpenedPortRanges().ByUnit() {
+		portRangeDoc.UnitRanges[unitName] = make(network.GroupedPortRanges)
+
+		for endpointName, portRanges := range unitPorts.ByEndpoint() {
+			portRangeList := transform.Slice(portRanges, func(pr description.UnitPortRange) network.PortRange {
+				return network.PortRange{
+					FromPort: pr.FromPort(),
+					ToPort:   pr.ToPort(),
+					Protocol: pr.Protocol(),
+				}
+			})
+			portRangeDoc.UnitRanges[unitName][endpointName] = portRangeList
+		}
+	}
+
+	return txn.Op{
+		C:      openedPortsC,
+		Id:     docID,
 		Assert: txn.DocMissing,
 		Insert: portRangeDoc,
 	}
@@ -947,6 +979,9 @@ func (i *importer) application(a description.Application, ctrlCfg controller.Con
 	})
 
 	ops = append(ops, i.appResourceOps(a)...)
+
+	// add any ops that we may need to add the opened ports information for the application.
+	ops = append(ops, i.applicationPortsOp(a))
 
 	if err := i.st.db().RunTransaction(ops); err != nil {
 		return errors.Trace(err)
@@ -1358,41 +1393,6 @@ func (i *importer) makeApplicationDoc(a description.Application) (*applicationDo
 	}, nil
 }
 
-func (i *importer) loadInstanceHardwareFromUnits(units []description.Unit) ([]instance.HardwareCharacteristics, error) {
-	machinesCollection, closer := i.st.db().GetCollection(machinesC)
-	defer closer()
-
-	machineIds := set.NewStrings()
-	for _, unit := range units {
-		tag := unit.Machine()
-		machineIds.Add(tag.Id())
-	}
-
-	docs := []machineDoc{}
-	err := machinesCollection.Find(bson.M{
-		"_id": bson.M{
-			"$in": machineIds.SortedValues(),
-		},
-	}).All(&docs)
-	if err != nil {
-		return nil, errors.Annotate(err, "cannot get unit machines")
-	}
-
-	var hwChars []instance.HardwareCharacteristics
-	for _, doc := range docs {
-		machine := newMachine(i.st, &doc)
-		hw, err := machine.HardwareCharacteristics()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if hw == nil {
-			continue
-		}
-		hwChars = append(hwChars, *hw)
-	}
-	return hwChars, nil
-}
-
 func (i *importer) makeCharmOrigin(a description.Application) (*CharmOrigin, error) {
 	curlStr := a.CharmURL()
 
@@ -1577,22 +1577,13 @@ func (i *importer) firewallRules() error {
 		return m.Execute(stateModelNamspaceShim{
 			Model: migration.src,
 			st:    i.st,
-		}, migration.dst)
+		}, i.dbModel)
 	})
 	if err := migration.Run(); err != nil {
 		return errors.Trace(err)
 	}
 	i.logger.Debugf("importing firewall rules succeeded")
 	return nil
-}
-
-// makeStatusDoc assumes status is non-nil.
-func (i *importer) makeFirewallRuleDoc(firewallRule description.FirewallRule) *firewallRulesDoc {
-	return &firewallRulesDoc{
-		Id:               firewallRule.ID(),
-		WellKnownService: firewallRule.WellKnownService(),
-		WhitelistCIDRS:   firewallRule.WhitelistCIDRs(),
-	}
 }
 
 func (i *importer) makeRemoteApplicationDoc(app description.RemoteApplication) *remoteApplicationDoc {
@@ -2711,14 +2702,38 @@ func (i *importer) secrets() error {
 	}
 	migration.Add(func() error {
 		m := ImportSecrets{}
-		return m.Execute(stateModelNamspaceShim{
-			Model: migration.src,
-			st:    i.st,
+		return m.Execute(&secretConsumersStateShim{
+			stateModelNamspaceShim: stateModelNamspaceShim{
+				Model: migration.src,
+				st:    i.st,
+			},
 		}, migration.dst, migration.knownSecretBackends)
 	})
 	if err := migration.Run(); err != nil {
 		return errors.Trace(err)
 	}
 	i.logger.Debugf("importing secrets succeeded")
+	return nil
+}
+
+func (i *importer) remoteSecrets() error {
+	i.logger.Debugf("importing remote secret references")
+	migration := &ImportStateMigration{
+		src: i.model,
+		dst: i.st.db(),
+	}
+	migration.Add(func() error {
+		m := ImportRemoteSecrets{}
+		return m.Execute(&secretConsumersStateShim{
+			stateModelNamspaceShim: stateModelNamspaceShim{
+				Model: migration.src,
+				st:    i.st,
+			},
+		}, migration.dst)
+	})
+	if err := migration.Run(); err != nil {
+		return errors.Trace(err)
+	}
+	i.logger.Debugf("importing remote secret references succeeded")
 	return nil
 }

@@ -70,6 +70,14 @@ import (
 
 var defaultBase = series.MustParseBaseFromString("ubuntu@22.04")
 
+func resourceHash(content string) charmresource.Fingerprint {
+	fp, err := charmresource.GenerateFingerprint(strings.NewReader(content))
+	if err != nil {
+		panic(err)
+	}
+	return fp
+}
+
 type DeploySuiteBase struct {
 	jjtesting.RepoSuite
 	coretesting.CmdBlockHelper
@@ -79,7 +87,7 @@ type DeploySuiteBase struct {
 }
 
 // deployCommand returns a deploy command that stubs out the
-// charm store and the controller deploy API.
+// charm repository and the controller deploy API.
 func (s *DeploySuiteBase) deployCommand() *DeployCommand {
 	deploy := s.deployCommandForState()
 	deploy.NewDeployAPI = func() (deployer.DeployerAPI, error) {
@@ -95,7 +103,7 @@ func (s *DeploySuiteBase) deployCommand() *DeployCommand {
 }
 
 // deployCommandForState returns a deploy command that stubs out the
-// charm store but writes data to the juju database.
+// charm repository but writes data to the juju database.
 func (s *DeploySuiteBase) deployCommandForState() *DeployCommand {
 	deploy := newDeployCommand()
 	deploy.Steps = nil
@@ -305,7 +313,7 @@ func (s *DeploySuite) TestBlockDeploy(c *gc.C) {
 
 func (s *DeploySuite) TestInvalidPath(c *gc.C) {
 	err := s.runDeploy(c, "/home/nowhere")
-	c.Assert(err, gc.ErrorMatches, `cannot resolve charm or bundle "nowhere": charm or bundle not found`)
+	c.Assert(err, gc.ErrorMatches, `no charm was found at "/home/nowhere"`)
 }
 
 func (s *DeploySuite) TestInvalidFileFormat(c *gc.C) {
@@ -962,7 +970,8 @@ func (s *DeploySuite) TestDeployBundleWithSAAS(c *gc.C) {
 			OfferName: "mysql",
 			OfferURL:  "admin/default.mysql",
 		},
-		Macaroon: mac,
+		Macaroon:  mac,
+		AuthToken: "auth-token",
 		ControllerInfo: &params.ExternalControllerInfo{
 			ControllerTag: coretesting.ControllerTag.String(),
 			Addrs:         []string{"192.168.1.0"},
@@ -979,6 +988,7 @@ func (s *DeploySuite) TestDeployBundleWithSAAS(c *gc.C) {
 			},
 			ApplicationAlias: "mysql",
 			Macaroon:         mac,
+			AuthToken:        "auth-token",
 			ControllerInfo: &crossmodel.ControllerInfo{
 				ControllerTag: coretesting.ControllerTag,
 				Alias:         "controller-alias",
@@ -1065,11 +1075,6 @@ func (s *CAASDeploySuiteBase) fakeAPI() *fakeDeployAPI {
 		return s.factory
 	}
 	return fakeAPI
-}
-
-func (s *CAASDeploySuiteBase) makeCharmDir(c *gc.C, cloneCharm string) *charm.CharmDir {
-	charmsPath := c.MkDir()
-	return testcharms.RepoWithSeries("kubernetes").ClonedDir(charmsPath, cloneCharm)
 }
 
 func (s *CAASDeploySuiteBase) runDeploy(c *gc.C, fakeAPI *fakeDeployAPI, args ...string) (*cmd.Context, error) {
@@ -1627,8 +1632,6 @@ func (s *DeploySuite) TestSetMetricCredentialsNotCalledForUnmeteredCharm(c *gc.C
 
 type FakeStoreStateSuite struct {
 	DeploySuiteBase
-	path string
-	riak *state.Application
 }
 
 func (s *FakeStoreStateSuite) runDeployWithOutput(c *gc.C, args ...string) (string, string, error) {
@@ -1762,20 +1765,6 @@ func (s *FakeStoreStateSuite) assertCharmsUploaded(c *gc.C, ids ...string) {
 	c.Assert(uploaded, jc.SameContents, ids)
 }
 
-// assertDeployedApplicationBindings checks that applications were deployed into the
-// expected spaces. It is separate to assertApplicationsDeployed because it is only
-// relevant to a couple of tests.
-func (s *FakeStoreStateSuite) assertDeployedApplicationBindings(c *gc.C, info map[string]applicationInfo) {
-	applications, err := s.State.AllApplications()
-	c.Assert(err, jc.ErrorIsNil)
-
-	for _, app := range applications {
-		endpointBindings, err := app.EndpointBindings()
-		c.Assert(err, jc.ErrorIsNil)
-		c.Assert(endpointBindings.Map(), jc.DeepEquals, info[app.Name()].endpointBindings)
-	}
-}
-
 // assertApplicationsDeployed checks that the given applications have been deployed.
 func (s *FakeStoreStateSuite) assertApplicationsDeployed(c *gc.C, info map[string]applicationInfo) {
 	applications, err := s.State.AllApplications()
@@ -1841,14 +1830,13 @@ func (s *FakeStoreStateSuite) assertUnitsCreated(c *gc.C, expectedUnits map[stri
 
 // applicationInfo holds information about a deployed application.
 type applicationInfo struct {
-	charm            string
-	config           charm.Settings
-	constraints      constraints.Value
-	scale            int
-	exposed          bool
-	storage          map[string]state.StorageConstraints
-	devices          map[string]state.DeviceConstraints
-	endpointBindings map[string]string
+	charm       string
+	config      charm.Settings
+	constraints constraints.Value
+	scale       int
+	exposed     bool
+	storage     map[string]state.StorageConstraints
+	devices     map[string]state.DeviceConstraints
 }
 
 func (s *DeploySuite) TestDeployCharmWithSomeEndpointBindingsSpecifiedSuccess(c *gc.C) {

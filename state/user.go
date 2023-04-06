@@ -71,15 +71,26 @@ func (st *State) AddUserWithSecretKey(name, displayName, creator string) (*User,
 }
 
 func (st *State) addUser(name, displayName, password, creator string, secretKey []byte) (*User, error) {
+
 	if !names.IsValidUserName(name) {
 		return nil, errors.Errorf("invalid user name %q", name)
 	}
 	lowercaseName := strings.ToLower(name)
 
-	if _, err := st.User(names.NewUserTag(name)); err != nil && !errors.IsNotFound(err) {
-		if IsDeletedUserError(err) {
-			return nil, errors.Annotate(err, "cannot reuse name")
+	foundUser := &User{st: st}
+	err := st.getUser(names.NewUserTag(name).Name(), &foundUser.doc)
+	// No error, the user is already there
+	if err == nil {
+		if foundUser.doc.Deleted {
+			// the user was deleted, we update it
+			return st.recreateExistingUser(foundUser, name, displayName, password, creator, secretKey)
+		} else {
+			return nil, errors.AlreadyExistsf("user %s", name)
 		}
+	}
+
+	// There is an error different from not found
+	if err != nil && !errors.IsNotFound(err) {
 		return nil, errors.Trace(err)
 	}
 
@@ -93,6 +104,8 @@ func (st *State) addUser(name, displayName, password, creator string, secretKey 
 			SecretKey:   secretKey,
 			CreatedBy:   creator,
 			DateCreated: dateCreated,
+			Deleted:     false,
+			RemovalLog:  []userRemovedLogEntry{},
 		},
 	}
 
@@ -119,7 +132,7 @@ func (st *State) addUser(name, displayName, password, creator string, secretKey 
 		defaultControllerPermission)
 	ops = append(ops, controllerUserOps...)
 
-	err := st.db().RunTransaction(ops)
+	err = st.db().RunTransaction(ops)
 	if err != nil {
 		if err == txn.ErrAborted {
 			err = errors.Errorf("username unavailable")
@@ -127,6 +140,100 @@ func (st *State) addUser(name, displayName, password, creator string, secretKey 
 		return nil, errors.Trace(err)
 	}
 	return user, nil
+}
+
+// recreateExistingUser manipulates the values of an existing user in the db.
+// This is particularly useful when reusing existing users that were previously
+// deleted.
+func (st *State) recreateExistingUser(u *User, name, displayName, password, creator string, secretKey []byte) (*User, error) {
+	dateCreated := st.nowToTheSecond()
+
+	buildTxn := func(attempt int) ([]txn.Op, error) {
+		if attempt > 0 {
+			err := u.Refresh()
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			if !u.IsDeleted() {
+				return nil, errors.AlreadyExistsf("user %s", name)
+			}
+		}
+
+		updateUser := bson.D{{"$set", bson.D{
+			{"deleted", false},
+			{"name", name},
+			{"displayname", displayName},
+			{"createdby", creator},
+			{"datecreated", dateCreated},
+			{"secretkey", secretKey},
+		}}}
+
+		// update the password
+		if password != "" {
+			salt, err := utils.RandomSalt()
+			if err != nil {
+				return nil, err
+			}
+			updateUser = append(updateUser,
+				bson.DocElem{"$set", bson.D{
+					{"passwordhash", utils.UserPasswordHash(password, salt)},
+					{"passwordsalt", salt},
+				}},
+			)
+		}
+
+		var ops []txn.Op
+
+		// ensure models that were migrating at the time of the RemoveUser call are
+		// processed now.
+		modelQuery, closer, err := st.modelQueryForUser(u.UserTag(), false)
+		defer closer()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		var modelDocs []modelDoc
+		if err := modelQuery.All(&modelDocs); err != nil {
+			return nil, errors.Trace(err)
+		}
+		for _, model := range modelDocs {
+			// remove the permission for the model
+			ops = append(ops, removeModelUserOpsGlobal(model.UUID, u.UserTag())...)
+		}
+
+		// remove previous controller permissions
+		if _, err := u.st.controllerUser(u.UserTag()); err == nil {
+			ops = append(ops, removeControllerUserOps(st.ControllerUUID(), u.UserTag())...)
+		} else if err != nil && !errors.Is(err, errors.NotFound) {
+			return nil, errors.Trace(err)
+		}
+
+		// create default new ones
+		ops = append(ops, createControllerUserOps(st.ControllerUUID(),
+			u.UserTag(),
+			names.NewUserTag(creator),
+			displayName,
+			dateCreated,
+			defaultControllerPermission)...)
+
+		// update user doc
+		ops = append(ops, txn.Op{
+			C:  usersC,
+			Id: strings.ToLower(u.Name()),
+			Assert: bson.M{
+				"deleted": true,
+			},
+			Update: updateUser,
+		})
+
+		return ops, nil
+	}
+
+	if err := u.st.db().RunRaw(buildTxn); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// recreate the user object
+	return st.User(u.UserTag())
 }
 
 // RemoveUser marks the user as deleted. This obviates the ability of a user
@@ -148,16 +255,55 @@ func (st *State) RemoveUser(tag names.UserTag) error {
 			if err := u.Refresh(); err != nil {
 				return nil, errors.Trace(err)
 			}
+			if u.IsDeleted() {
+				return nil, nil
+			}
 		}
-		ops := []txn.Op{{
+
+		// remove the access to all the models and the current controller
+		// first query all the models for this user
+		modelQuery, closer, err := st.modelQueryForUser(tag, false)
+		defer closer()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		var modelDocs []modelDoc
+		if err := modelQuery.All(&modelDocs); err != nil {
+			return nil, errors.Trace(err)
+		}
+		var ops []txn.Op
+		for _, model := range modelDocs {
+			// remove the permission for the model
+			ops = append(ops, removeModelUserOpsGlobal(model.UUID, tag)...)
+		}
+
+		// remove the user from the controller
+		ops = append(ops, removeControllerUserOps(st.ControllerUUID(), tag)...)
+
+		// new entry in the removal log
+		newRemovalLogEntry := userRemovedLogEntry{
+			RemovedBy:   u.doc.CreatedBy,
+			DateCreated: u.doc.DateCreated,
+			DateRemoved: st.nowToTheSecond(),
+		}
+		ops = append(ops, txn.Op{
 			Id:     lowercaseName,
 			C:      usersC,
 			Assert: txn.DocExists,
-			Update: bson.M{"$set": bson.M{"deleted": true}},
-		}}
+			Update: bson.M{
+				"$set": bson.M{
+					"deleted": true,
+				},
+				"$push": bson.M{
+					"removallog": bson.M{"$each": []userRemovedLogEntry{newRemovalLogEntry}},
+				},
+			},
+		})
 		return ops, nil
 	}
-	return st.db().Run(buildTxn)
+
+	// Use raw transactions to avoid model filtering
+	return st.db().RunRaw(buildTxn)
 }
 
 func createInitialUserOps(controllerUUID string, user names.UserTag, password, salt string, dateCreated time.Time) []txn.Op {
@@ -187,7 +333,6 @@ func createInitialUserOps(controllerUUID string, user names.UserTag, password, s
 
 	ops = append(ops, controllerUserOps...)
 	return ops
-
 }
 
 // getUser fetches information about the user with the
@@ -274,7 +419,7 @@ func (st *State) AllUsers(includeDeactivated bool) ([]*User, error) {
 type User struct {
 	st           *State
 	doc          userDoc
-	lastLoginDoc userLastLoginDoc
+	lastLoginDoc userLastLoginDoc //nolint:unused
 }
 
 type userDoc struct {
@@ -288,6 +433,8 @@ type userDoc struct {
 	PasswordSalt string    `bson:"passwordsalt"`
 	CreatedBy    string    `bson:"createdby"`
 	DateCreated  time.Time `bson:"datecreated"`
+	// RemovalLog keeps a track of removals for this user
+	RemovalLog []userRemovedLogEntry `bson:"removallog"`
 }
 
 type userLastLoginDoc struct {
@@ -300,6 +447,14 @@ type userLastLoginDoc struct {
 	// It is really informational only as far as everyone except the
 	// api server is concerned.
 	LastLogin time.Time `bson:"last-login"`
+}
+
+// userRemovedLog contains a log of entries added every time the user
+// doc has been removed
+type userRemovedLogEntry struct {
+	RemovedBy   string    `bson:"removedby"`
+	DateCreated time.Time `bson:"datecreated"`
+	DateRemoved time.Time `bson:"dateremoved"`
 }
 
 // String returns "<name>" where <name> is the Name of the user.

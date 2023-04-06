@@ -1433,8 +1433,9 @@ func (s *provisionerSuite) getManagerConfig(c *gc.C, typ instance.ContainerType)
 func (s *withoutControllerSuite) TestContainerManagerConfigDefaults(c *gc.C) {
 	cfg := s.getManagerConfig(c, instance.KVM)
 	c.Assert(cfg, jc.DeepEquals, map[string]string{
-		container.ConfigModelUUID:      coretesting.ModelTag.Id(),
-		config.ContainerImageStreamKey: "released",
+		container.ConfigModelUUID:        coretesting.ModelTag.Id(),
+		config.ContainerImageStreamKey:   "released",
+		config.ContainerNetworkingMethod: config.ConfigDefaults()[config.ContainerNetworkingMethod].(string),
 	})
 }
 
@@ -1799,6 +1800,7 @@ func (s *withImageMetadataSuite) TestContainerManagerConfigImageMetadata(c *gc.C
 		config.ContainerImageStreamKey:      "daily",
 		config.ContainerImageMetadataURLKey: "https://images.linuxcontainers.org/",
 		config.LXDSnapChannel:               "5.0/stable",
+		config.ContainerNetworkingMethod:    config.ConfigDefaults()[config.ContainerNetworkingMethod].(string),
 	})
 }
 
@@ -1885,30 +1887,6 @@ func (s *provisionerMockSuite) expectNetworkingEnviron() {
 	eExp := s.environ.EXPECT()
 	eExp.Config().Return(&config.Config{}).AnyTimes()
 	eExp.SupportsContainerAddresses(gomock.Any()).Return(true, nil).AnyTimes()
-}
-
-// expectLinkLayerDevices mocks a link-layer device and its parent,
-// suitable for use as a bridge network for containers.
-func (s *provisionerMockSuite) expectLinkLayerDevices() {
-	devName := "eth0"
-	mtu := uint(1500)
-	mac := network.GenerateVirtualMACAddress()
-
-	dExp := s.device.EXPECT()
-	dExp.Name().Return(devName).AnyTimes()
-	dExp.Type().Return(network.BridgeDevice).AnyTimes()
-	dExp.MTU().Return(mtu).AnyTimes()
-	dExp.ParentDevice().Return(s.parentDevice, nil)
-	dExp.MACAddress().Return(mac)
-	dExp.IsAutoStart().Return(true)
-	dExp.IsUp().Return(true)
-
-	pExp := s.parentDevice.EXPECT()
-	// The address itself is unimportant, so we can use an empty one.
-	// What is important is that there is one there to flex the path we are
-	// testing.
-	pExp.Addresses().Return([]*state.Address{{}}, nil)
-	pExp.Name().Return(devName).MinTimes(1)
 }
 
 func (s *provisionerMockSuite) TestContainerAlreadyProvisionedError(c *gc.C) {

@@ -30,8 +30,6 @@ type unregisterCommand struct {
 	modelcmd.DestroyConfirmationCommandBase
 
 	controllerName string
-	assumeYes      bool // DEPRECATED
-	assumeNoPrompt bool
 	store          jujuclient.ClientStore
 }
 
@@ -41,23 +39,26 @@ command does not destroy the controller.  In order to regain access to an
 unregistered controller, it will need to be added again using the juju register
 command.
 
-Examples:
+`
 
+const usageUnregisterExamples = `
     juju unregister my-controller
-
-See also:
-    destroy-controller
-    kill-controller
-    register`
+`
 
 // Info implements Command.Info
 // `unregister` may seem generic as a command, but aligns with `register`.
 func (c *unregisterCommand) Info() *cmd.Info {
 	return jujucmd.Info(&cmd.Info{
-		Name:    "unregister",
-		Args:    "<controller name>",
-		Purpose: "Unregisters a Juju controller.",
-		Doc:     usageUnregisterDetails,
+		Name:     "unregister",
+		Args:     "<controller name>",
+		Purpose:  "Unregisters a Juju controller.",
+		Doc:      usageUnregisterDetails,
+		Examples: usageUnregisterExamples,
+		SeeAlso: []string{
+			"destroy-controller",
+			"kill-controller",
+			"register",
+		},
 	})
 }
 
@@ -102,9 +103,6 @@ func (c *unregisterCommand) Run(ctx *cmd.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := c.DestroyConfirmationCommandBase.Run(ctx); err != nil {
-		return errors.Trace(err)
-	}
 	if c.DestroyConfirmationCommandBase.NeedsConfirmation() {
 		fmt.Fprintf(ctx.Stderr, unregisterMsg, c.controllerName)
 		if err := jujucmd.UserConfirmName(c.controllerName, "controller", ctx); err != nil {

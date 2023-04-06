@@ -8,39 +8,8 @@ import (
 	"github.com/juju/names/v4"
 
 	"github.com/juju/juju/core/crossmodel"
-	"github.com/juju/juju/core/network/firewall"
 	"github.com/juju/juju/state"
 )
-
-// StatePool provides the subset of a state pool.
-type StatePool interface {
-	// Get returns a State for a given model from the pool.
-	Get(modelUUID string) (Backend, func(), error)
-}
-
-type statePoolShim struct {
-	*state.StatePool
-}
-
-func (p *statePoolShim) Get(modelUUID string) (Backend, func(), error) {
-	st, err := p.StatePool.Get(modelUUID)
-	if err != nil {
-		return nil, func() {}, err
-	}
-	closer := func() {
-		st.Release()
-	}
-	model, err := st.Model()
-	if err != nil {
-		closer()
-		return nil, nil, err
-	}
-	return stateShim{st.State, model}, closer, err
-}
-
-func GetStatePool(pool *state.StatePool) StatePool {
-	return &statePoolShim{pool}
-}
 
 // GetBackend wraps a State to provide a Backend interface implementation.
 func GetBackend(st *state.State) stateShim {
@@ -65,6 +34,10 @@ func (st stateShim) KeyRelation(key string) (Relation, error) {
 		return nil, errors.Trace(err)
 	}
 	return relationShim{r, st.State}, nil
+}
+
+func (st stateShim) OfferConnectionForRelation(relationKey string) (OfferConnection, error) {
+	return st.State.OfferConnectionForRelation(relationKey)
 }
 
 // ControllerTag returns the tag of the controller in which we are operating.
@@ -197,11 +170,6 @@ func (s stateShim) SaveIngressNetworks(relationKey string, cidrs []string) (stat
 func (s stateShim) IngressNetworks(relationKey string) (state.RelationNetworks, error) {
 	api := state.NewRelationIngressNetworks(s.State)
 	return api.Networks(relationKey)
-}
-
-func (s stateShim) FirewallRule(service firewall.WellKnownServiceType) (*state.FirewallRule, error) {
-	api := state.NewFirewallRules(s.State)
-	return api.Rule(service)
 }
 
 type relationShim struct {

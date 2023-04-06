@@ -1,4 +1,9 @@
+# Export this first, incase we want to change it in the included makefiles.
+export CGO_ENABLED=0
 
+include scripts/dqlite/Makefile
+
+#
 # Makefile for juju-core.
 #
 PROJECT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
@@ -22,8 +27,7 @@ JUJU_VERSION=$(shell go run -ldflags "-X $(PROJECT)/version.build=$(JUJU_BUILD_N
 # BUILD_DIR is the directory relative to this project where we place build
 # artifacts created by this Makefile.
 BUILD_DIR ?= $(PROJECT_DIR)/_build
-
-BIN_DIR = ${BUILD_DIR}/${GOOS}_${GOARCH}/bin
+BIN_DIR ?= ${BUILD_DIR}/${GOOS}_${GOARCH}/bin
 
 # JUJU_METADATA_SOURCE is the directory where we place simple streams archives
 # for built juju binaries.
@@ -32,9 +36,6 @@ JUJU_METADATA_SOURCE ?= ${BUILD_DIR}/simplestreams
 # TEST_PACKAGE_LIST is the path to a file that is a newline delimited list of
 # packages to test. This file must be sorted.
 TEST_PACKAGE_LIST ?=
-
-# Explicitly tell GO that we don't want CGO in our builds
-export CGO_ENABLED=0
 
 # bin_platform_path calculates the bin directory path for build artifacts for
 # the list of Go style platforms passed to this macro. For example
@@ -66,11 +67,10 @@ OCI_IMAGE_PLATFORMS ?= linux/$(GOARCH)
 
 # Build tags passed to go install/build.
 # Example: BUILD_TAGS="minimal provider_kubernetes"
-BUILD_TAGS ?=
+BUILD_TAGS ?= "libsqlite3 dqlite"
 
 # GIT_COMMIT the current git commit of this repository
 GIT_COMMIT ?= $(shell git -C $(PROJECT_DIR) rev-parse HEAD 2>/dev/null)
-
 
 # Build flag passed to go -mod defaults to readonly to support go workspaces.
 # CI should set this to vendor
@@ -80,17 +80,23 @@ JUJU_GOMOD_MODE ?= readonly
 # if the tree that is checked out is dirty (modified) or clean.
 GIT_TREE_STATE = $(if $(shell git -C $(PROJECT_DIR) rev-parse --is-inside-work-tree 2>/dev/null | grep -e 'true'),$(if $(shell git -C $(PROJECT_DIR) status --porcelain),dirty,clean),archive)
 
-# BUILD_AGENT_TARGETS is a list of make targets the get built that fall under
-# the category of Juju agents. These targets are also the ones we are more then
-# likely wanting to cross compile.
+# BUILD_AGENT_TARGETS is a list of make targets that get built, that fall under
+# the category of Juju agents, that are not CGO. These targets are also the ones
+# we are more then likely wanting to cross compile.
 # NOTES:
 # - We filter pebble here for only linux builds as that is only what it will
 #   compile for at the moment.
 define BUILD_AGENT_TARGETS
 	$(call tool_platform_paths,jujuc,$(filter-out windows%,${AGENT_PACKAGE_PLATFORMS})) \
-	$(call tool_platform_paths,jujud,$(filter-out windows%,${AGENT_PACKAGE_PLATFORMS})) \
 	$(call tool_platform_paths,containeragent,$(filter-out windows%,${AGENT_PACKAGE_PLATFORMS})) \
 	$(call tool_platform_paths,pebble,$(filter linux%,${AGENT_PACKAGE_PLATFORMS}))
+endef
+
+# BUILD_CGO_AGENT_TARGETS is a list of make targets that get built, that fall
+# under the category of Juju agents, that are CGO. These targets are also the
+# ones we are more then likely wanting to cross compile.
+define BUILD_CGO_AGENT_TARGETS
+	$(call tool_platform_paths,jujud,$(filter linux%,${AGENT_PACKAGE_PLATFORMS}))
 endef
 
 # BUILD_CLIENT_TARGETS is a list of make targets that get built that fall under
@@ -132,17 +138,17 @@ endif
 
 # Allow the tests to take longer on restricted platforms.
 ifeq ($(shell echo "${GOARCH}" | sed -E 's/.*(arm|arm64|ppc64le|ppc64|s390x).*/golang/'), golang)
-	TEST_TIMEOUT := 5400s
+	TEST_TIMEOUT ?= 5400s
 else
-	TEST_TIMEOUT := 2700s
+	TEST_TIMEOUT ?= 2700s
 endif
-TEST_TIMEOUT:=$(TEST_TIMEOUT)
+TEST_TIMEOUT := $(TEST_TIMEOUT)
 
 # Limit concurrency on s390x.
 ifeq ($(shell echo "${GOARCH}" | sed -E 's/.*(s390x).*/golang/'), golang)
-	TEST_ARGS := -p 4
+	TEST_ARGS ?= -p 4
 else
-	TEST_ARGS :=
+	TEST_ARGS ?=
 endif
 
 # Enable coverage testing.
@@ -155,12 +161,20 @@ ifeq ($(VERBOSE_CHECK), 1)
 	CHECK_ARGS = -v
 endif
 
+define link_flags_version
+	-X $(PROJECT)/version.GitCommit=$(GIT_COMMIT) \
+	-X $(PROJECT)/version.GitTreeState=$(GIT_TREE_STATE) \
+	-X $(PROJECT)/version.build=$(JUJU_BUILD_NUMBER)
+endef
+
 # Compile with debug flags if requested.
 ifeq ($(DEBUG_JUJU), 1)
     COMPILE_FLAGS = -gcflags "all=-N -l"
-    LINK_FLAGS = -ldflags "-X $(PROJECT)/version.GitCommit=$(GIT_COMMIT) -X $(PROJECT)/version.GitTreeState=$(GIT_TREE_STATE) -X $(PROJECT)/version.build=$(JUJU_BUILD_NUMBER)"
+    LINK_FLAGS =  "-X $(link_flags_version)"
+	CGO_LINK_FLAGS = "-linkmode 'external' -extldflags '-static' $(link_flags_version)"
 else
-    LINK_FLAGS = -ldflags "-s -w -extldflags '-static' -X $(PROJECT)/version.GitCommit=$(GIT_COMMIT) -X $(PROJECT)/version.GitTreeState=$(GIT_TREE_STATE) -X $(PROJECT)/version.build=$(JUJU_BUILD_NUMBER)"
+    LINK_FLAGS = "-s -w -extldflags '-static' $(link_flags_version)"
+	CGO_LINK_FLAGS = "-s -w -linkmode 'external' -extldflags '-static' $(link_flags_version)"
 endif
 
 define DEPENDENCIES
@@ -175,11 +189,11 @@ endef
 # juju package. It's expected that the make target using this sequence has a
 # local variable defined for PACKAGE. An example of PACKAGE would be
 # PACKAGE=github.com/juju/juju
-# 
-# This canned commaned also allows building for architectures defined as
+#
+# This canned command also allows building for architectures defined as
 # ppc64el. Because of legacy Juju we use the arch ppc64el over the go defined
 # arch of ppc64le. This canned command will do a last minute transformation of
-# the string we build the "correct" go archiecture. However the build result
+# the string we build the "correct" go architecture. However the build result
 # will still be placed at the expected location with names matching ppc64el.
 define run_go_build
 	$(eval OS = $(word 1,$(subst _, ,$*)))
@@ -188,12 +202,67 @@ define run_go_build
 	$(eval BUILD_ARCH = $(subst ppc64el,ppc64le,${ARCH}))
 	@@mkdir -p ${BBIN_DIR}
 	@echo "Building ${PACKAGE} for ${OS}/${ARCH}"
-	@env GOOS=${OS} GOARCH=${BUILD_ARCH} go build -mod=$(JUJU_GOMOD_MODE) -o ${BBIN_DIR} -tags "$(BUILD_TAGS)" $(COMPILE_FLAGS) $(LINK_FLAGS) -v  ${PACKAGE}
+	@env GOOS=${OS} \
+		GOARCH=${BUILD_ARCH} \
+		go build \
+			-mod=$(JUJU_GOMOD_MODE) \
+			-tags=$(BUILD_TAGS) \
+			-o ${BBIN_DIR} \
+			$(COMPILE_FLAGS) \
+			-ldflags $(LINK_FLAGS) \
+			-v ${PACKAGE}
+endef
+
+define run_cgo_build
+	$(eval OS = $(word 1,$(subst _, ,$*)))
+	$(eval ARCH = $(word 2,$(subst _, ,$*)))
+	$(eval BBIN_DIR = ${BUILD_DIR}/${OS}_${ARCH}/bin)
+	$(eval BUILD_ARCH = $(subst ppc64el,ppc64le,${ARCH}))
+	@@mkdir -p ${BBIN_DIR}
+	@echo "Building ${PACKAGE} for ${OS}/${ARCH}"
+	@env PATH=${MUSL_BIN_PATH}:${PATH} \
+		CC="musl-gcc" \
+		CGO_CFLAGS="-I${DQLITE_EXTRACTED_DEPS_ARCHIVE_PATH}/include" \
+		CGO_LDFLAGS="-L${DQLITE_EXTRACTED_DEPS_ARCHIVE_PATH} -luv -lraft -ldqlite -llz4 -lsqlite3" \
+		CGO_LDFLAGS_ALLOW="(-Wl,-wrap,pthread_create)|(-Wl,-z,now)" \
+		LD_LIBRARY_PATH="${DQLITE_EXTRACTED_DEPS_ARCHIVE_PATH}" \
+		CGO_ENABLED=1 \
+		GOOS=${OS} \
+		GOARCH=${BUILD_ARCH} \
+		go build \
+			-mod=$(JUJU_GOMOD_MODE) \
+			-tags=$(BUILD_TAGS) \
+			-o ${BBIN_DIR} \
+			${COMPILE_FLAGS} \
+			-ldflags ${CGO_LINK_FLAGS} \
+			-v ${PACKAGE}
 endef
 
 define run_go_install
 	@echo "Installing ${PACKAGE}"
-	@go install -mod=$(JUJU_GOMOD_MODE) -tags "$(BUILD_TAGS)" $(COMPILE_FLAGS) $(LINK_FLAGS) -v ${PACKAGE}
+	@go install \
+		-mod=$(JUJU_GOMOD_MODE) \
+		-tags=$(BUILD_TAGS) \
+		$(COMPILE_FLAGS) \
+		-ldflags $(LINK_FLAGS) \
+		-v ${PACKAGE}
+endef
+
+define run_cgo_install
+	@echo "Installing ${PACKAGE}"
+	@env PATH=${MUSL_BIN_PATH}:${PATH} \
+		CC="musl-gcc" \
+		CGO_CFLAGS="-I${DQLITE_EXTRACTED_DEPS_ARCHIVE_PATH}/include" \
+		CGO_LDFLAGS="-L${DQLITE_EXTRACTED_DEPS_ARCHIVE_PATH} -luv -lraft -ldqlite -llz4 -lsqlite3" \
+		CGO_LDFLAGS_ALLOW="(-Wl,-wrap,pthread_create)|(-Wl,-z,now)" \
+		LD_LIBRARY_PATH="${DQLITE_EXTRACTED_DEPS_ARCHIVE_PATH}" \
+		CGO_ENABLED=1 \
+		go install \
+			-mod=$(JUJU_GOMOD_MODE) \
+			-tags=$(BUILD_TAGS) \
+			${COMPILE_FLAGS} \
+			-ldflags ${CGO_LINK_FLAGS} \
+			-v ${PACKAGE}
 endef
 
 default: build
@@ -217,9 +286,9 @@ jujuc:
 
 .PHONY: jujud
 jujud: PACKAGE = github.com/juju/juju/cmd/jujud
-jujud:
+jujud: musl-install-if-missing dqlite-install-if-missing
 ## jujud: Install jujud without updating dependencies
-	${run_go_install}
+	${run_cgo_install}
 
 .PHONY: containeragent
 containeragent: PACKAGE = github.com/juju/juju/cmd/containeragent
@@ -255,9 +324,9 @@ ${BUILD_DIR}/%/bin/jujuc: phony_explicit
 	$(run_go_build)
 
 ${BUILD_DIR}/%/bin/jujud: PACKAGE = github.com/juju/juju/cmd/jujud
-${BUILD_DIR}/%/bin/jujud: phony_explicit
+${BUILD_DIR}/%/bin/jujud: phony_explicit musl-install-if-missing dqlite-install-if-missing
 # build for jujud
-	$(run_go_build)
+	$(run_cgo_build)
 
 ${BUILD_DIR}/%/bin/containeragent: PACKAGE = github.com/juju/juju/cmd/containeragent
 ${BUILD_DIR}/%/bin/containeragent: phony_explicit
@@ -274,7 +343,7 @@ ${BUILD_DIR}/%/bin/pebble: phony_explicit
 # build for pebble
 	$(run_go_build)
 
-${JUJU_METADATA_SOURCE}/tools/released/juju-${JUJU_VERSION}-%.tgz: phony_explicit juju $(BUILD_AGENT_TARGETS)
+${JUJU_METADATA_SOURCE}/tools/released/juju-${JUJU_VERSION}-%.tgz: phony_explicit juju $(BUILD_AGENT_TARGETS) $(BUILD_CGO_AGENT_TARGETS)
 	@echo "Packaging simplestream tools for juju ${JUJU_VERSION} on $*"
 	@mkdir -p ${JUJU_METADATA_SOURCE}/tools/released
 	@tar czf "$@" -C $(call bin_platform_paths,$(subst -,/,$*)) .
@@ -289,13 +358,22 @@ build: rebuild-schema go-build
 ## build builds all the targets specified by BUILD_AGENT_TARGETS and
 ## BUILD_CLIENT_TARGETS while also rebuilding a new schema.
 
+.PHONY: go-agent-build
+go-agent-build: $(BUILD_AGENT_TARGETS) $(BUILD_CGO_AGENT_TARGETS)
+
+.PHONY: go-agent-build-no-cgo
+go-agent-build-no-cgo: $(BUILD_AGENT_TARGETS)
+
+.PHONY: go-client-build
+go-client-build: $(BUILD_CLIENT_TARGETS)
+
 .PHONY: go-build
-go-build: $(BUILD_AGENT_TARGETS) $(BUILD_CLIENT_TARGETS)
+go-build: go-agent-build go-client-build
 ## build builds all the targets specified by BUILD_AGENT_TARGETS and
 ## BUILD_CLIENT_TARGETS.
 
 .PHONY: release-build
-release-build: $(BUILD_MAIN_TARGETS) $(BUILD_AGENT_TARGETS)
+release-build: go-agent-build
 ## release-build: Construct Juju binaries, without building schema
 
 .PHONY: release-install
@@ -316,15 +394,43 @@ check: pre-check run-tests
 test: run-tests
 ## test: Verify Juju code using unit tests
 
-.PHONY: run-tests
+.PHONY: run-tests run-go-tests
 # Can't make the length of the TMP dir too long or it hits socket name length issues.
-run-tests:
+run-tests: musl-install-if-missing dqlite-install-if-missing
 ## run-tests: Run the unit tests
+	$(eval OS = $(shell go env GOOS))
+	$(eval ARCH = $(shell go env GOARCH))
+	$(eval BUILD_ARCH = $(subst ppc64el,ppc64le,${ARCH}))
 	$(eval TMP := $(shell mktemp -d $${TMPDIR:-/tmp}/jj-XXX))
 	$(eval TEST_PACKAGES := $(shell go list $(PROJECT)/... | sort | ([ -f "$(TEST_PACKAGE_LIST)" ] && comm -12 "$(TEST_PACKAGE_LIST)" - || cat) | grep -v $(PROJECT)$$ | grep -v $(PROJECT)/vendor/ | grep -v $(PROJECT)/acceptancetests/ | grep -v $(PROJECT)/generate/ | grep -v mocks))
-	@echo 'go test -mod=$(JUJU_GOMOD_MODE) -tags "$(BUILD_TAGS)" $(TEST_ARGS) $(CHECK_ARGS) -test.timeout=$(TEST_TIMEOUT) $$TEST_PACKAGES -check.v'
-	@TMPDIR=$(TMP) go test -mod=$(JUJU_GOMOD_MODE) -tags "$(BUILD_TAGS)" $(TEST_ARGS) $(CHECK_ARGS) -test.timeout=$(TEST_TIMEOUT) $(TEST_PACKAGES) -check.v
+	@echo 'go test -mod=$(JUJU_GOMOD_MODE) -tags=$(BUILD_TAGS) $(TEST_ARGS) $(CHECK_ARGS) -test.timeout=$(TEST_TIMEOUT) $$TEST_PACKAGES -check.v'
+	@TMPDIR=$(TMP) \
+		PATH=${MUSL_BIN_PATH}:${PATH} \
+		CC="musl-gcc" \
+		CGO_CFLAGS="-I${DQLITE_EXTRACTED_DEPS_ARCHIVE_PATH}/include" \
+		CGO_LDFLAGS="-L${DQLITE_EXTRACTED_DEPS_ARCHIVE_PATH} -luv -lraft -ldqlite -llz4 -lsqlite3" \
+		CGO_LDFLAGS_ALLOW="(-Wl,-wrap,pthread_create)|(-Wl,-z,now)" \
+		LD_LIBRARY_PATH="${DQLITE_EXTRACTED_DEPS_ARCHIVE_PATH}" \
+		CGO_ENABLED=1 \
+		go test -v -mod=$(JUJU_GOMOD_MODE) -tags=$(BUILD_TAGS) $(TEST_ARGS) $(CHECK_ARGS) -ldflags ${CGO_LINK_FLAGS} -test.timeout=$(TEST_TIMEOUT) $(TEST_PACKAGES) -check.v
 	@rm -r $(TMP)
+
+run-go-tests: musl-install-if-missing dqlite-install-if-missing
+## run-go-tests: Run the unit tests
+	$(eval OS = $(shell go env GOOS))
+	$(eval ARCH = $(shell go env GOARCH))
+	$(eval BUILD_ARCH = $(subst ppc64el,ppc64le,${ARCH}))
+	$(eval TEST_PACKAGES ?= "./...")
+	$(eval TEST_FILTER ?= "")
+	@echo 'go test -mod=$(JUJU_GOMOD_MODE) -tags=$(BUILD_TAGS) $(TEST_ARGS) $(CHECK_ARGS) -test.timeout=$(TEST_TIMEOUT) $$TEST_PACKAGES -check.v -check.f $(TEST_FILTER)'
+	@PATH=${MUSL_BIN_PATH}:${PATH} \
+		CC="musl-gcc" \
+		CGO_CFLAGS="-I${DQLITE_EXTRACTED_DEPS_ARCHIVE_PATH}/include" \
+		CGO_LDFLAGS="-L${DQLITE_EXTRACTED_DEPS_ARCHIVE_PATH} -luv -lraft -ldqlite -llz4 -lsqlite3" \
+		CGO_LDFLAGS_ALLOW="(-Wl,-wrap,pthread_create)|(-Wl,-z,now)" \
+		LD_LIBRARY_PATH="${DQLITE_EXTRACTED_DEPS_ARCHIVE_PATH}" \
+		CGO_ENABLED=1 \
+		go test -v -mod=$(JUJU_GOMOD_MODE) -tags=$(BUILD_TAGS) $(TEST_ARGS) $(CHECK_ARGS) -ldflags ${CGO_LINK_FLAGS} -test.timeout=$(TEST_TIMEOUT) ${TEST_PACKAGES} -check.v -check.f $(TEST_FILTER)
 
 .PHONY: install
 install: rebuild-schema go-install
@@ -527,6 +633,8 @@ local-operator-update: check-k8s-model operator-image
 STATIC_ANALYSIS_JOB ?=
 
 .PHONY: static-analysis
-static-analysis:
+static-analysis: dqlite-install-if-missing
 ## static-analysis: Check the go code using static-analysis
-	@cd tests && ./main.sh static_analysis ${STATIC_ANALYSIS_JOB}
+	@cd tests && CGO_ENABLED=1 \
+		CGO_LDFLAGS_ALLOW="(-Wl,-wrap,pthread_create)|(-Wl,-z,now)" \
+		./main.sh static_analysis ${STATIC_ANALYSIS_JOB}

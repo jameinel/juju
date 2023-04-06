@@ -43,28 +43,30 @@ const moveCommandDoc = `
 Replaces the list of associated subnets of the space. Since subnets
 can only be part of a single space, all specified subnets (using their
 CIDRs) "leave" their current space and "enter" the one we're updating.
+`
 
-Examples:
-
+const moveCommandExamples = `
 Move a list of CIDRs from their space to a new space:
-	juju move-to-space db-space 172.31.1.0/28 172.31.16.0/20
 
-See also:
-	add-space
-	spaces
-	reload-spaces
-	rename-space
-	show-space
-	remove-space
+	juju move-to-space db-space 172.31.1.0/28 172.31.16.0/20
 `
 
 // Info returns a cmd.Info that details the move command information.
 func (c *MoveCommand) Info() *cmd.Info {
 	return jujucmd.Info(&cmd.Info{
-		Name:    "move-to-space",
-		Args:    "[--format yaml|json] <name> <CIDR1> [ <CIDR2> ...]",
-		Purpose: "Update a network space's CIDR.",
-		Doc:     strings.TrimSpace(moveCommandDoc),
+		Name:     "move-to-space",
+		Args:     "[--format yaml|json] <name> <CIDR1> [ <CIDR2> ...]",
+		Purpose:  "Update a network space's CIDR.",
+		Doc:      strings.TrimSpace(moveCommandDoc),
+		Examples: moveCommandExamples,
+		SeeAlso: []string{
+			"add-space",
+			"spaces",
+			"reload-spaces",
+			"rename-space",
+			"show-space",
+			"remove-space",
+		},
 	})
 }
 
@@ -111,15 +113,6 @@ func (c *MoveCommand) Run(ctx *cmd.Context) error {
 		}
 		return c.out.Write(ctx, changes)
 	})
-}
-
-func (c *MoveCommand) getSpaceTag(api SpaceAPI, name string) (names.SpaceTag, error) {
-	space, err := api.ShowSpace(name)
-	if err != nil {
-		return names.SpaceTag{}, errors.Annotatef(err, "failed to get space %q", name)
-	}
-
-	return names.NewSpaceTag(space.Space.Id), nil
 }
 
 func (c *MoveCommand) getSubnetTags(ctx *cmd.Context, api SubnetAPI, cidrs set.Strings) ([]names.SubnetTag, error) {

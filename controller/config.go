@@ -114,6 +114,9 @@ const (
 	// ControllerUUIDKey is the key for the controller UUID attribute.
 	ControllerUUIDKey = "controller-uuid"
 
+	// LoginTokenRefreshURL sets the url of the login jwt well known endpoint.
+	LoginTokenRefreshURL = "login-token-refresh-url"
+
 	// IdentityURL sets the url of the identity manager.
 	IdentityURL = "identity-url"
 
@@ -218,13 +221,6 @@ const (
 	// disables the quota checks although in principle, mongo imposes a
 	// hard (but configurable) limit of 16M.
 	MaxAgentStateSize = "max-agent-state-size"
-
-	// NonSyncedWritesToRaftLog allows the operator to disable fsync calls
-	// when writing to the raft log by setting this value to true.
-	NonSyncedWritesToRaftLog = "non-synced-writes-to-raft-log"
-
-	// BatchRaftFSM allows the operator to batch raft FSM calls.
-	BatchRaftFSM = "batch-raft-fsm"
 
 	// MigrationMinionWaitMax is the maximum time that the migration-master
 	// worker will wait for agents to report for a migration phase when
@@ -367,14 +363,6 @@ const (
 	// state data that agents can store to the controller.
 	DefaultMaxAgentStateSize = 512 * 1024
 
-	// DefaultNonSyncedWritesToRaftLog is the default value for the
-	// non-synced-writes-to-raft-log value. It is set to false by default.
-	DefaultNonSyncedWritesToRaftLog = false
-
-	// DefaultBatchRaftFSM is the default value for batch-raft-fsm value.
-	// It is set to false by default.
-	DefaultBatchRaftFSM = false
-
 	// DefaultMigrationMinionWaitMax is the default value for
 	DefaultMigrationMinionWaitMax = 15 * time.Minute
 )
@@ -394,6 +382,7 @@ var (
 		ControllerAPIPort,
 		ControllerName,
 		ControllerUUIDKey,
+		LoginTokenRefreshURL,
 		IdentityPublicKey,
 		IdentityURL,
 		SetNUMAControlPolicyKey,
@@ -425,8 +414,6 @@ var (
 		MeteringURL,
 		MaxCharmStateSize,
 		MaxAgentStateSize,
-		NonSyncedWritesToRaftLog,
-		BatchRaftFSM,
 		MigrationMinionWaitMax,
 		ApplicationResourceDownloadLimit,
 		ControllerResourceDownloadLimit,
@@ -477,8 +464,6 @@ var (
 		Features,
 		MaxCharmStateSize,
 		MaxAgentStateSize,
-		NonSyncedWritesToRaftLog,
-		BatchRaftFSM,
 		MigrationMinionWaitMax,
 		ApplicationResourceDownloadLimit,
 		ControllerResourceDownloadLimit,
@@ -807,6 +792,11 @@ func (c Config) IdentityPublicKey() *bakery.PublicKey {
 	return &pubKey
 }
 
+// LoginTokenRefreshURL returns the url of the login jwt well known endpoint.
+func (c Config) LoginTokenRefreshURL() string {
+	return c.asString(LoginTokenRefreshURL)
+}
+
 // MongoMemoryProfile returns the selected profile or low.
 func (c Config) MongoMemoryProfile() string {
 	if profile, ok := c[MongoMemoryProfile]; ok {
@@ -984,23 +974,6 @@ func (c Config) MaxAgentStateSize() int {
 	return c.intOrDefault(MaxAgentStateSize, DefaultMaxAgentStateSize)
 }
 
-// NonSyncedWritesToRaftLog returns true if fsync calls should be skipped
-// after each write to the raft log.
-func (c Config) NonSyncedWritesToRaftLog() bool {
-	if v, ok := c[NonSyncedWritesToRaftLog]; ok {
-		return v.(bool)
-	}
-	return DefaultNonSyncedWritesToRaftLog
-}
-
-// BatchRaftFSM returns true if raft should use batch writing to the FSM.
-func (c Config) BatchRaftFSM() bool {
-	if v, ok := c[BatchRaftFSM]; ok {
-		return v.(bool)
-	}
-	return DefaultBatchRaftFSM
-}
-
 // MigrationMinionWaitMax returns a duration for the maximum time that the
 // migration-master worker should wait for migration-minion reports during
 // phases of a model migration.
@@ -1028,6 +1001,16 @@ func Validate(c Config) error {
 		// key.
 		if _, ok := c[IdentityPublicKey]; !ok && u.Scheme != "https" {
 			return errors.Errorf("URL needs to be https when %s not provided", IdentityPublicKey)
+		}
+	}
+
+	if v, ok := c[LoginTokenRefreshURL].(string); ok {
+		u, err := url.Parse(v)
+		if err != nil {
+			return errors.Annotate(err, "invalid login token refresh URL")
+		}
+		if u.Scheme == "" || u.Host == "" {
+			return errors.NotValidf("logic token refresh URL %q", v)
 		}
 	}
 
@@ -1309,6 +1292,7 @@ var configChecker = schema.FieldMap(schema.Fields{
 	ControllerAPIPort:                schema.ForceInt(),
 	ControllerName:                   schema.String(),
 	StatePort:                        schema.ForceInt(),
+	LoginTokenRefreshURL:             schema.String(),
 	IdentityURL:                      schema.String(),
 	IdentityPublicKey:                schema.String(),
 	SetNUMAControlPolicyKey:          schema.Bool(),
@@ -1337,8 +1321,6 @@ var configChecker = schema.FieldMap(schema.Fields{
 	MeteringURL:                      schema.String(),
 	MaxCharmStateSize:                schema.ForceInt(),
 	MaxAgentStateSize:                schema.ForceInt(),
-	NonSyncedWritesToRaftLog:         schema.Bool(),
-	BatchRaftFSM:                     schema.Bool(),
 	MigrationMinionWaitMax:           schema.TimeDuration(),
 	ApplicationResourceDownloadLimit: schema.ForceInt(),
 	ControllerResourceDownloadLimit:  schema.ForceInt(),
@@ -1355,6 +1337,7 @@ var configChecker = schema.FieldMap(schema.Fields{
 	AuditLogMaxBackups:               DefaultAuditLogMaxBackups,
 	AuditLogExcludeMethods:           DefaultAuditLogExcludeMethods,
 	StatePort:                        DefaultStatePort,
+	LoginTokenRefreshURL:             schema.Omit,
 	IdentityURL:                      schema.Omit,
 	IdentityPublicKey:                schema.Omit,
 	SetNUMAControlPolicyKey:          DefaultNUMAControlPolicy,
@@ -1383,8 +1366,6 @@ var configChecker = schema.FieldMap(schema.Fields{
 	MeteringURL:                      romulus.DefaultAPIRoot,
 	MaxCharmStateSize:                DefaultMaxCharmStateSize,
 	MaxAgentStateSize:                DefaultMaxAgentStateSize,
-	NonSyncedWritesToRaftLog:         DefaultNonSyncedWritesToRaftLog,
-	BatchRaftFSM:                     DefaultBatchRaftFSM,
 	MigrationMinionWaitMax:           DefaultMigrationMinionWaitMax,
 	ApplicationResourceDownloadLimit: schema.Omit,
 	ControllerResourceDownloadLimit:  schema.Omit,
@@ -1451,6 +1432,10 @@ set, the api-port isn't opened until the controllers have started properly.`,
 	StatePort: {
 		Type:        environschema.Tint,
 		Description: `The port used for mongo connections`,
+	},
+	LoginTokenRefreshURL: {
+		Type:        environschema.Tstring,
+		Description: `The url of the jwt well known endpoint`,
 	},
 	IdentityURL: {
 		Type:        environschema.Tstring,
@@ -1566,14 +1551,6 @@ Use "caas-image-repo" instead.`,
 	MaxAgentStateSize: {
 		Type:        environschema.Tint,
 		Description: `The maximum size (in bytes) of internal state data that agents can store to the controller`,
-	},
-	NonSyncedWritesToRaftLog: {
-		Type:        environschema.Tbool,
-		Description: `Do not perform fsync calls after appending entries to the raft log. Disabling sync improves performance at the cost of reliability`,
-	},
-	BatchRaftFSM: {
-		Type:        environschema.Tbool,
-		Description: `Allow raft to use batch writing to the FSM.`,
 	},
 	MigrationMinionWaitMax: {
 		Type:        environschema.Tstring,

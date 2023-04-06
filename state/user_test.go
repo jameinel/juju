@@ -284,6 +284,51 @@ func (s *UserSuite) TestRemoveUserRemovesUserAccess(c *gc.C) {
 	c.Assert(err, gc.ErrorMatches, fmt.Sprintf("user %q is permanently deleted", user.UserTag().Name()))
 }
 
+func (s *UserSuite) TestRecreatedUsersResetPermissions(c *gc.C) {
+	user := s.Factory.MakeUser(c, &factory.UserParams{Password: "so sekrit"})
+
+	// Assert user exists and can authenticate.
+	c.Assert(user.PasswordValid("so sekrit"), jc.IsTrue)
+
+	s.State.SetUserAccess(user.UserTag(), s.Model.ModelTag(), permission.AdminAccess)
+	s.State.SetUserAccess(user.UserTag(), s.State.ControllerTag(), permission.SuperuserAccess)
+
+	uam, err := s.State.UserAccess(user.UserTag(), s.Model.ModelTag())
+	c.Check(err, jc.ErrorIsNil)
+	c.Check(uam.Access, gc.Equals, permission.AdminAccess)
+
+	uac, err := s.State.UserAccess(user.UserTag(), s.State.ControllerTag())
+	c.Check(err, jc.ErrorIsNil)
+	c.Check(uac.Access, gc.Equals, permission.SuperuserAccess)
+
+	// Look for the user.
+	u, err := s.State.User(user.UserTag())
+	c.Check(err, jc.ErrorIsNil)
+	c.Check(u, jc.DeepEquals, user)
+
+	// Remove the user.
+	err = s.State.RemoveUser(user.UserTag())
+	c.Check(err, jc.ErrorIsNil)
+
+	// Add the user again with other password and access
+	userRecreated := s.Factory.MakeUser(c, &factory.UserParams{
+		Password: "otherpassword",
+		Access:   permission.ReadAccess})
+
+	// Assert user exists and can authenticate.
+	c.Assert(userRecreated.PasswordValid("otherpassword"), jc.IsTrue)
+
+	// Check that the recreated user does not have the permissions set previously
+	urac, err := s.State.UserAccess(userRecreated.UserTag(), s.State.ControllerTag())
+	c.Check(err, jc.ErrorIsNil)
+	c.Check(urac.Access, gc.Equals, permission.LoginAccess)
+
+	// No model access was set yet
+	uram, err := s.State.UserAccess(userRecreated.UserTag(), s.Model.ModelTag())
+	c.Assert(err, jc.ErrorIsNil)
+	c.Check(uram.Access, gc.Equals, permission.ReadAccess)
+}
+
 func (s *UserSuite) TestDisableUser(c *gc.C) {
 	user := s.Factory.MakeUser(c, &factory.UserParams{Password: "a-password"})
 	c.Assert(user.IsDisabled(), jc.IsFalse)
@@ -442,7 +487,7 @@ func (s *UserSuite) TestCaseSensitiveUsersErrors(c *gc.C) {
 
 	_, err := s.State.AddUser(
 		"boB", "ignored", "ignored", "ignored")
-	c.Assert(err, gc.ErrorMatches, "username unavailable")
+	c.Assert(err, gc.ErrorMatches, "user boB already exists")
 }
 
 func (s *UserSuite) TestCaseInsensitiveLookup(c *gc.C) {
@@ -495,13 +540,17 @@ func (s *UserSuite) TestAllUsers(c *gc.C) {
 }
 
 func (s *UserSuite) TestAddDeletedUser(c *gc.C) {
-	s.Factory.MakeUser(c, &factory.UserParams{Name: "Bob"})
+	s.Factory.MakeUser(c, &factory.UserParams{Name: "bob"})
 
 	_ = s.State.RemoveUser(names.NewUserTag("bob"))
 
-	_, err := s.State.AddUser(
-		"bob", "ignored", "ignored", "ignored")
-	c.Assert(err, jc.Satisfies, state.IsDeletedUserError)
+	u, err := s.State.AddUser(
+		"bob", "displayname", "password", "creator")
+
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(u.Name(), gc.Equals, "bob")
+	c.Assert(u.DisplayName(), gc.Equals, "displayname")
+	c.Assert(u.CreatedBy(), gc.Equals, "creator")
 }
 
 func (s *UserSuite) TestAddUserNoSecretKey(c *gc.C) {

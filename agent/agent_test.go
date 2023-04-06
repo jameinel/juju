@@ -377,19 +377,17 @@ var attributeParams = agent.AgentConfigParams{
 	Paths: agent.Paths{
 		DataDir: "/data/dir",
 	},
-	Tag:                      names.NewMachineTag("1"),
-	UpgradedToVersion:        jujuversion.Current,
-	Password:                 "sekrit",
-	CACert:                   "ca cert",
-	APIAddresses:             []string{"localhost:1235"},
-	Nonce:                    "a nonce",
-	Controller:               testing.ControllerTag,
-	Model:                    testing.ModelTag,
-	JujuDBSnapChannel:        controller.DefaultJujuDBSnapChannel,
-	NonSyncedWritesToRaftLog: false,
-	BatchRaftFSM:             false,
-	AgentLogfileMaxSizeMB:    150,
-	AgentLogfileMaxBackups:   4,
+	Tag:                    names.NewMachineTag("1"),
+	UpgradedToVersion:      jujuversion.Current,
+	Password:               "sekrit",
+	CACert:                 "ca cert",
+	APIAddresses:           []string{"localhost:1235"},
+	Nonce:                  "a nonce",
+	Controller:             testing.ControllerTag,
+	Model:                  testing.ModelTag,
+	JujuDBSnapChannel:      controller.DefaultJujuDBSnapChannel,
+	AgentLogfileMaxSizeMB:  150,
+	AgentLogfileMaxBackups: 4,
 }
 
 func (*suite) TestAttributes(c *gc.C) {
@@ -404,8 +402,6 @@ func (*suite) TestAttributes(c *gc.C) {
 	c.Assert(conf.Nonce(), gc.Equals, "a nonce")
 	c.Assert(conf.UpgradedToVersion(), jc.DeepEquals, jujuversion.Current)
 	c.Assert(conf.JujuDBSnapChannel(), gc.Equals, "4.4/stable")
-	c.Assert(conf.NonSyncedWritesToRaftLog(), jc.IsFalse)
-	c.Assert(conf.BatchRaftFSM(), jc.IsFalse)
 	c.Assert(conf.AgentLogfileMaxSizeMB(), gc.Equals, 150)
 	c.Assert(conf.AgentLogfileMaxBackups(), gc.Equals, 4)
 }
@@ -486,27 +482,27 @@ func (*suite) TestAPIInfoMissingAddress(c *gc.C) {
 	c.Assert(ok, jc.IsFalse)
 }
 
-func (*suite) TestAPIInfoServesLocalhostOnlyWhenServingInfoPresent(c *gc.C) {
+func (*suite) TestAPIInfoServesLocalhostWhenServingInfoPresent(c *gc.C) {
 	attrParams := attributeParams
-	attrParams.APIAddresses = []string{"localhost:1235", "localhost:1236"}
+	attrParams.APIAddresses = []string{"foo.example:1235"}
 	servingInfo := stateServingInfo()
 	conf, err := agent.NewStateMachineConfig(attrParams, servingInfo)
 	c.Assert(err, jc.ErrorIsNil)
 	apiinfo, ok := conf.APIInfo()
 	c.Assert(ok, jc.IsTrue)
-	c.Check(apiinfo.Addrs, gc.DeepEquals, []string{"localhost:52"})
+	c.Check(apiinfo.Addrs, jc.SameContents, []string{"localhost:52", "foo.example:1235"})
 }
 
 func (*suite) TestAPIInfoServesStandardAPIPortWhenControllerAPIPortNotSet(c *gc.C) {
 	attrParams := attributeParams
-	attrParams.APIAddresses = []string{"localhost:1235", "localhost:1236"}
+	attrParams.APIAddresses = []string{"foo.example:1235"}
 	servingInfo := stateServingInfo()
 	servingInfo.ControllerAPIPort = 0
 	conf, err := agent.NewStateMachineConfig(attrParams, servingInfo)
 	c.Assert(err, jc.ErrorIsNil)
 	apiinfo, ok := conf.APIInfo()
 	c.Assert(ok, jc.IsTrue)
-	c.Check(apiinfo.Addrs, gc.DeepEquals, []string{"localhost:47"})
+	c.Check(apiinfo.Addrs, jc.SameContents, []string{"localhost:47", "foo.example:1235"})
 }
 
 func (*suite) TestMongoInfo(c *gc.C) {
@@ -703,28 +699,4 @@ func (*suite) TestSetMongoChannel(c *gc.C) {
 	conf.SetJujuDBSnapChannel("latest/candidate")
 	snapChannel = conf.JujuDBSnapChannel()
 	c.Assert(snapChannel, gc.Equals, "latest/candidate", gc.Commentf("mongo snap channel setting not updated"))
-}
-
-func (*suite) TestSetSyncWritesToRaftLog(c *gc.C) {
-	conf, err := agent.NewAgentConfig(attributeParams)
-	c.Assert(err, jc.ErrorIsNil)
-
-	nonSyncedWritesToRaftLog := conf.NonSyncedWritesToRaftLog()
-	c.Assert(nonSyncedWritesToRaftLog, jc.IsFalse)
-
-	conf.SetNonSyncedWritesToRaftLog(true)
-	nonSyncedWritesToRaftLog = conf.NonSyncedWritesToRaftLog()
-	c.Assert(nonSyncedWritesToRaftLog, jc.IsTrue, gc.Commentf("sync writes to raft log settings not updated"))
-}
-
-func (*suite) TestSetBatchRaftFSM(c *gc.C) {
-	conf, err := agent.NewAgentConfig(attributeParams)
-	c.Assert(err, jc.ErrorIsNil)
-
-	nonSyncedWritesToRaftLog := conf.BatchRaftFSM()
-	c.Assert(nonSyncedWritesToRaftLog, jc.IsFalse)
-
-	conf.SetBatchRaftFSM(true)
-	nonSyncedWritesToRaftLog = conf.BatchRaftFSM()
-	c.Assert(nonSyncedWritesToRaftLog, jc.IsTrue, gc.Commentf("batch raft FSM settings not updated"))
 }

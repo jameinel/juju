@@ -228,6 +228,8 @@ func allCollections() CollectionSchema {
 		charmsC: {
 			indexes: []mgo.Index{{
 				Key: []string{"model-uuid"},
+			}, {
+				Key: []string{"bundlesha256"},
 			}},
 		},
 		applicationsC: {
@@ -511,13 +513,6 @@ func allCollections() CollectionSchema {
 		// relationNetworksC holds required ingress or egress cidrs for remote relations.
 		relationNetworksC: {},
 
-		// firewallRulesC holds firewall rules for defined service types.
-		firewallRulesC: {
-			indexes: []mgo.Index{{
-				Key: []string{"model-uuid"},
-			}},
-		},
-
 		// podSpecsC holds the CAAS pod specifications,
 		// for applications.
 		podSpecsC: {},
@@ -545,6 +540,12 @@ func allCollections() CollectionSchema {
 		secretConsumersC: {
 			indexes: []mgo.Index{{
 				Key: []string{"consumer-tag", "label", "model-uuid"},
+			}},
+		},
+
+		secretRemoteConsumersC: {
+			indexes: []mgo.Index{{
+				Key: []string{"consumer-tag", "model-uuid"},
 			}},
 		},
 
@@ -679,16 +680,16 @@ const (
 	remoteEntitiesC      = "remoteEntities"
 	externalControllersC = "externalControllers"
 	relationNetworksC    = "relationNetworks"
-	firewallRulesC       = "firewallRules"
 
 	// Secrets
-	secretMetadataC       = "secretMetadata"
-	secretRevisionsC      = "secretRevisions"
-	secretConsumersC      = "secretConsumers"
-	secretPermissionsC    = "secretPermissions"
-	secretRotateC         = "secretRotate"
-	secretBackendsC       = "secretBackends"
-	secretBackendsRotateC = "secretBackendsRotate"
+	secretMetadataC        = "secretMetadata"
+	secretRevisionsC       = "secretRevisions"
+	secretConsumersC       = "secretConsumers"
+	secretRemoteConsumersC = "secretRemoteConsumers"
+	secretPermissionsC     = "secretPermissions"
+	secretRotateC          = "secretRotate"
+	secretBackendsC        = "secretBackends"
+	secretBackendsRotateC  = "secretBackendsRotate"
 )
 
 // watcherIgnoreList contains all the collections in mongo that should not be watched by the

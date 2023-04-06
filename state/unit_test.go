@@ -942,7 +942,6 @@ type destroyMachineTestCase struct {
 	target    *state.Unit
 	host      *state.Machine
 	desc      string
-	flipHook  []jujutxn.TestHook
 	destroyed bool
 }
 
@@ -2040,10 +2039,24 @@ func (s *UnitSuite) TestDestroyAlsoDeletesSecretPermissions(c *gc.C) {
 	_, err := store.CreateSecret(uri, cp)
 	c.Assert(err, jc.ErrorIsNil)
 
+	// Make a relation for the access scope.
+	endpoint1, err := s.application.Endpoint("juju-info")
+	c.Assert(err, jc.ErrorIsNil)
+	application2 := s.Factory.MakeApplication(c, &factory.ApplicationParams{
+		Charm: s.Factory.MakeCharm(c, &factory.CharmParams{
+			Name: "logging",
+		}),
+	})
+	endpoint2, err := application2.Endpoint("info")
+	c.Assert(err, jc.ErrorIsNil)
+	rel := s.Factory.MakeRelation(c, &factory.RelationParams{
+		Endpoints: []state.Endpoint{endpoint1, endpoint2},
+	})
+
 	unit := s.Factory.MakeUnit(c, nil)
 	err = s.State.GrantSecretAccess(uri, state.SecretAccessParams{
 		LeaderToken: &fakeToken{},
-		Scope:       unit.Tag(),
+		Scope:       rel.Tag(),
 		Subject:     unit.Tag(),
 		Role:        secrets.RoleView,
 	})
@@ -2916,7 +2929,6 @@ func unitMachine(c *gc.C, st *state.State, u *state.Unit) *state.Machine {
 
 type CAASUnitSuite struct {
 	ConnSuite
-	charm       *state.Charm
 	application *state.Application
 	operatorApp *state.Application
 }

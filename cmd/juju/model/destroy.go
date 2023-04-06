@@ -250,10 +250,6 @@ func (c *destroyCommand) Run(ctx *cmd.Context) error {
 	}
 	defer func() { _ = api.Close() }()
 
-	if err := c.DestroyConfirmationCommandBase.Run(ctx); err != nil {
-		return errors.Trace(err)
-	}
-
 	if c.DestroyConfirmationCommandBase.NeedsConfirmation() {
 		modelStatuses, err := api.ModelStatus(names.NewModelTag(modelDetails.ModelUUID))
 		if err != nil {
@@ -312,14 +308,6 @@ type modelData struct {
 	volumeCount      int
 	filesystemCount  int
 	errorCount       int
-}
-
-func (data *modelData) isEmpty() bool {
-	return data.errorCount == 0 &&
-		data.machineCount == 0 &&
-		data.applicationCount == 0 &&
-		data.volumeCount == 0 &&
-		data.filesystemCount == 0
 }
 
 func waitForModelDestroyed(

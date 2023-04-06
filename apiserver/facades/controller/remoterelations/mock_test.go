@@ -4,7 +4,6 @@
 package remoterelations_test
 
 import (
-	"github.com/juju/charm/v10"
 	"github.com/juju/errors"
 	"github.com/juju/names/v4"
 	"github.com/juju/testing"
@@ -120,6 +119,19 @@ func (r *mockRelation) ApplicationSettings(appName string) (map[string]interface
 	return settings, nil
 }
 
+type mockOfferConnection struct {
+	offerUUID string
+	username  string
+}
+
+func (o *mockOfferConnection) OfferUUID() string {
+	return o.offerUUID
+}
+
+func (o *mockOfferConnection) UserName() string {
+	return o.username
+}
+
 type mockRemoteApplication struct {
 	common.RemoteApplication
 	testing.Stub
@@ -130,7 +142,6 @@ type mockRemoteApplication struct {
 	status        status.Status
 	terminated    bool
 	message       string
-	eps           []charm.Relation
 	consumerproxy bool
 }
 

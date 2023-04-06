@@ -22,6 +22,7 @@ import (
 	"github.com/juju/juju/cmd/juju/commands"
 	"github.com/juju/juju/core/auditlog"
 	"github.com/juju/juju/core/cache"
+	coredatabase "github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/lease"
 	"github.com/juju/juju/core/multiwatcher"
 	"github.com/juju/juju/core/presence"
@@ -45,15 +46,14 @@ type ManifoldConfig struct {
 	UpgradeGateName        string
 	AuditConfigUpdaterName string
 	LeaseManagerName       string
-	RaftTransportName      string
 	SyslogName             string
 	CharmhubHTTPClientName string
+	DBAccessorName         string
 
 	PrometheusRegisterer              prometheus.Registerer
 	RegisterIntrospectionHTTPHandlers func(func(path string, _ http.Handler))
 	Hub                               *pubsub.StructuredHub
 	Presence                          presence.Recorder
-	RaftOpQueue                       Queue
 
 	NewWorker           func(Config) (worker.Worker, error)
 	NewMetricsCollector func() *apiserver.Collector
@@ -91,9 +91,6 @@ func (config ManifoldConfig) Validate() error {
 	if config.LeaseManagerName == "" {
 		return errors.NotValidf("empty LeaseManagerName")
 	}
-	if config.RaftTransportName == "" {
-		return errors.NotValidf("empty RaftTransportName")
-	}
 	if config.PrometheusRegisterer == nil {
 		return errors.NotValidf("nil PrometheusRegisterer")
 	}
@@ -104,7 +101,10 @@ func (config ManifoldConfig) Validate() error {
 		return errors.NotValidf("empty SyslogName")
 	}
 	if config.CharmhubHTTPClientName == "" {
-		return errors.NotValidf("nil CharmhubHTTPClientName")
+		return errors.NotValidf("empty CharmhubHTTPClientName")
+	}
+	if config.DBAccessorName == "" {
+		return errors.NotValidf("empty DBAccessorName")
 	}
 	if config.Hub == nil {
 		return errors.NotValidf("nil Hub")
@@ -117,9 +117,6 @@ func (config ManifoldConfig) Validate() error {
 	}
 	if config.NewMetricsCollector == nil {
 		return errors.NotValidf("nil NewMetricsCollector")
-	}
-	if config.RaftOpQueue == nil {
-		return errors.NotValidf("nil RaftOpQueue")
 	}
 	return nil
 }
@@ -140,9 +137,9 @@ func Manifold(config ManifoldConfig) dependency.Manifold {
 			config.UpgradeGateName,
 			config.AuditConfigUpdaterName,
 			config.LeaseManagerName,
-			config.RaftTransportName,
 			config.SyslogName,
 			config.CharmhubHTTPClientName,
+			config.DBAccessorName,
 		},
 		Start: config.start,
 	}
@@ -209,15 +206,13 @@ func (config ManifoldConfig) start(context dependency.Context) (worker.Worker, e
 		return nil, errors.Trace(err)
 	}
 
-	// We don't need anything from the raft-transport but we need to
-	// tie the lifetime of this worker to it - otherwise http-server
-	// will hang waiting for this to release the mux.
-	if err := context.Get(config.RaftTransportName, nil); err != nil {
+	var charmhubHTTPClient HTTPClient
+	if err := context.Get(config.CharmhubHTTPClientName, &charmhubHTTPClient); err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	var charmhubHTTPClient HTTPClient
-	if err := context.Get(config.CharmhubHTTPClientName, &charmhubHTTPClient); err != nil {
+	var dbGetter coredatabase.DBGetter
+	if err := context.Get(config.DBAccessorName, &dbGetter); err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -256,9 +251,9 @@ func (config ManifoldConfig) start(context dependency.Context) (worker.Worker, e
 		NewServer:                         newServerShim,
 		MetricsCollector:                  metricsCollector,
 		EmbeddedCommand:                   execEmbeddedCommand,
-		RaftOpQueue:                       config.RaftOpQueue,
 		SysLogger:                         sysLogger,
 		CharmhubHTTPClient:                charmhubHTTPClient,
+		DBGetter:                          dbGetter,
 	})
 	if err != nil {
 		_ = stTracker.Done()

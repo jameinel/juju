@@ -842,27 +842,27 @@ type ApplicationOpenedPorts struct {
 }
 
 // ApplicationOpenedPortsResult holds a single result of the
-// CAASFirewallerEmbedded.GetApplicationOpenedPorts() API calls.
+// CAASFirewallerEmbedded.GetOpenedPorts() API calls.
 type ApplicationOpenedPortsResult struct {
 	Error                 *Error                   `json:"error,omitempty"`
 	ApplicationPortRanges []ApplicationOpenedPorts `json:"application-port-ranges"`
 }
 
 // ApplicationOpenedPortsResults holds all the results of the
-// CAASFirewallerEmbedded.GetApplicationOpenedPorts() API calls.
+// CAASFirewallerEmbedded.GetOpenedPorts() API calls.
 type ApplicationOpenedPortsResults struct {
 	Results []ApplicationOpenedPortsResult `json:"results"`
 }
 
-// OpenMachinePortRangesByEndpointResults holds the results of a request to the
-// uniter's OpenedMachinePortRangesByEndpoint API.
-type OpenMachinePortRangesByEndpointResults struct {
-	Results []OpenMachinePortRangesByEndpointResult `json:"results"`
+// OpenPortRangesByEndpointResults holds the results of a request to the
+// uniter's OpenedMachinePortRangesByEndpoint and OpenedPortRangesByEndpoint API.
+type OpenPortRangesByEndpointResults struct {
+	Results []OpenPortRangesByEndpointResult `json:"results"`
 }
 
-// OpenMachinePortRangesByEndpointResult holds a single result of a request to
-// the uniter's OpenedMachinePortRangesByEndpoint API.
-type OpenMachinePortRangesByEndpointResult struct {
+// OpenPortRangesByEndpointResult holds a single result of a request to
+// the uniter's OpenedMachinePortRangesByEndpoint and OpenedPortRangesByEndpoint API.
+type OpenPortRangesByEndpointResult struct {
 	Error *Error `json:"error,omitempty"`
 
 	// The set of opened port ranges grouped by unit tag.
@@ -900,6 +900,16 @@ type OpenUnitPortRanges struct {
 	// The CIDRs that correspond to the subnets assigned to the space that
 	// this endpoint is bound to.
 	SubnetCIDRs []string `json:"subnet-cidrs"`
+}
+
+type IngressRulesResult struct {
+	Rules []IngressRule `json:"rules"`
+	Error *Error        `json:"error,omitempty"`
+}
+
+type IngressRule struct {
+	PortRange   PortRange `json:"port-range"`
+	SourceCIDRs []string  `json:"source-cidrs"`
 }
 
 // APIHostPortsResult holds the result of an APIHostPorts

@@ -23,6 +23,7 @@ import (
 
 	"github.com/juju/juju/api"
 	"github.com/juju/juju/api/client/application"
+	"github.com/juju/juju/api/client/charms"
 	"github.com/juju/juju/api/client/resources"
 	commoncharm "github.com/juju/juju/api/common/charm"
 	app "github.com/juju/juju/apiserver/facades/client/application"
@@ -393,7 +394,7 @@ func (h *bundleHandler) resolveCharmChannelAndRevision(charmURL string, charmBas
 		return charmChannel, -1, nil
 	}
 	// If the charm URL already contains a revision, return that before
-	// attempting to resolve a revision from any charm store. We can ignore the
+	// attempting to resolve a revision from any charm repository. We can ignore the
 	// error here, as we want to just parse out the charm URL.
 	// Resolution and validation of the charm URL happens further down.
 	if curl, err := charm.ParseURL(charmURL); err == nil {
@@ -660,17 +661,22 @@ func (h *bundleHandler) addCharm(change *bundlechanges.AddCharmChange) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		selector := seriesSelector{
-			charmURLSeries:      url.Series,
-			seriesFlag:          change.Params.Series,
-			supportedSeries:     supportedSeries,
-			supportedJujuSeries: workloadSeries,
-			conf:                modelCfg,
-			fromBundle:          true,
+		selector := corecharm.SeriesSelector{
+			CharmURLSeries:      url.Series,
+			SeriesFlag:          change.Params.Series,
+			SupportedSeries:     supportedSeries,
+			SupportedJujuSeries: workloadSeries,
+			Conf:                modelCfg,
+			FromBundle:          true,
+			Logger:              logger,
+		}
+		err = selector.Validate()
+		if err != nil {
+			return errors.Trace(err)
 		}
 
 		// Get the series to use.
-		chSeries, err := selector.charmSeries()
+		chSeries, err := selector.CharmSeries()
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -995,16 +1001,21 @@ func (h *bundleHandler) selectedSeries(ch charm.CharmMeta, chID application.Char
 		return "", errors.Trace(err)
 	}
 
-	selector := seriesSelector{
-		seriesFlag:          chSeries,
-		charmURLSeries:      chID.URL.Series,
-		supportedSeries:     supportedSeries,
-		supportedJujuSeries: workloadSeries,
-		conf:                h.modelConfig,
-		force:               h.force,
-		fromBundle:          true,
+	selector := corecharm.SeriesSelector{
+		SeriesFlag:          chSeries,
+		CharmURLSeries:      chID.URL.Series,
+		SupportedSeries:     supportedSeries,
+		SupportedJujuSeries: workloadSeries,
+		Conf:                h.modelConfig,
+		Force:               h.force,
+		FromBundle:          true,
+		Logger:              logger,
 	}
-	selectedSeries, err := selector.charmSeries()
+	err = selector.Validate()
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	selectedSeries, err := selector.CharmSeries()
 	return selectedSeries, charmValidationError(curl.Name, errors.Trace(err))
 }
 
@@ -1285,7 +1296,7 @@ func (h *bundleHandler) upgradeCharmResources(chID application.CharmID, param bu
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	filtered, err := utils.GetUpgradeResources(chID.URL, resourceLister, param.Application, resMap, meta)
+	filtered, err := utils.GetUpgradeResources(chID, charms.NewClient(h.deployAPI), resourceLister, param.Application, resMap, meta)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -1470,11 +1481,12 @@ func (h *bundleHandler) consumeOffer(change *bundlechanges.ConsumeOfferChange) e
 	offerURL.Source = url.Source
 	consumeDetails.Offer.OfferURL = offerURL.String()
 
-	// construct the cosume application arguments
+	// construct the consume application arguments
 	arg := crossmodel.ConsumeApplicationArgs{
 		Offer:            *consumeDetails.Offer,
 		ApplicationAlias: p.ApplicationName,
 		Macaroon:         consumeDetails.Macaroon,
+		AuthToken:        consumeDetails.AuthToken,
 	}
 	if consumeDetails.ControllerInfo != nil {
 		controllerTag, err := names.ParseControllerTag(consumeDetails.ControllerInfo.ControllerTag)

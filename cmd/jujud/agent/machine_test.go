@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	stdcontext "context"
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -16,8 +17,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/hashicorp/raft"
-	"github.com/juju/clock"
 	"github.com/juju/cmd/v3"
 	"github.com/juju/cmd/v3/cmdtesting"
 	"github.com/juju/collections/set"
@@ -59,13 +58,10 @@ import (
 	"github.com/juju/juju/controller"
 	"github.com/juju/juju/core/auditlog"
 	"github.com/juju/juju/core/instance"
-	"github.com/juju/juju/core/lease"
 	"github.com/juju/juju/core/life"
 	"github.com/juju/juju/core/migration"
 	coremodel "github.com/juju/juju/core/model"
 	"github.com/juju/juju/core/network"
-	"github.com/juju/juju/core/raft/queue"
-	"github.com/juju/juju/core/raftlease"
 	"github.com/juju/juju/environs"
 	"github.com/juju/juju/environs/context"
 	envtesting "github.com/juju/juju/environs/testing"
@@ -87,7 +83,6 @@ import (
 	"github.com/juju/juju/worker/instancepoller"
 	"github.com/juju/juju/worker/machiner"
 	"github.com/juju/juju/worker/migrationmaster"
-	raftworker "github.com/juju/juju/worker/raft"
 	"github.com/juju/juju/worker/storageprovisioner"
 )
 
@@ -120,7 +115,6 @@ func (s *MachineSuite) SetUpTest(c *gc.C) {
 		controller.AuditingEnabled: true,
 	}
 	s.commonMachineSuite.SetUpTest(c)
-	bootstrapRaft(c, s.DataDir())
 
 	// Restart failed workers much faster for the tests.
 	s.PatchValue(&engine.EngineErrorDelay, 100*time.Millisecond)
@@ -129,17 +123,6 @@ func (s *MachineSuite) SetUpTest(c *gc.C) {
 	// If any given test hits a minute, we have almost certainly become
 	// wedged, so dump the logs.
 	coretesting.DumpTestLogsAfter(time.Minute, c, s)
-}
-
-func bootstrapRaft(c *gc.C, dataDir string) {
-	err := raftworker.Bootstrap(raftworker.Config{
-		Clock:      clock.WallClock,
-		StorageDir: filepath.Join(dataDir, "raft"),
-		LocalID:    "0",
-		Logger:     loggo.GetLogger("machine_test.raft"),
-		Queue:      queue.NewOpQueue(clock.WallClock),
-	})
-	c.Assert(err, jc.ErrorIsNil)
 }
 
 func (s *MachineSuite) TestParseNonsense(c *gc.C) {
@@ -1385,7 +1368,7 @@ func (s *MachineSuite) TestDyingModelCleanedUp(c *gc.C) {
 func (s *MachineSuite) TestModelWorkersRespectSingularResponsibilityFlag(c *gc.C) {
 	// Grab responsibility for the model on behalf of another machine.
 	uuid := s.BackingState.ModelUUID()
-	claimSingularRaftLease(c, s.DataDir(), uuid)
+	s.claimSingularLease(uuid)
 
 	// Then run a normal model-tracking test, just checking for
 	// a different set of workers.
@@ -1399,53 +1382,15 @@ func (s *MachineSuite) TestModelWorkersRespectSingularResponsibilityFlag(c *gc.C
 	})
 }
 
-func claimSingularRaftLease(c *gc.C, dataDir string, modelUUID string) {
-	// This is cribbed from upgrades/raft.go, but simplified because
-	// we don't need to handle
-	raftDir := filepath.Join(dataDir, "raft")
-	snapshotStore, err := raftworker.NewSnapshotStore(raftDir, 2, loggo.GetLogger("machine_test.raft"))
-	c.Assert(err, jc.ErrorIsNil)
+func (s *MachineSuite) claimSingularLease(modelUUID string) {
+	s.InitialDBOps = append(s.InitialDBOps, func(db *sql.DB) error {
+		q := `
+INSERT INTO lease (uuid, lease_type_id, model_uuid, name, holder, start, expiry)
+VALUES (?, 0, ?, ?, 'machine-999-lxd-99', datetime('now'), datetime('now', '+100 seconds'))`[1:]
 
-	var zero time.Time
-	newSnapshot := raftlease.Snapshot{
-		Version: raftlease.SnapshotVersion,
-		Entries: map[raftlease.SnapshotKey]raftlease.SnapshotEntry{
-			{
-				Namespace: lease.SingularControllerNamespace,
-				ModelUUID: modelUUID,
-				Lease:     modelUUID,
-			}: {
-				Holder:   "machine-999-lxd-99",
-				Start:    zero,
-				Duration: time.Hour,
-			},
-		},
-		GlobalTime: zero,
-	}
-	// Store the snapshot.
-	_, transport := raft.NewInmemTransport(raft.ServerAddress("notused"))
-	defer transport.Close()
-	sink, err := snapshotStore.Create(
-		raft.SnapshotVersionMax,
-		1, // lastIndex
-		1, // lastTerm
-		raft.Configuration{
-			Servers: []raft.Server{{
-				ID:       raft.ServerID("0"),
-				Address:  raft.ServerAddress(serverAddress),
-				Suffrage: raft.Voter,
-			}},
-		},
-		1, // configIndex
-		transport,
-	)
-	c.Assert(err, jc.ErrorIsNil)
-	defer sink.Close()
-	err = newSnapshot.Persist(sink)
-	if err != nil {
-		sink.Cancel()
-	}
-	c.Assert(err, jc.ErrorIsNil)
+		_, err := db.Exec(q, utils.MustNewUUID().String(), modelUUID, modelUUID)
+		return err
+	})
 }
 
 func (s *MachineSuite) setUpNewModel(c *gc.C) (newSt *state.State, closer func()) {
@@ -1497,7 +1442,7 @@ type cleanupSuite interface {
 
 func startAddressPublisher(suite cleanupSuite, c *gc.C, agent *MachineAgent) {
 	// Start publishing a test API address on the central hub so that
-	// the raft workers can start. The other way of unblocking them
+	// dependent workers can start. The other way of unblocking them
 	// would be to get the peergrouper healthy, but that has proved
 	// difficult - trouble getting the replicaset correctly
 	// configured.

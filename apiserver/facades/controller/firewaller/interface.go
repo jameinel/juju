@@ -9,8 +9,8 @@ import (
 	"gopkg.in/macaroon.v2"
 
 	"github.com/juju/juju/apiserver/common/firewall"
+	"github.com/juju/juju/controller"
 	"github.com/juju/juju/core/network"
-	corefirewall "github.com/juju/juju/core/network/firewall"
 	"github.com/juju/juju/rpc/params"
 	"github.com/juju/juju/state"
 )
@@ -20,11 +20,12 @@ import (
 type State interface {
 	firewall.State
 
+	ControllerConfig() (controller.Config, error)
+	IsController() bool
 	ModelUUID() string
 	GetMacaroon(entity names.Tag) (*macaroon.Macaroon, error)
 	WatchOpenedPorts() state.StringsWatcher
 	FindEntity(tag names.Tag) (state.Entity, error)
-	FirewallRule(service corefirewall.WellKnownServiceType) (*state.FirewallRule, error)
 	AllEndpointBindings() (map[string]map[string]string, error)
 	SpaceInfos() (network.SpaceInfos, error)
 }
@@ -49,6 +50,14 @@ type stateShim struct {
 	st *state.State
 }
 
+func (st stateShim) ControllerConfig() (controller.Config, error) {
+	return st.st.ControllerConfig()
+}
+
+func (st stateShim) IsController() bool {
+	return st.st.IsController()
+}
+
 func (st stateShim) ModelUUID() string {
 	return st.st.ModelUUID()
 }
@@ -64,11 +73,6 @@ func (st stateShim) FindEntity(tag names.Tag) (state.Entity, error) {
 
 func (st stateShim) WatchOpenedPorts() state.StringsWatcher {
 	return st.st.WatchOpenedPorts()
-}
-
-func (st stateShim) FirewallRule(service corefirewall.WellKnownServiceType) (*state.FirewallRule, error) {
-	api := state.NewFirewallRules(st.st)
-	return api.Rule(service)
 }
 
 func (st stateShim) AllEndpointBindings() (map[string]map[string]string, error) {

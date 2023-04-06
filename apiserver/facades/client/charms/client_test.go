@@ -9,7 +9,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/juju/charm/v10"
 	"github.com/juju/errors"
-	"github.com/juju/mgo/v3"
 	"github.com/juju/names/v4"
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
@@ -27,6 +26,7 @@ import (
 	"github.com/juju/juju/core/cache"
 	corecharm "github.com/juju/juju/core/charm"
 	"github.com/juju/juju/core/constraints"
+	coredatabase "github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/instance"
 	"github.com/juju/juju/core/leadership"
 	"github.com/juju/juju/core/lease"
@@ -70,8 +70,8 @@ func (ctx *charmsSuiteContext) LeadershipChecker() (leadership.Checker, error)  
 func (ctx *charmsSuiteContext) LeadershipPinner(string) (leadership.Pinner, error)    { return nil, nil }
 func (ctx *charmsSuiteContext) LeadershipReader(string) (leadership.Reader, error)    { return nil, nil }
 func (ctx *charmsSuiteContext) SingularClaimer() (lease.Claimer, error)               { return nil, nil }
-func (ctx *charmsSuiteContext) Raft() facade.RaftContext                              { return nil }
 func (ctx *charmsSuiteContext) HTTPClient(facade.HTTPClientPurpose) facade.HTTPClient { return nil }
+func (ctx *charmsSuiteContext) ControllerDB() (coredatabase.TrackedDB, error)         { return nil, nil }
 
 func (s *charmsSuite) SetUpTest(c *gc.C) {
 	s.JujuConnSuite.SetUpTest(c)
@@ -668,10 +668,6 @@ func (s *charmsMockSuite) expectResolveWithPreferredChannelNoSeries() {
 
 			return curl, resolvedOrigin, []string{}, nil
 		})
-}
-
-func (s *charmsMockSuite) expectMongoSession() {
-	s.state.EXPECT().MongoSession().Return(&mgo.Session{})
 }
 
 func (s *charmsMockSuite) expectApplication(name string) {

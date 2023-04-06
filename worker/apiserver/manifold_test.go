@@ -27,10 +27,10 @@ import (
 	"github.com/juju/juju/controller"
 	"github.com/juju/juju/core/auditlog"
 	"github.com/juju/juju/core/cache"
+	coredatabase "github.com/juju/juju/core/database"
 	corelogger "github.com/juju/juju/core/logger"
 	"github.com/juju/juju/core/multiwatcher"
 	"github.com/juju/juju/core/presence"
-	"github.com/juju/juju/core/raft/queue"
 	"github.com/juju/juju/state"
 	coretesting "github.com/juju/juju/testing"
 	"github.com/juju/juju/worker/apiserver"
@@ -58,9 +58,9 @@ type ManifoldSuite struct {
 	prometheusRegisterer stubPrometheusRegisterer
 	state                stubStateTracker
 	upgradeGate          stubGateWaiter
-	queue                *queue.OpQueue
 	sysLogger            syslogger.SysLogger
 	charmhubHTTPClient   *http.Client
+	dbGetter             stubDBGetter
 
 	stub testing.Stub
 }
@@ -85,7 +85,6 @@ func (s *ManifoldSuite) SetUpTest(c *gc.C) {
 	s.auditConfig = stubAuditConfig{}
 	s.multiwatcherFactory = &fakeMultiwatcherFactory{}
 	s.leaseManager = &lease.Manager{}
-	s.queue = queue.NewOpQueue(testclock.NewClock(time.Now()))
 	s.sysLogger = &mockSysLogger{}
 	s.charmhubHTTPClient = &http.Client{}
 	s.stub.ResetCalls()
@@ -102,16 +101,15 @@ func (s *ManifoldSuite) SetUpTest(c *gc.C) {
 		UpgradeGateName:                   "upgrade",
 		AuditConfigUpdaterName:            "auditconfig-updater",
 		LeaseManagerName:                  "lease-manager",
-		RaftTransportName:                 "raft-transport",
 		SyslogName:                        "syslog",
 		CharmhubHTTPClientName:            "charmhub-http-client",
+		DBAccessorName:                    "db-accessor",
 		PrometheusRegisterer:              &s.prometheusRegisterer,
 		RegisterIntrospectionHTTPHandlers: func(func(string, http.Handler)) {},
 		Hub:                               &s.hub,
 		Presence:                          presence.New(s.clock),
 		NewWorker:                         s.newWorker,
 		NewMetricsCollector:               s.newMetricsCollector,
-		RaftOpQueue:                       s.queue,
 	})
 }
 
@@ -127,9 +125,9 @@ func (s *ManifoldSuite) newContext(overlay map[string]interface{}) dependency.Co
 		"upgrade":              &s.upgradeGate,
 		"auditconfig-updater":  s.auditConfig.get,
 		"lease-manager":        s.leaseManager,
-		"raft-transport":       nil,
 		"syslog":               s.sysLogger,
 		"charmhub-http-client": s.charmhubHTTPClient,
+		"db-accessor":          s.dbGetter,
 	}
 	for k, v := range overlay {
 		resources[k] = v
@@ -160,7 +158,7 @@ func (s *ManifoldSuite) newMetricsCollector() *coreapiserver.Collector {
 var expectedInputs = []string{
 	"agent", "authenticator", "clock", "modelcache", "multiwatcher", "mux",
 	"state", "upgrade", "auditconfig-updater", "lease-manager",
-	"raft-transport", "syslog", "charmhub-http-client",
+	"syslog", "charmhub-http-client", "db-accessor",
 }
 
 func (s *ManifoldSuite) TestInputs(c *gc.C) {
@@ -227,9 +225,9 @@ func (s *ManifoldSuite) TestStart(c *gc.C) {
 		LeaseManager:        s.leaseManager,
 		MetricsCollector:    s.metricsCollector,
 		Hub:                 &s.hub,
-		RaftOpQueue:         s.queue,
 		SysLogger:           s.sysLogger,
 		CharmhubHTTPClient:  s.charmhubHTTPClient,
+		DBGetter:            s.dbGetter,
 	})
 }
 
@@ -377,4 +375,13 @@ type mockAuthenticator struct {
 
 type fakeMultiwatcherFactory struct {
 	multiwatcher.Factory
+}
+
+type stubDBGetter struct{}
+
+func (s stubDBGetter) GetDB(namespace string) (coredatabase.TrackedDB, error) {
+	if namespace != "controller" {
+		return nil, errors.Errorf(`expected a request for "controller" DB; got %q`, namespace)
+	}
+	return nil, nil
 }

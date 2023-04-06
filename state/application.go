@@ -80,12 +80,14 @@ type applicationDoc struct {
 	Name        string `bson:"name"`
 	ModelUUID   string `bson:"model-uuid"`
 	Subordinate bool   `bson:"subordinate"`
-	// CharmURL and channel should be moved to CharmOrigin. Attempting it should
+	// CharmURL should be moved to CharmOrigin. Attempting it should
 	// be relatively straight forward, but very time consuming.
 	// When moving to CharmHub from Juju it should be
 	// tackled then.
-	CharmURL             *string      `bson:"charmurl"`
-	CharmOrigin          CharmOrigin  `bson:"charm-origin"`
+	CharmURL    *string     `bson:"charmurl"`
+	CharmOrigin CharmOrigin `bson:"charm-origin"`
+	// CharmModifiedVersion changes will trigger the upgrade-charm hook
+	// for units independent of charm url changes.
 	CharmModifiedVersion int          `bson:"charmmodifiedversion"`
 	ForceCharm           bool         `bson:"forcecharm"`
 	Life                 Life         `bson:"life"`
@@ -391,7 +393,7 @@ func (op *DestroyApplicationOperation) deleteSecrets() error {
 		return errors.Annotatef(err, "deleting owned secrets for %q", op.app.Name())
 	}
 	// TODO(juju4) - remove
-	if err := op.app.st.removeSecretConsumer(op.app.Tag()); err != nil {
+	if err := op.app.st.RemoveSecretConsumer(op.app.Tag()); err != nil {
 		return errors.Annotatef(err, "deleting secret consumer records for %q", op.app.Name())
 	}
 	return nil
@@ -686,11 +688,16 @@ func (a *Application) removeOps(asserts bson.D, op *ForcedOperation) ([]txn.Op, 
 	}
 	ops = append(ops, removeOfferOps...)
 	// Remove secret permissions.
-	secretPermissionsOps, err := a.st.removeScopedSecretPermissionOps(a.Tag())
+	secretScopedPermissionsOps, err := a.st.removeScopedSecretPermissionOps(a.Tag())
 	if op.FatalError(err) {
 		return nil, errors.Trace(err)
 	}
-	ops = append(ops, secretPermissionsOps...)
+	ops = append(ops, secretScopedPermissionsOps...)
+	secretConsumerPermissionsOps, err := a.st.removeConsumerSecretPermissionOps(a.Tag())
+	if op.FatalError(err) {
+		return nil, errors.Trace(err)
+	}
+	ops = append(ops, secretConsumerPermissionsOps...)
 	secretLabelOps, err := a.st.removeOwnerSecretLabelOps(a.ApplicationTag())
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -743,11 +750,11 @@ func (a *Application) removeOps(asserts bson.D, op *ForcedOperation) ([]txn.Op, 
 		removePodSpecOp(a.ApplicationTag()),
 	)
 
-	openedApplicationPortRanges, err := getOpenedApplicationPortRanges(a.st, a.Name())
+	apr, err := getApplicationPortRanges(a.st, a.Name())
 	if op.FatalError(err) {
 		return nil, errors.Trace(err)
 	}
-	ops = append(ops, openedApplicationPortRanges.removeOps()...)
+	ops = append(ops, apr.removeOps()...)
 
 	cancelCleanupOps, err := a.cancelScheduledCleanupOps()
 	if err != nil {
@@ -1195,7 +1202,6 @@ func (a *Application) changeCharmOps(
 	ch *Charm,
 	updatedSettings charm.Settings,
 	forceUnits bool,
-	resourceIDs map[string]string,
 	updatedStorageConstraints map[string]StorageConstraints,
 ) ([]txn.Op, error) {
 	// Build the new application config from what can be used of the old one.
@@ -1328,15 +1334,6 @@ func (a *Application) changeCharmOps(
 		return nil, errors.Trace(err)
 	}
 	ops = append(ops, addPeerOps...)
-
-	if len(resourceIDs) > 0 {
-		// Collect pending resource resolution operations.
-		resOps, err := a.resolveResourceOps(resourceIDs)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		ops = append(ops, resOps...)
-	}
 
 	// Update the relation count as well.
 	if len(newPeers) > 0 {
@@ -1529,10 +1526,10 @@ func incCharmModifiedVersionOps(applicationID string) []txn.Op {
 	}}
 }
 
-func (a *Application) resolveResourceOps(resourceIDs map[string]string) ([]txn.Op, error) {
+func (a *Application) resolveResourceOps(pendingResourceIDs map[string]string) ([]txn.Op, error) {
 	// Collect pending resource resolution operations.
 	resources := a.st.Resources().(*resourcePersistence)
-	return resources.resolveApplicationPendingResourcesOps(a.doc.Name, resourceIDs)
+	return resources.resolveApplicationPendingResourcesOps(a.doc.Name, pendingResourceIDs)
 }
 
 // SetCharmConfig contains the parameters for Application.SetCharm.
@@ -1561,9 +1558,9 @@ type SetCharmConfig struct {
 	// profile doesn't validate.
 	Force bool
 
-	// ResourceIDs is a map of resource names to resource IDs to activate during
+	// PendingResourceIDs is a map of resource names to resource IDs to activate during
 	// the upgrade.
-	ResourceIDs map[string]string
+	PendingResourceIDs map[string]string
 
 	// StorageConstraints contains the storage constraints to add or update when
 	// upgrading the charm.
@@ -1702,13 +1699,25 @@ func (a *Application) SetCharm(cfg SetCharmConfig) (err error) {
 				cfg.Charm,
 				updatedSettings,
 				cfg.ForceUnits,
-				cfg.ResourceIDs,
 				cfg.StorageConstraints,
 			)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 			ops = append(ops, chng...)
+			newCharmModifiedVersion++
+		}
+
+		// Resources can be upgraded independent of a charm upgrade.
+		resourceOps, err := a.resolveResourceOps(cfg.PendingResourceIDs)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		ops = append(ops, resourceOps...)
+		// Only update newCharmModifiedVersion once. It might have been
+		// incremented in charmCharmOps.
+		if len(resourceOps) > 0 && newCharmModifiedVersion == a.doc.CharmModifiedVersion {
+			ops = append(ops, incCharmModifiedVersionOps(a.doc.DocID)...)
 			newCharmModifiedVersion++
 		}
 
@@ -2756,11 +2765,19 @@ func (a *Application) removeUnitOps(u *Unit, asserts bson.D, op *ForcedOperation
 	if op.FatalError(err) {
 		return nil, errors.Trace(err)
 	}
+	appPortsOps, err := removeApplicationPortsForUnitOps(a.st, u)
+	if op.FatalError(err) {
+		return nil, errors.Trace(err)
+	}
 	resOps, err := removeUnitResourcesOps(a.st, u.doc.Name)
 	if op.FatalError(err) {
 		return nil, errors.Trace(err)
 	}
-	secretPermissionsOps, err := a.st.removeScopedSecretPermissionOps(u.Tag())
+	secretScopedPermissionsOps, err := a.st.removeScopedSecretPermissionOps(u.Tag())
+	if op.FatalError(err) {
+		return nil, errors.Trace(err)
+	}
+	secretConsumerPermissionsOps, err := a.st.removeConsumerSecretPermissionOps(u.Tag())
 	if op.FatalError(err) {
 		return nil, errors.Trace(err)
 	}
@@ -2795,9 +2812,11 @@ func (a *Application) removeUnitOps(u *Unit, asserts bson.D, op *ForcedOperation
 		newCleanupOp(cleanupRemovedUnit, u.doc.Name, op.Force),
 	}
 	ops = append(ops, portsOps...)
+	ops = append(ops, appPortsOps...)
 	ops = append(ops, resOps...)
 	ops = append(ops, hostOps...)
-	ops = append(ops, secretPermissionsOps...)
+	ops = append(ops, secretScopedPermissionsOps...)
+	ops = append(ops, secretConsumerPermissionsOps...)
 	ops = append(ops, secretOwnerLabelOps...)
 	ops = append(ops, secretConsumerLabelOps...)
 
@@ -3230,7 +3249,11 @@ func assertApplicationAliveOp(docID string) txn.Op {
 // OpenedPortRanges returns a ApplicationPortRanges object that can be used to query
 // and/or mutate the port ranges opened by the embedded k8s application.
 func (a *Application) OpenedPortRanges() (ApplicationPortRanges, error) {
-	return getOpenedApplicationPortRanges(a.st, a.Name())
+	apr, err := getApplicationPortRanges(a.st, a.Name())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return apr, nil
 }
 
 // EndpointBindings returns the mapping for each endpoint name and the space

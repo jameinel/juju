@@ -334,6 +334,7 @@ var unsupportedConstraints = []string{
 	constraints.Tags,
 	constraints.VirtType,
 	constraints.AllocatePublicIP,
+	constraints.ImageID,
 }
 
 // ConstraintsValidator is defined on the Environs interface.
@@ -389,4 +390,10 @@ func (e *manualEnviron) DetectSeries() (string, error) {
 func (e *manualEnviron) DetectHardware() (*instance.HardwareCharacteristics, error) {
 	hw, _, err := e.seriesAndHardwareCharacteristics()
 	return hw, err
+}
+
+// UpdateModelConstraints always returns false because we don't want to update
+// model constraints for manual env.
+func (e *manualEnviron) UpdateModelConstraints() bool {
+	return false
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/juju/clock"
 	"github.com/juju/errors"
 	"github.com/juju/loggo"
+	"github.com/juju/names/v4"
 	"github.com/juju/pubsub/v2"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/worker/v3/workertest"
@@ -17,8 +18,8 @@ import (
 
 	corecontroller "github.com/juju/juju/controller"
 	"github.com/juju/juju/core/cache"
+	"github.com/juju/juju/core/permission"
 	"github.com/juju/juju/core/presence"
-	"github.com/juju/juju/core/raft/queue"
 	"github.com/juju/juju/pubsub/controller"
 	"github.com/juju/juju/state"
 	statetesting "github.com/juju/juju/state/testing"
@@ -81,8 +82,8 @@ func (s *sharedServerContextSuite) SetUpTest(c *gc.C) {
 		presence:            presence.New(clock.WallClock),
 		leaseManager:        &lease.Manager{},
 		controllerConfig:    controllerConfig,
-		raftOpQueue:         queue.NewOpQueue(clock.WallClock),
 		logger:              loggo.GetLogger("test"),
+		dbGetter:            StubDBGetter{},
 	}
 }
 
@@ -155,6 +156,9 @@ func (s *sharedServerContextSuite) newContext(c *gc.C) *sharedServerContext {
 	ctx, err := newSharedServerContext(s.config)
 	c.Assert(err, jc.ErrorIsNil)
 	s.AddCleanup(func(*gc.C) { ctx.Close() })
+	ctx.entityHasPermission = func(entity names.Tag, operation permission.Access, target names.Tag) (bool, error) {
+		return CheckHasPermission(s.State, entity, operation, target)
+	}
 	return ctx
 }
 

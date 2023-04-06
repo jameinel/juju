@@ -186,9 +186,6 @@ func (st *State) exportImpl(cfg ExportConfig, leaders map[string]string) (descri
 	if err := export.remoteEntities(); err != nil {
 		return nil, errors.Trace(err)
 	}
-	if err := export.firewallRules(); err != nil {
-		return nil, errors.Trace(err)
-	}
 	if err := export.offerConnections(); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -226,6 +223,9 @@ func (st *State) exportImpl(cfg ExportConfig, leaders map[string]string) (descri
 		return nil, errors.Trace(err)
 	}
 	if err := export.secrets(); err != nil {
+		return nil, errors.Trace(err)
+	}
+	if err := export.remoteSecrets(); err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -377,7 +377,7 @@ func (e *exporter) machines() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	openedPorts, err := e.loadOpenedPortRanges()
+	openedPorts, err := e.loadOpenedPortRangesForMachine()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -410,7 +410,7 @@ func (e *exporter) machines() error {
 	return nil
 }
 
-func (e *exporter) loadOpenedPortRanges() (map[string]*machinePortRanges, error) {
+func (e *exporter) loadOpenedPortRangesForMachine() (map[string]*machinePortRanges, error) {
 	mprs, err := getOpenedPortRangesForAllMachines(e.st)
 	if err != nil {
 		return nil, errors.Annotate(err, "opened port ranges")
@@ -423,6 +423,21 @@ func (e *exporter) loadOpenedPortRanges() (map[string]*machinePortRanges, error)
 
 	e.logger.Debugf("found %d openedPorts docs", len(openedPortsByMachine))
 	return openedPortsByMachine, nil
+}
+
+func (e *exporter) loadOpenedPortRangesForApplication() (map[string]*applicationPortRanges, error) {
+	mprs, err := getOpenedApplicationPortRangesForAllApplications(e.st)
+	if err != nil {
+		return nil, errors.Annotate(err, "opened port ranges")
+	}
+
+	openedPortsByApplication := make(map[string]*applicationPortRanges)
+	for _, mpr := range mprs {
+		openedPortsByApplication[mpr.ApplicationName()] = mpr
+	}
+
+	e.logger.Debugf("found %d openedPorts docs", len(openedPortsByApplication))
+	return openedPortsByApplication, nil
 }
 
 func (e *exporter) loadMachineInstanceData() (map[string]instanceData, error) {
@@ -704,6 +719,11 @@ func (e *exporter) applications(leaders map[string]string) error {
 		return errors.Trace(err)
 	}
 
+	openedPorts, err := e.loadOpenedPortRangesForApplication()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	for _, application := range applications {
 		applicationUnits := e.units[application.Name()]
 		resources, err := resourcesSt.ListResources(application.Name())
@@ -721,6 +741,7 @@ func (e *exporter) applications(leaders map[string]string) error {
 			resources:        resources,
 			endpoingBindings: bindings,
 			leader:           leaders[application.Name()],
+			portsData:        openedPorts,
 		}
 
 		if appOfferMap != nil {
@@ -786,6 +807,7 @@ type addApplicationContext struct {
 	payloads         map[string][]payloads.FullPayloadInfo
 	resources        resources.ApplicationResources
 	endpoingBindings map[string]bindingsMap
+	portsData        map[string]*applicationPortRanges
 
 	// CAAS
 	podSpecs        map[string]string
@@ -947,6 +969,10 @@ func (e *exporter) addApplication(ctx addApplicationContext) error {
 		return errors.Trace(err)
 	}
 
+	for _, args := range e.openedPortRangesArgsForApplication(appName, ctx.portsData) {
+		exApplication.AddOpenedPortRange(args)
+	}
+
 	// Set Tools for application - this is only for CAAS models.
 	isSidecar, err := ctx.application.IsSidecar()
 	if err != nil {
@@ -1081,6 +1107,28 @@ func (e *exporter) addApplication(ctx addApplicationContext) error {
 	}
 
 	return nil
+}
+
+func (e *exporter) openedPortRangesArgsForApplication(appName string, portsData map[string]*applicationPortRanges) []description.OpenedPortRangeArgs {
+	if portsData[appName] == nil {
+		return nil
+	}
+
+	var result []description.OpenedPortRangeArgs
+	for unitName, unitPorts := range portsData[appName].ByUnit() {
+		for endpointName, portRanges := range unitPorts.ByEndpoint() {
+			for _, pr := range portRanges {
+				result = append(result, description.OpenedPortRangeArgs{
+					UnitName:     unitName,
+					EndpointName: endpointName,
+					FromPort:     pr.FromPort,
+					ToPort:       pr.ToPort,
+					Protocol:     pr.Protocol,
+				})
+			}
+		}
+	}
+	return result
 }
 
 func (e *exporter) unitWorkloadVersion(unit *Unit) (string, error) {
@@ -1306,42 +1354,6 @@ func (e *exporter) relationUnit(
 	exEndPoint.SetUnitSettings(unitName, settingsDoc.Settings)
 
 	return nil
-}
-
-func (e *exporter) firewallRules() error {
-	e.logger.Debugf("reading firewall rules")
-	migration := &ExportStateMigration{
-		src: e.st,
-		dst: e.model,
-	}
-	migration.Add(func() error {
-		m := migrations.ExportFirewallRules{}
-		return m.Execute(firewallRulesShim{
-			st: migration.src,
-		}, migration.dst)
-	})
-	return migration.Run()
-}
-
-// firewallRulesShim is to handle the fact that go doesn't handle covariance
-// and the tight abstraction around the new migration export work ensures that
-// we handle our dependencies up front.
-type firewallRulesShim struct {
-	st *State
-}
-
-func (s firewallRulesShim) AllFirewallRules() ([]migrations.MigrationFirewallRule, error) {
-	fRs := firewallRulesState{st: s.st}
-	firewallRules, err := fRs.AllRules()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	result := make([]migrations.MigrationFirewallRule, len(firewallRules))
-	for k, v := range firewallRules {
-		result[k] = v
-
-	}
-	return result, nil
 }
 
 func (e *exporter) remoteEntities() error {
@@ -1822,7 +1834,7 @@ func (e *exporter) secrets() error {
 		}
 		access[perm.Subject] = accessArg
 	}
-	allConsumers, err := store.allSecretConsumers()
+	allConsumers, err := store.allLocalSecretConsumers()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -1841,26 +1853,79 @@ func (e *exporter) secrets() error {
 		consumersByID[id] = append(consumersByID[id], consumerArg)
 	}
 
+	allRemoteConsumers, err := store.allSecretRemoteConsumers()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	remoteConsumersByID := make(map[string][]description.SecretRemoteConsumerArgs)
+	for _, info := range allRemoteConsumers {
+		consumer, err := names.ParseTag(info.ConsumerTag)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		id := strings.Split(e.st.localID(info.DocID), "#")[0]
+		remoteConsumerArg := description.SecretRemoteConsumerArgs{
+			Consumer:        consumer,
+			CurrentRevision: info.CurrentRevision,
+		}
+		remoteConsumersByID[id] = append(remoteConsumersByID[id], remoteConsumerArg)
+	}
+
 	for _, md := range allSecrets {
 		owner, err := names.ParseTag(md.OwnerTag)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		arg := description.SecretArgs{
-			ID:             md.URI.ID,
-			Version:        md.Version,
-			Description:    md.Description,
-			Label:          md.Label,
-			RotatePolicy:   md.RotatePolicy.String(),
-			Owner:          owner,
-			Created:        md.CreateTime,
-			Updated:        md.UpdateTime,
-			NextRotateTime: md.NextRotateTime,
-			Revisions:      revisionArgsByID[md.URI.ID],
-			ACL:            accessArgsByID[md.URI.ID],
-			Consumers:      consumersByID[md.URI.ID],
+			ID:              md.URI.ID,
+			Version:         md.Version,
+			Description:     md.Description,
+			Label:           md.Label,
+			RotatePolicy:    md.RotatePolicy.String(),
+			Owner:           owner,
+			Created:         md.CreateTime,
+			Updated:         md.UpdateTime,
+			NextRotateTime:  md.NextRotateTime,
+			Revisions:       revisionArgsByID[md.URI.ID],
+			ACL:             accessArgsByID[md.URI.ID],
+			Consumers:       consumersByID[md.URI.ID],
+			RemoteConsumers: remoteConsumersByID[md.URI.ID],
 		}
 		e.model.AddSecret(arg)
+	}
+	return nil
+}
+
+func (e *exporter) remoteSecrets() error {
+	if e.cfg.SkipSecrets {
+		return nil
+	}
+	store := NewSecrets(e.st)
+
+	allConsumers, err := store.allRemoteSecretConsumers()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	e.logger.Debugf("read %d remote secret consumers", len(allConsumers))
+	for _, info := range allConsumers {
+		consumer, err := names.ParseTag(info.ConsumerTag)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		id := strings.Split(e.st.localID(info.DocID), "#")[0]
+		uri, err := secrets.ParseURI(id)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		arg := description.RemoteSecretArgs{
+			ID:              uri.ID,
+			SourceUUID:      uri.SourceUUID,
+			Consumer:        consumer,
+			Label:           info.Label,
+			CurrentRevision: info.CurrentRevision,
+			LatestRevision:  info.LatestRevision,
+		}
+		e.model.AddRemoteSecret(arg)
 	}
 	return nil
 }
@@ -1929,7 +1994,8 @@ func (e *exporter) readAllMeterStatus() (map[string]*meterStatusDoc, error) {
 	}
 	e.logger.Debugf("found %d meter status docs", len(docs))
 	result := make(map[string]*meterStatusDoc)
-	for _, doc := range docs {
+	for _, v := range docs {
+		doc := v
 		result[e.st.localID(doc.DocID)] = &doc
 	}
 	return result, nil
@@ -1963,7 +2029,8 @@ func (e *exporter) readAllCloudServices() (map[string]*cloudServiceDoc, error) {
 	}
 	e.logger.Debugf("found %d cloud service docs", len(docs))
 	result := make(map[string]*cloudServiceDoc)
-	for _, doc := range docs {
+	for _, v := range docs {
+		doc := v
 		result[e.st.localID(doc.DocID)] = &doc
 	}
 	return result, nil
@@ -1987,7 +2054,8 @@ func (e *exporter) readAllCloudContainers() (map[string]*cloudContainerDoc, erro
 	}
 	e.logger.Debugf("found %d cloud container docs", len(docs))
 	result := make(map[string]*cloudContainerDoc)
-	for _, doc := range docs {
+	for _, v := range docs {
+		doc := v
 		result[e.st.localID(doc.Id)] = &doc
 	}
 	return result, nil
@@ -2318,6 +2386,7 @@ func (e *exporter) constraintsArgs(globalKey string) (description.ConstraintsArg
 		Container:        optionalString("container"),
 		CpuCores:         optionalInt("cpucores"),
 		CpuPower:         optionalInt("cpupower"),
+		ImageID:          optionalString("imageid"),
 		InstanceType:     optionalString("instancetype"),
 		Memory:           optionalInt("mem"),
 		RootDisk:         optionalInt("rootdisk"),

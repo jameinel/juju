@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/juju/collections/set"
 	"github.com/juju/errors"
 	"github.com/juju/loggo"
 	"github.com/juju/names/v4"
@@ -278,14 +279,6 @@ type Config interface {
 	// focal or later.
 	JujuDBSnapChannel() string
 
-	// NonSyncedWritesToRaftLog returns true if an fsync calls should not be
-	// performed after each write to the raft log.
-	NonSyncedWritesToRaftLog() bool
-
-	// BatchRaftFSM returns true if the raft calls should use the batching
-	// FSM.
-	BatchRaftFSM() bool
-
 	// AgentLogfileMaxSizeMB returns the maximum file size in MB of each
 	// agent/controller log file.
 	AgentLogfileMaxSizeMB() int
@@ -340,14 +333,6 @@ type configSetterOnly interface {
 
 	// SetLoggingConfig sets the logging config value for the agent.
 	SetLoggingConfig(string)
-
-	// SetNonSyncedWritesToRaftLog selects whether fsync calls are performed
-	// after each write to the raft log.
-	SetNonSyncedWritesToRaftLog(bool)
-
-	// SetBatchRaftFSM select whether raft should use the batching for writing
-	// to the FSM.
-	SetBatchRaftFSM(bool)
 }
 
 // LogFileName returns the filename for the Agent's log file.
@@ -404,49 +389,45 @@ func (d *apiDetails) clone() *apiDetails {
 }
 
 type configInternal struct {
-	configFilePath           string
-	paths                    Paths
-	tag                      names.Tag
-	nonce                    string
-	controller               names.ControllerTag
-	model                    names.ModelTag
-	jobs                     []model.MachineJob
-	upgradedToVersion        version.Number
-	caCert                   string
-	apiDetails               *apiDetails
-	statePassword            string
-	oldPassword              string
-	servingInfo              *controller.StateServingInfo
-	loggingConfig            string
-	values                   map[string]string
-	mongoMemoryProfile       string
-	jujuDBSnapChannel        string
-	nonSyncedWritesToRaftLog bool
-	batchRaftFSM             bool
-	agentLogfileMaxSizeMB    int
-	agentLogfileMaxBackups   int
+	configFilePath         string
+	paths                  Paths
+	tag                    names.Tag
+	nonce                  string
+	controller             names.ControllerTag
+	model                  names.ModelTag
+	jobs                   []model.MachineJob
+	upgradedToVersion      version.Number
+	caCert                 string
+	apiDetails             *apiDetails
+	statePassword          string
+	oldPassword            string
+	servingInfo            *controller.StateServingInfo
+	loggingConfig          string
+	values                 map[string]string
+	mongoMemoryProfile     string
+	jujuDBSnapChannel      string
+	agentLogfileMaxSizeMB  int
+	agentLogfileMaxBackups int
 }
 
 // AgentConfigParams holds the parameters required to create
 // a new AgentConfig.
 type AgentConfigParams struct {
-	Paths                    Paths
-	Jobs                     []model.MachineJob
-	UpgradedToVersion        version.Number
-	Tag                      names.Tag
-	Password                 string
-	Nonce                    string
-	Controller               names.ControllerTag
-	Model                    names.ModelTag
-	APIAddresses             []string
-	CACert                   string
-	Values                   map[string]string
-	MongoMemoryProfile       mongo.MemoryProfile
-	JujuDBSnapChannel        string
-	NonSyncedWritesToRaftLog bool
-	BatchRaftFSM             bool
-	AgentLogfileMaxSizeMB    int
-	AgentLogfileMaxBackups   int
+	Paths                  Paths
+	Jobs                   []model.MachineJob
+	UpgradedToVersion      version.Number
+	Tag                    names.Tag
+	Password               string
+	Nonce                  string
+	Controller             names.ControllerTag
+	Model                  names.ModelTag
+	APIAddresses           []string
+	CACert                 string
+	Values                 map[string]string
+	MongoMemoryProfile     mongo.MemoryProfile
+	JujuDBSnapChannel      string
+	AgentLogfileMaxSizeMB  int
+	AgentLogfileMaxBackups int
 }
 
 // NewAgentConfig returns a new config object suitable for use for a
@@ -496,22 +477,20 @@ func NewAgentConfig(configParams AgentConfigParams) (ConfigSetterWriter, error) 
 	// When/if this connection is successful, apicaller worker will generate
 	// a new secure password and update this agent's config.
 	config := &configInternal{
-		paths:                    NewPathsWithDefaults(configParams.Paths),
-		jobs:                     configParams.Jobs,
-		upgradedToVersion:        configParams.UpgradedToVersion,
-		tag:                      configParams.Tag,
-		nonce:                    configParams.Nonce,
-		controller:               configParams.Controller,
-		model:                    configParams.Model,
-		caCert:                   configParams.CACert,
-		oldPassword:              configParams.Password,
-		values:                   configParams.Values,
-		mongoMemoryProfile:       configParams.MongoMemoryProfile.String(),
-		jujuDBSnapChannel:        configParams.JujuDBSnapChannel,
-		nonSyncedWritesToRaftLog: configParams.NonSyncedWritesToRaftLog,
-		batchRaftFSM:             configParams.BatchRaftFSM,
-		agentLogfileMaxSizeMB:    configParams.AgentLogfileMaxSizeMB,
-		agentLogfileMaxBackups:   configParams.AgentLogfileMaxBackups,
+		paths:                  NewPathsWithDefaults(configParams.Paths),
+		jobs:                   configParams.Jobs,
+		upgradedToVersion:      configParams.UpgradedToVersion,
+		tag:                    configParams.Tag,
+		nonce:                  configParams.Nonce,
+		controller:             configParams.Controller,
+		model:                  configParams.Model,
+		caCert:                 configParams.CACert,
+		oldPassword:            configParams.Password,
+		values:                 configParams.Values,
+		mongoMemoryProfile:     configParams.MongoMemoryProfile.String(),
+		jujuDBSnapChannel:      configParams.JujuDBSnapChannel,
+		agentLogfileMaxSizeMB:  configParams.AgentLogfileMaxSizeMB,
+		agentLogfileMaxBackups: configParams.AgentLogfileMaxBackups,
 	}
 	if len(configParams.APIAddresses) > 0 {
 		config.apiDetails = &apiDetails{
@@ -824,26 +803,6 @@ func (c *configInternal) SetJujuDBSnapChannel(snapChannel string) {
 	c.jujuDBSnapChannel = snapChannel
 }
 
-// NonSyncedWritesToRaftLog implements Config.
-func (c *configInternal) NonSyncedWritesToRaftLog() bool {
-	return c.nonSyncedWritesToRaftLog
-}
-
-// SetNonSyncedWritesToRaftLog implements configSetterOnly.
-func (c *configInternal) SetNonSyncedWritesToRaftLog(nonSyncedWrites bool) {
-	c.nonSyncedWritesToRaftLog = nonSyncedWrites
-}
-
-// BatchRaftFSM implements Config.
-func (c *configInternal) BatchRaftFSM() bool {
-	return c.batchRaftFSM
-}
-
-// SetBatchRaftFSM implements configSetterOnly.
-func (c *configInternal) SetBatchRaftFSM(batchRaftFSM bool) {
-	c.batchRaftFSM = batchRaftFSM
-}
-
 // AgentLogfileMaxSizeMB implements Config.
 func (c *configInternal) AgentLogfileMaxSizeMB() int {
 	return c.agentLogfileMaxSizeMB
@@ -899,7 +858,7 @@ func (c *configInternal) APIInfo() (*api.Info, bool) {
 	}
 	servingInfo, isController := c.StateServingInfo()
 	addrs := c.apiDetails.addresses
-	// For controller we return only localhost - we should not connect
+	// For controllers, we return only localhost - we should not connect
 	// to other controllers if we can talk locally.
 	if isController {
 		port := servingInfo.APIPort
@@ -912,7 +871,17 @@ func (c *configInternal) APIInfo() (*api.Info, bool) {
 		// loopback, and when/if this changes localhost should resolve
 		// to IPv6 loopback in any case (lp:1644009). Review.
 		localAPIAddr := net.JoinHostPort("localhost", strconv.Itoa(port))
-		addrs = []string{localAPIAddr}
+
+		// TODO (manadart 2023-03-27): This is a temporary change from using
+		// *only* the localhost address, to fix an issue where we can get the
+		// configuration change that tells a new machine that it is a
+		// controller *before* the machine agent has completed its first run
+		// set its status to "running". When this happens we deadlock, because
+		// the peergrouper has not joined the machine to replica-set, so there
+		// will never be a working API available at localhost.
+		if !set.NewStrings(addrs...).Contains(localAPIAddr) {
+			addrs = append([]string{localAPIAddr}, addrs...)
+		}
 	}
 	return &api.Info{
 		Addrs:    addrs,

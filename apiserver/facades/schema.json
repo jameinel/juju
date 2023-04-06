@@ -860,6 +860,9 @@
                         "nonce": {
                             "type": "string"
                         },
+                        "token": {
+                            "type": "string"
+                        },
                         "user-data": {
                             "type": "string"
                         }
@@ -1833,8 +1836,8 @@
     },
     {
         "Name": "Application",
-        "Description": "APIv17 provides the Application API facade for version 17.",
-        "Version": 17,
+        "Description": "APIv18 provides the Application API facade for version 18.",
+        "Version": 18,
         "AvailableTo": [
             "controller-machine-agent",
             "machine-agent",
@@ -1927,6 +1930,18 @@
                         }
                     },
                     "description": "Deploy fetches the charms from the charm store and deploys them\nusing the specified placement directives."
+                },
+                "DeployFromRepository": {
+                    "type": "object",
+                    "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/DeployFromRepositoryArgs"
+                        },
+                        "Result": {
+                            "$ref": "#/definitions/DeployFromRepositoryResults"
+                        }
+                    },
+                    "description": "DeployFromRepository is a one-stop deployment method for repository\ncharms. Only a charm name is required to deploy. If argument validation\nfails, a list of all errors found in validation will be returned. If a\nlocal resource is provided, details required for uploading the validated\nresource will be returned."
                 },
                 "DestroyApplication": {
                     "type": "object",
@@ -3101,6 +3116,9 @@
                         "application-description": {
                             "type": "string"
                         },
+                        "auth-token": {
+                            "type": "string"
+                        },
                         "bindings": {
                             "type": "object",
                             "patternProperties": {
@@ -3167,6 +3185,187 @@
                         }
                     },
                     "additionalProperties": false
+                },
+                "DeployFromRepositoryArg": {
+                    "type": "object",
+                    "properties": {
+                        "ApplicationName": {
+                            "type": "string"
+                        },
+                        "AttachStorage": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "CharmName": {
+                            "type": "string"
+                        },
+                        "ConfigYAML": {
+                            "type": "string"
+                        },
+                        "Cons": {
+                            "$ref": "#/definitions/Value"
+                        },
+                        "Devices": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {
+                                    "$ref": "#/definitions/Constraints"
+                                }
+                            }
+                        },
+                        "DryRun": {
+                            "type": "boolean"
+                        },
+                        "Placement": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/Placement"
+                            }
+                        },
+                        "Storage": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {
+                                    "$ref": "#/definitions/Constraints"
+                                }
+                            }
+                        },
+                        "Trust": {
+                            "type": "boolean"
+                        },
+                        "base": {
+                            "$ref": "#/definitions/Base"
+                        },
+                        "channel": {
+                            "type": "string"
+                        },
+                        "endpoint-bindings": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "force": {
+                            "type": "boolean"
+                        },
+                        "num-units": {
+                            "type": "integer"
+                        },
+                        "resources": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "revision": {
+                            "type": "integer"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "CharmName",
+                        "ApplicationName",
+                        "AttachStorage",
+                        "ConfigYAML",
+                        "Cons",
+                        "Devices",
+                        "DryRun",
+                        "Placement",
+                        "Storage",
+                        "Trust"
+                    ]
+                },
+                "DeployFromRepositoryArgs": {
+                    "type": "object",
+                    "properties": {
+                        "Args": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/DeployFromRepositoryArg"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "Args"
+                    ]
+                },
+                "DeployFromRepositoryInfo": {
+                    "type": "object",
+                    "properties": {
+                        "architecture": {
+                            "type": "string"
+                        },
+                        "base": {
+                            "$ref": "#/definitions/Base"
+                        },
+                        "channel": {
+                            "type": "string"
+                        },
+                        "effective-channel": {
+                            "type": "string"
+                        },
+                        "name": {
+                            "type": "string"
+                        },
+                        "revision": {
+                            "type": "integer"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "architecture",
+                        "channel",
+                        "name",
+                        "revision"
+                    ]
+                },
+                "DeployFromRepositoryResult": {
+                    "type": "object",
+                    "properties": {
+                        "Errors": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/Error"
+                            }
+                        },
+                        "Info": {
+                            "$ref": "#/definitions/DeployFromRepositoryInfo"
+                        },
+                        "PendingResourceUploads": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/PendingResourceUpload"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "Errors",
+                        "Info",
+                        "PendingResourceUploads"
+                    ]
+                },
+                "DeployFromRepositoryResults": {
+                    "type": "object",
+                    "properties": {
+                        "Results": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/DeployFromRepositoryResult"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "Results"
+                    ]
                 },
                 "DestroyApplicationInfo": {
                     "type": "object",
@@ -3580,6 +3779,26 @@
                         "user",
                         "display-name",
                         "access"
+                    ]
+                },
+                "PendingResourceUpload": {
+                    "type": "object",
+                    "properties": {
+                        "Filename": {
+                            "type": "string"
+                        },
+                        "Name": {
+                            "type": "string"
+                        },
+                        "Type": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "Name",
+                        "Filename",
+                        "Type"
                     ]
                 },
                 "Placement": {
@@ -4025,6 +4244,9 @@
                         "cpu-power": {
                             "type": "integer"
                         },
+                        "image-id": {
+                            "type": "string"
+                        },
                         "instance-role": {
                             "type": "string"
                         },
@@ -4382,6 +4604,9 @@
                 "ConsumeOfferDetails": {
                     "type": "object",
                     "properties": {
+                        "auth-token": {
+                            "type": "string"
+                        },
                         "external-controller": {
                             "$ref": "#/definitions/ExternalControllerInfo"
                         },
@@ -4414,6 +4639,9 @@
                     "properties": {
                         "ConsumeOfferDetails": {
                             "$ref": "#/definitions/ConsumeOfferDetails"
+                        },
+                        "auth-token": {
+                            "type": "string"
                         },
                         "error": {
                             "$ref": "#/definitions/Error"
@@ -8099,6 +8327,9 @@
                         "cpu-power": {
                             "type": "integer"
                         },
+                        "image-id": {
+                            "type": "string"
+                        },
                         "instance-role": {
                             "type": "string"
                         },
@@ -9045,7 +9276,7 @@
                     },
                     "description": "CharmInfo returns information about the requested charm."
                 },
-                "GetApplicationOpenedPorts": {
+                "GetOpenedPorts": {
                     "type": "object",
                     "properties": {
                         "Params": {
@@ -9055,7 +9286,7 @@
                             "$ref": "#/definitions/ApplicationOpenedPortsResults"
                         }
                     },
-                    "description": "GetApplicationOpenedPorts returns all the opened ports for each given application tag."
+                    "description": "GetOpenedPorts returns all the opened ports for each given application tag."
                 },
                 "IsExposed": {
                     "type": "object",
@@ -14243,6 +14474,9 @@
                         "cpu-power": {
                             "type": "integer"
                         },
+                        "image-id": {
+                            "type": "string"
+                        },
                         "instance-role": {
                             "type": "string"
                         },
@@ -17934,6 +18168,9 @@
                         "cpu-power": {
                             "type": "integer"
                         },
+                        "image-id": {
+                            "type": "string"
+                        },
                         "instance-role": {
                             "type": "string"
                         },
@@ -19612,6 +19849,18 @@
                     },
                     "description": "RegisterRemoteRelations sets up the model to participate\nin the specified relations. This operation is idempotent."
                 },
+                "WatchConsumedSecretsChanges": {
+                    "type": "object",
+                    "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/WatchRemoteSecretChangesArgs"
+                        },
+                        "Result": {
+                            "$ref": "#/definitions/SecretRevisionWatchResults"
+                        }
+                    },
+                    "description": "WatchConsumedSecretsChanges returns a watcher which notifies of changes to any secrets\nfor the specified remote consumers."
+                },
                 "WatchEgressAddressesForRelations": {
                     "type": "object",
                     "properties": {
@@ -19885,6 +20134,9 @@
                     "type": "object",
                     "properties": {
                         "application-token": {
+                            "type": "string"
+                        },
+                        "auth-token": {
                             "type": "string"
                         },
                         "bakery-version": {
@@ -20274,6 +20526,59 @@
                         "subnets"
                     ]
                 },
+                "SecretRevisionChange": {
+                    "type": "object",
+                    "properties": {
+                        "revision": {
+                            "type": "integer"
+                        },
+                        "uri": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "uri",
+                        "revision"
+                    ]
+                },
+                "SecretRevisionWatchResult": {
+                    "type": "object",
+                    "properties": {
+                        "changes": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/SecretRevisionChange"
+                            }
+                        },
+                        "error": {
+                            "$ref": "#/definitions/Error"
+                        },
+                        "watcher-id": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "watcher-id",
+                        "changes"
+                    ]
+                },
+                "SecretRevisionWatchResults": {
+                    "type": "object",
+                    "properties": {
+                        "results": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/SecretRevisionWatchResult"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "results"
+                    ]
+                },
                 "StringsWatchResult": {
                     "type": "object",
                     "properties": {
@@ -20351,6 +20656,348 @@
                         "life",
                         "space-tag",
                         "zones"
+                    ]
+                },
+                "WatchRemoteSecretChangesArg": {
+                    "type": "object",
+                    "properties": {
+                        "application-token": {
+                            "type": "string"
+                        },
+                        "bakery-version": {
+                            "type": "integer"
+                        },
+                        "macaroons": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/Macaroon"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "application-token"
+                    ]
+                },
+                "WatchRemoteSecretChangesArgs": {
+                    "type": "object",
+                    "properties": {
+                        "relations": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/WatchRemoteSecretChangesArg"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "relations"
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "Name": "CrossModelSecrets",
+        "Description": "CrossModelSecretsAPI provides access to the CrossModelSecrets API facade.",
+        "Version": 1,
+        "AvailableTo": [
+            "controller-machine-agent",
+            "machine-agent",
+            "unit-agent",
+            "model-user"
+        ],
+        "Schema": {
+            "type": "object",
+            "properties": {
+                "GetSecretAccessScope": {
+                    "type": "object",
+                    "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/GetRemoteSecretAccessArgs"
+                        },
+                        "Result": {
+                            "$ref": "#/definitions/StringResults"
+                        }
+                    },
+                    "description": "GetSecretAccessScope returns the tokens for the access scope of the specified secrets and consumers."
+                },
+                "GetSecretContentInfo": {
+                    "type": "object",
+                    "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/GetRemoteSecretContentArgs"
+                        },
+                        "Result": {
+                            "$ref": "#/definitions/SecretContentResults"
+                        }
+                    },
+                    "description": "GetSecretContentInfo returns the secret values for the specified secrets."
+                }
+            },
+            "definitions": {
+                "Error": {
+                    "type": "object",
+                    "properties": {
+                        "code": {
+                            "type": "string"
+                        },
+                        "info": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {
+                                    "type": "object",
+                                    "additionalProperties": true
+                                }
+                            }
+                        },
+                        "message": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "message",
+                        "code"
+                    ]
+                },
+                "GetRemoteSecretAccessArg": {
+                    "type": "object",
+                    "properties": {
+                        "application-token": {
+                            "type": "string"
+                        },
+                        "unit-id": {
+                            "type": "integer"
+                        },
+                        "uri": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "application-token",
+                        "unit-id",
+                        "uri"
+                    ]
+                },
+                "GetRemoteSecretAccessArgs": {
+                    "type": "object",
+                    "properties": {
+                        "relations": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/GetRemoteSecretAccessArg"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "relations"
+                    ]
+                },
+                "GetRemoteSecretContentArg": {
+                    "type": "object",
+                    "properties": {
+                        "application-token": {
+                            "type": "string"
+                        },
+                        "bakery-version": {
+                            "type": "integer"
+                        },
+                        "macaroons": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/Macaroon"
+                            }
+                        },
+                        "peek": {
+                            "type": "boolean"
+                        },
+                        "refresh": {
+                            "type": "boolean"
+                        },
+                        "revision": {
+                            "type": "integer"
+                        },
+                        "unit-id": {
+                            "type": "integer"
+                        },
+                        "uri": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "application-token",
+                        "unit-id",
+                        "uri"
+                    ]
+                },
+                "GetRemoteSecretContentArgs": {
+                    "type": "object",
+                    "properties": {
+                        "relations": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/GetRemoteSecretContentArg"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "relations"
+                    ]
+                },
+                "Macaroon": {
+                    "type": "object",
+                    "additionalProperties": false
+                },
+                "SecretBackendConfig": {
+                    "type": "object",
+                    "properties": {
+                        "params": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {
+                                    "type": "object",
+                                    "additionalProperties": true
+                                }
+                            }
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "type"
+                    ]
+                },
+                "SecretBackendConfigResult": {
+                    "type": "object",
+                    "properties": {
+                        "config": {
+                            "$ref": "#/definitions/SecretBackendConfig"
+                        },
+                        "draining": {
+                            "type": "boolean"
+                        },
+                        "model-controller": {
+                            "type": "string"
+                        },
+                        "model-name": {
+                            "type": "string"
+                        },
+                        "model-uuid": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "model-controller",
+                        "model-uuid",
+                        "model-name",
+                        "draining"
+                    ]
+                },
+                "SecretContentParams": {
+                    "type": "object",
+                    "properties": {
+                        "data": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "value-ref": {
+                            "$ref": "#/definitions/SecretValueRef"
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "SecretContentResult": {
+                    "type": "object",
+                    "properties": {
+                        "backend-config": {
+                            "$ref": "#/definitions/SecretBackendConfigResult"
+                        },
+                        "content": {
+                            "$ref": "#/definitions/SecretContentParams"
+                        },
+                        "error": {
+                            "$ref": "#/definitions/Error"
+                        },
+                        "latest-revision": {
+                            "type": "integer"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "content"
+                    ]
+                },
+                "SecretContentResults": {
+                    "type": "object",
+                    "properties": {
+                        "results": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/SecretContentResult"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "results"
+                    ]
+                },
+                "SecretValueRef": {
+                    "type": "object",
+                    "properties": {
+                        "backend-id": {
+                            "type": "string"
+                        },
+                        "revision-id": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "backend-id",
+                        "revision-id"
+                    ]
+                },
+                "StringResult": {
+                    "type": "object",
+                    "properties": {
+                        "error": {
+                            "$ref": "#/definitions/Error"
+                        },
+                        "result": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "result"
+                    ]
+                },
+                "StringResults": {
+                    "type": "object",
+                    "properties": {
+                        "results": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/StringResult"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "results"
                     ]
                 }
             }
@@ -21827,142 +22474,6 @@
         }
     },
     {
-        "Name": "FirewallRules",
-        "Description": "API provides the firewallrules facade APIs for v1.",
-        "Version": 1,
-        "AvailableTo": [
-            "controller-machine-agent",
-            "machine-agent",
-            "unit-agent",
-            "model-user"
-        ],
-        "Schema": {
-            "type": "object",
-            "properties": {
-                "ListFirewallRules": {
-                    "type": "object",
-                    "properties": {
-                        "Result": {
-                            "$ref": "#/definitions/ListFirewallRulesResults"
-                        }
-                    },
-                    "description": "ListFirewallRules returns all the firewall rules."
-                },
-                "SetFirewallRules": {
-                    "type": "object",
-                    "properties": {
-                        "Params": {
-                            "$ref": "#/definitions/FirewallRuleArgs"
-                        },
-                        "Result": {
-                            "$ref": "#/definitions/ErrorResults"
-                        }
-                    },
-                    "description": "SetFirewallRules creates or updates the specified firewall rules."
-                }
-            },
-            "definitions": {
-                "Error": {
-                    "type": "object",
-                    "properties": {
-                        "code": {
-                            "type": "string"
-                        },
-                        "info": {
-                            "type": "object",
-                            "patternProperties": {
-                                ".*": {
-                                    "type": "object",
-                                    "additionalProperties": true
-                                }
-                            }
-                        },
-                        "message": {
-                            "type": "string"
-                        }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                        "message",
-                        "code"
-                    ]
-                },
-                "ErrorResult": {
-                    "type": "object",
-                    "properties": {
-                        "error": {
-                            "$ref": "#/definitions/Error"
-                        }
-                    },
-                    "additionalProperties": false
-                },
-                "ErrorResults": {
-                    "type": "object",
-                    "properties": {
-                        "results": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/ErrorResult"
-                            }
-                        }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                        "results"
-                    ]
-                },
-                "FirewallRule": {
-                    "type": "object",
-                    "properties": {
-                        "known-service": {
-                            "type": "string"
-                        },
-                        "whitelist-cidrs": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                        "known-service"
-                    ]
-                },
-                "FirewallRuleArgs": {
-                    "type": "object",
-                    "properties": {
-                        "args": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/FirewallRule"
-                            }
-                        }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                        "args"
-                    ]
-                },
-                "ListFirewallRulesResults": {
-                    "type": "object",
-                    "properties": {
-                        "Rules": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/FirewallRule"
-                            }
-                        }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                        "Rules"
-                    ]
-                }
-            }
-        }
-    },
-    {
         "Name": "Firewaller",
         "Description": "FirewallerAPI provides access to the Firewaller API facade.",
         "Version": 7,
@@ -22019,18 +22530,6 @@
                         }
                     },
                     "description": "ControllerConfig returns the controller's configuration."
-                },
-                "FirewallRules": {
-                    "type": "object",
-                    "properties": {
-                        "Params": {
-                            "$ref": "#/definitions/KnownServiceArgs"
-                        },
-                        "Result": {
-                            "$ref": "#/definitions/ListFirewallRulesResults"
-                        }
-                    },
-                    "description": "FirewallRules returns the firewall rules for the specified well known service types."
                 },
                 "GetAssignedMachine": {
                     "type": "object",
@@ -22112,6 +22611,15 @@
                         }
                     },
                     "description": "ModelConfig returns the current model's configuration."
+                },
+                "ModelFirewallRules": {
+                    "type": "object",
+                    "properties": {
+                        "Result": {
+                            "$ref": "#/definitions/IngressRulesResult"
+                        }
+                    },
+                    "description": "ModelFirewallRules returns the firewall rules that this model is\nconfigured to open"
                 },
                 "OpenedMachinePortRanges": {
                     "type": "object",
@@ -22205,6 +22713,15 @@
                         }
                     },
                     "description": "WatchIngressAddressesForRelations creates a watcher that returns the ingress networks\nthat have been recorded against the specified relations."
+                },
+                "WatchModelFirewallRules": {
+                    "type": "object",
+                    "properties": {
+                        "Result": {
+                            "$ref": "#/definitions/NotifyWatchResult"
+                        }
+                    },
+                    "description": "WatchModelFirewallRules returns a NotifyWatcher that notifies of\npotential changes to a model's configured firewall rules"
                 },
                 "WatchModelMachineStartTimes": {
                     "type": "object",
@@ -22615,13 +23132,13 @@
                         "overlay"
                     ]
                 },
-                "FirewallRule": {
+                "IngressRule": {
                     "type": "object",
                     "properties": {
-                        "known-service": {
-                            "type": "string"
+                        "port-range": {
+                            "$ref": "#/definitions/PortRange"
                         },
-                        "whitelist-cidrs": {
+                        "source-cidrs": {
                             "type": "array",
                             "items": {
                                 "type": "string"
@@ -22630,22 +23147,26 @@
                     },
                     "additionalProperties": false,
                     "required": [
-                        "known-service"
+                        "port-range",
+                        "source-cidrs"
                     ]
                 },
-                "KnownServiceArgs": {
+                "IngressRulesResult": {
                     "type": "object",
                     "properties": {
-                        "known-services": {
+                        "error": {
+                            "$ref": "#/definitions/Error"
+                        },
+                        "rules": {
                             "type": "array",
                             "items": {
-                                "type": "string"
+                                "$ref": "#/definitions/IngressRule"
                             }
                         }
                     },
                     "additionalProperties": false,
                     "required": [
-                        "known-services"
+                        "rules"
                     ]
                 },
                 "LifeResult": {
@@ -22676,21 +23197,6 @@
                     "additionalProperties": false,
                     "required": [
                         "results"
-                    ]
-                },
-                "ListFirewallRulesResults": {
-                    "type": "object",
-                    "properties": {
-                        "Rules": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/FirewallRule"
-                            }
-                        }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                        "Rules"
                     ]
                 },
                 "Macaroon": {
@@ -23313,6 +23819,9 @@
                         },
                         "cpu-power": {
                             "type": "integer"
+                        },
+                        "image-id": {
+                            "type": "string"
                         },
                         "instance-role": {
                             "type": "string"
@@ -27189,6 +27698,9 @@
                         "cpu-power": {
                             "type": "integer"
                         },
+                        "image-id": {
+                            "type": "string"
+                        },
                         "instance-role": {
                             "type": "string"
                         },
@@ -29219,6 +29731,15 @@
                     },
                     "description": "SetStatusMessage sets a human readable status message containing\ninformation about the migration's progress. This will be shown in\nstatus output shown to the end user."
                 },
+                "SourceControllerInfo": {
+                    "type": "object",
+                    "properties": {
+                        "Result": {
+                            "$ref": "#/definitions/MigrationSourceInfo"
+                        }
+                    },
+                    "description": "SourceControllerInfo returns the details required to connect to\nthe source controller for model migration."
+                },
                 "Watch": {
                     "type": "object",
                     "properties": {
@@ -29315,6 +29836,39 @@
                         "owner-tag",
                         "agent-version",
                         "controller-agent-version"
+                    ]
+                },
+                "MigrationSourceInfo": {
+                    "type": "object",
+                    "properties": {
+                        "addrs": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "ca-cert": {
+                            "type": "string"
+                        },
+                        "controller-alias": {
+                            "type": "string"
+                        },
+                        "controller-tag": {
+                            "type": "string"
+                        },
+                        "local-related-models": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "local-related-models",
+                        "controller-tag",
+                        "addrs",
+                        "ca-cert"
                     ]
                 },
                 "MigrationSpec": {
@@ -29817,7 +30371,7 @@
     {
         "Name": "MigrationTarget",
         "Description": "API implements the API required for the model migration\nmaster worker when communicating with the target controller.",
-        "Version": 1,
+        "Version": 2,
         "AvailableTo": [
             "controller-user"
         ],
@@ -29837,10 +30391,10 @@
                     "type": "object",
                     "properties": {
                         "Params": {
-                            "$ref": "#/definitions/ModelArgs"
+                            "$ref": "#/definitions/ActivateModelArgs"
                         }
                     },
-                    "description": "Activate sets the migration mode of the model to \"none\", meaning it\nis ready for use. It is an error to attempt to Abort a model that\nhas a migration mode other than importing."
+                    "description": "Activate sets the migration mode of the model to \"none\", meaning it\nis ready for use. It is an error to attempt to Abort a model that\nhas a migration mode other than importing. It also adds any required\nexternal controller records for those controllers hosting offers used\nby the model."
                 },
                 "AdoptResources": {
                     "type": "object",
@@ -29905,6 +30459,43 @@
                 }
             },
             "definitions": {
+                "ActivateModelArgs": {
+                    "type": "object",
+                    "properties": {
+                        "controller-alias": {
+                            "type": "string"
+                        },
+                        "controller-tag": {
+                            "type": "string"
+                        },
+                        "cross-model-uuids": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "model-tag": {
+                            "type": "string"
+                        },
+                        "source-api-addrs": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "source-ca-cert": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "model-tag",
+                        "controller-tag",
+                        "source-api-addrs",
+                        "source-ca-cert",
+                        "cross-model-uuids"
+                    ]
+                },
                 "AdoptResourcesArgs": {
                     "type": "object",
                     "properties": {
@@ -30485,6 +31076,9 @@
                         },
                         "cpu-power": {
                             "type": "integer"
+                        },
+                        "image-id": {
+                            "type": "string"
                         },
                         "instance-role": {
                             "type": "string"
@@ -35365,6 +35959,9 @@
                         "cpu-power": {
                             "type": "integer"
                         },
+                        "image-id": {
+                            "type": "string"
+                        },
                         "instance-role": {
                             "type": "string"
                         },
@@ -35785,141 +36382,6 @@
                     "additionalProperties": false,
                     "required": [
                         "results"
-                    ]
-                }
-            }
-        }
-    },
-    {
-        "Name": "RaftLease",
-        "Description": "",
-        "Version": 2,
-        "AvailableTo": [
-            "controller-machine-agent",
-            "machine-agent",
-            "unit-agent",
-            "model-user"
-        ],
-        "Schema": {
-            "type": "object",
-            "properties": {
-                "ApplyLease": {
-                    "type": "object",
-                    "properties": {
-                        "Params": {
-                            "$ref": "#/definitions/LeaseOperationsV2"
-                        },
-                        "Result": {
-                            "$ref": "#/definitions/ErrorResults"
-                        }
-                    }
-                }
-            },
-            "definitions": {
-                "Error": {
-                    "type": "object",
-                    "properties": {
-                        "code": {
-                            "type": "string"
-                        },
-                        "info": {
-                            "type": "object",
-                            "patternProperties": {
-                                ".*": {
-                                    "type": "object",
-                                    "additionalProperties": true
-                                }
-                            }
-                        },
-                        "message": {
-                            "type": "string"
-                        }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                        "message",
-                        "code"
-                    ]
-                },
-                "ErrorResult": {
-                    "type": "object",
-                    "properties": {
-                        "error": {
-                            "$ref": "#/definitions/Error"
-                        }
-                    },
-                    "additionalProperties": false
-                },
-                "ErrorResults": {
-                    "type": "object",
-                    "properties": {
-                        "results": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/ErrorResult"
-                            }
-                        }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                        "results"
-                    ]
-                },
-                "LeaseOperationCommand": {
-                    "type": "object",
-                    "properties": {
-                        "duration": {
-                            "type": "integer"
-                        },
-                        "holder": {
-                            "type": "string"
-                        },
-                        "lease": {
-                            "type": "string"
-                        },
-                        "model-uuid": {
-                            "type": "string"
-                        },
-                        "namespace": {
-                            "type": "string"
-                        },
-                        "new-time": {
-                            "type": "string",
-                            "format": "date-time"
-                        },
-                        "old-time": {
-                            "type": "string",
-                            "format": "date-time"
-                        },
-                        "operation": {
-                            "type": "string"
-                        },
-                        "pin-entity": {
-                            "type": "string"
-                        },
-                        "version": {
-                            "type": "integer"
-                        }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                        "version",
-                        "operation"
-                    ]
-                },
-                "LeaseOperationsV2": {
-                    "type": "object",
-                    "properties": {
-                        "commands": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/LeaseOperationCommand"
-                            }
-                        }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                        "commands"
                     ]
                 }
             }
@@ -36508,6 +36970,18 @@
                     },
                     "description": "ConsumeRemoteRelationChanges consumes changes to settings originating\nfrom the remote/offering side of relations."
                 },
+                "ConsumeRemoteSecretChanges": {
+                    "type": "object",
+                    "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/LatestSecretRevisionChanges"
+                        },
+                        "Result": {
+                            "$ref": "#/definitions/ErrorResults"
+                        }
+                    },
+                    "description": "ConsumeRemoteSecretChanges updates the local model with secret revision changes\noriginating from the remote/offering model."
+                },
                 "ControllerAPIInfoForModels": {
                     "type": "object",
                     "properties": {
@@ -36915,6 +37389,21 @@
                         "Args"
                     ]
                 },
+                "LatestSecretRevisionChanges": {
+                    "type": "object",
+                    "properties": {
+                        "changes": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/SecretRevisionChange"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "changes"
+                    ]
+                },
                 "Macaroon": {
                     "type": "object",
                     "additionalProperties": false
@@ -37237,6 +37726,22 @@
                         }
                     },
                     "additionalProperties": false
+                },
+                "SecretRevisionChange": {
+                    "type": "object",
+                    "properties": {
+                        "revision": {
+                            "type": "integer"
+                        },
+                        "uri": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "uri",
+                        "revision"
+                    ]
                 },
                 "SetStatus": {
                     "type": "object",
@@ -39324,7 +39829,7 @@
     {
         "Name": "SecretsManager",
         "Description": "SecretsManagerAPI is the implementation for the SecretsManager facade.",
-        "Version": 1,
+        "Version": 2,
         "AvailableTo": [
             "controller-machine-agent",
             "machine-agent",
@@ -39368,16 +39873,19 @@
                             "$ref": "#/definitions/SecretConsumerInfoResults"
                         }
                     },
-                    "description": "GetConsumerSecretsRevisionInfo returns the latest secret revisions for the specified secrets."
+                    "description": "GetConsumerSecretsRevisionInfo returns the latest secret revisions for the specified secrets.\nThis facade method is used for remote watcher to get the latest secret revisions and labels for a secret changed hook."
                 },
-                "GetSecretBackendConfig": {
+                "GetSecretBackendConfigs": {
                     "type": "object",
                     "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/SecretBackendArgs"
+                        },
                         "Result": {
                             "$ref": "#/definitions/SecretBackendConfigResults"
                         }
                     },
-                    "description": "GetSecretBackendConfig gets the config needed to create a client to secret backends."
+                    "description": "GetSecretBackendConfigs gets the config needed to create a client to secret backends."
                 },
                 "GetSecretContentInfo": {
                     "type": "object",
@@ -39410,16 +39918,7 @@
                             "$ref": "#/definitions/SecretContentResults"
                         }
                     },
-                    "description": "GetSecretRevisionContentInfo returns the secret values for the specified secret revisions."
-                },
-                "GetSecretStoreConfig": {
-                    "type": "object",
-                    "properties": {
-                        "Result": {
-                            "$ref": "#/definitions/SecretBackendConfig"
-                        }
-                    },
-                    "description": "GetSecretStoreConfig is for 3.0.x agents.\nTODO(wallyworld) - remove when we auto upgrade migrated models."
+                    "description": "GetSecretRevisionContentInfo returns the secret values for the specified secret revisions.\nUsed when deleting a secret; only returns external revision info."
                 },
                 "RemoveSecrets": {
                     "type": "object",
@@ -39884,6 +40383,21 @@
                         "results"
                     ]
                 },
+                "SecretBackendArgs": {
+                    "type": "object",
+                    "properties": {
+                        "backend-ids": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "backend-ids"
+                    ]
+                },
                 "SecretBackendConfig": {
                     "type": "object",
                     "properties": {
@@ -39905,19 +40419,14 @@
                         "type"
                     ]
                 },
-                "SecretBackendConfigResults": {
+                "SecretBackendConfigResult": {
                     "type": "object",
                     "properties": {
-                        "active-id": {
-                            "type": "string"
+                        "config": {
+                            "$ref": "#/definitions/SecretBackendConfig"
                         },
-                        "configs": {
-                            "type": "object",
-                            "patternProperties": {
-                                ".*": {
-                                    "$ref": "#/definitions/SecretBackendConfig"
-                                }
-                            }
+                        "draining": {
+                            "type": "boolean"
                         },
                         "model-controller": {
                             "type": "string"
@@ -39934,6 +40443,26 @@
                         "model-controller",
                         "model-uuid",
                         "model-name",
+                        "draining"
+                    ]
+                },
+                "SecretBackendConfigResults": {
+                    "type": "object",
+                    "properties": {
+                        "active-id": {
+                            "type": "string"
+                        },
+                        "results": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {
+                                    "$ref": "#/definitions/SecretBackendConfigResult"
+                                }
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
                         "active-id"
                     ]
                 },
@@ -39991,11 +40520,17 @@
                 "SecretContentResult": {
                     "type": "object",
                     "properties": {
+                        "backend-config": {
+                            "$ref": "#/definitions/SecretBackendConfigResult"
+                        },
                         "content": {
                             "$ref": "#/definitions/SecretContentParams"
                         },
                         "error": {
                             "$ref": "#/definitions/Error"
+                        },
+                        "latest-revision": {
+                            "type": "integer"
                         }
                     },
                     "additionalProperties": false,
@@ -40333,6 +40868,100 @@
                         }
                     },
                     "additionalProperties": false
+                }
+            }
+        }
+    },
+    {
+        "Name": "SecretsRevisionWatcher",
+        "Description": "srvSecretsRevisionWatcher defines the API wrapping a SecretsRevisionWatcher.",
+        "Version": 1,
+        "AvailableTo": [
+            "controller-machine-agent",
+            "machine-agent",
+            "unit-agent",
+            "model-user"
+        ],
+        "Schema": {
+            "type": "object",
+            "properties": {
+                "Next": {
+                    "type": "object",
+                    "properties": {
+                        "Result": {
+                            "$ref": "#/definitions/SecretRevisionWatchResult"
+                        }
+                    },
+                    "description": "Next returns when a change has occurred to an entity of the\ncollection being watched since the most recent call to Next\nor the Watch call that created the srvSecretRotationWatcher."
+                },
+                "Stop": {
+                    "type": "object",
+                    "description": "Stop stops the watcher."
+                }
+            },
+            "definitions": {
+                "Error": {
+                    "type": "object",
+                    "properties": {
+                        "code": {
+                            "type": "string"
+                        },
+                        "info": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {
+                                    "type": "object",
+                                    "additionalProperties": true
+                                }
+                            }
+                        },
+                        "message": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "message",
+                        "code"
+                    ]
+                },
+                "SecretRevisionChange": {
+                    "type": "object",
+                    "properties": {
+                        "revision": {
+                            "type": "integer"
+                        },
+                        "uri": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "uri",
+                        "revision"
+                    ]
+                },
+                "SecretRevisionWatchResult": {
+                    "type": "object",
+                    "properties": {
+                        "changes": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/SecretRevisionChange"
+                            }
+                        },
+                        "error": {
+                            "$ref": "#/definitions/Error"
+                        },
+                        "watcher-id": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "watcher-id",
+                        "changes"
+                    ]
                 }
             }
         }
@@ -45082,7 +45711,7 @@
                             "$ref": "#/definitions/SecretConsumerInfoResults"
                         }
                     },
-                    "description": "GetConsumerSecretsRevisionInfo returns the latest secret revisions for the specified secrets."
+                    "description": "GetConsumerSecretsRevisionInfo returns the latest secret revisions for the specified secrets.\nThis facade method is used for remote watcher to get the latest secret revisions and labels for a secret changed hook."
                 },
                 "GetMeterStatus": {
                     "type": "object",
@@ -45131,14 +45760,17 @@
                     },
                     "description": "GetRawK8sSpec gets the raw k8s specs for a set of applications."
                 },
-                "GetSecretBackendConfig": {
+                "GetSecretBackendConfigs": {
                     "type": "object",
                     "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/SecretBackendArgs"
+                        },
                         "Result": {
                             "$ref": "#/definitions/SecretBackendConfigResults"
                         }
                     },
-                    "description": "GetSecretBackendConfig gets the config needed to create a client to secret backends."
+                    "description": "GetSecretBackendConfigs gets the config needed to create a client to secret backends."
                 },
                 "GetSecretContentInfo": {
                     "type": "object",
@@ -45171,16 +45803,7 @@
                             "$ref": "#/definitions/SecretContentResults"
                         }
                     },
-                    "description": "GetSecretRevisionContentInfo returns the secret values for the specified secret revisions."
-                },
-                "GetSecretStoreConfig": {
-                    "type": "object",
-                    "properties": {
-                        "Result": {
-                            "$ref": "#/definitions/SecretBackendConfig"
-                        }
-                    },
-                    "description": "GetSecretStoreConfig is for 3.0.x agents.\nTODO(wallyworld) - remove when we auto upgrade migrated models."
+                    "description": "GetSecretRevisionContentInfo returns the secret values for the specified secret revisions.\nUsed when deleting a secret; only returns external revision info."
                 },
                 "GoalStates": {
                     "type": "object",
@@ -45318,7 +45941,7 @@
                             "$ref": "#/definitions/ApplicationOpenedPortsResults"
                         }
                     },
-                    "description": "OpenedApplicationPortRangesByEndpoint returns the port ranges opened by each\napplication grouped by application endpoint."
+                    "description": "OpenedApplicationPortRangesByEndpoint returns the port ranges opened by each application."
                 },
                 "OpenedMachinePortRangesByEndpoint": {
                     "type": "object",
@@ -45327,10 +45950,19 @@
                             "$ref": "#/definitions/Entities"
                         },
                         "Result": {
-                            "$ref": "#/definitions/OpenMachinePortRangesByEndpointResults"
+                            "$ref": "#/definitions/OpenPortRangesByEndpointResults"
                         }
                     },
                     "description": "OpenedMachinePortRangesByEndpoint returns the port ranges opened by each\nunit on the provided machines grouped by application endpoint."
+                },
+                "OpenedPortRangesByEndpoint": {
+                    "type": "object",
+                    "properties": {
+                        "Result": {
+                            "$ref": "#/definitions/OpenPortRangesByEndpointResults"
+                        }
+                    },
+                    "description": "OpenedPortRangesByEndpoint returns the port ranges opened by the unit."
                 },
                 "PrivateAddress": {
                     "type": "object",
@@ -47663,7 +48295,7 @@
                         "results"
                     ]
                 },
-                "OpenMachinePortRangesByEndpointResult": {
+                "OpenPortRangesByEndpointResult": {
                     "type": "object",
                     "properties": {
                         "error": {
@@ -47686,13 +48318,13 @@
                         "unit-port-ranges"
                     ]
                 },
-                "OpenMachinePortRangesByEndpointResults": {
+                "OpenPortRangesByEndpointResults": {
                     "type": "object",
                     "properties": {
                         "results": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/OpenMachinePortRangesByEndpointResult"
+                                "$ref": "#/definitions/OpenPortRangesByEndpointResult"
                             }
                         }
                     },
@@ -48105,6 +48737,21 @@
                         "results"
                     ]
                 },
+                "SecretBackendArgs": {
+                    "type": "object",
+                    "properties": {
+                        "backend-ids": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "backend-ids"
+                    ]
+                },
                 "SecretBackendConfig": {
                     "type": "object",
                     "properties": {
@@ -48126,19 +48773,14 @@
                         "type"
                     ]
                 },
-                "SecretBackendConfigResults": {
+                "SecretBackendConfigResult": {
                     "type": "object",
                     "properties": {
-                        "active-id": {
-                            "type": "string"
+                        "config": {
+                            "$ref": "#/definitions/SecretBackendConfig"
                         },
-                        "configs": {
-                            "type": "object",
-                            "patternProperties": {
-                                ".*": {
-                                    "$ref": "#/definitions/SecretBackendConfig"
-                                }
-                            }
+                        "draining": {
+                            "type": "boolean"
                         },
                         "model-controller": {
                             "type": "string"
@@ -48155,6 +48797,26 @@
                         "model-controller",
                         "model-uuid",
                         "model-name",
+                        "draining"
+                    ]
+                },
+                "SecretBackendConfigResults": {
+                    "type": "object",
+                    "properties": {
+                        "active-id": {
+                            "type": "string"
+                        },
+                        "results": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {
+                                    "$ref": "#/definitions/SecretBackendConfigResult"
+                                }
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
                         "active-id"
                     ]
                 },
@@ -48212,11 +48874,17 @@
                 "SecretContentResult": {
                     "type": "object",
                     "properties": {
+                        "backend-config": {
+                            "$ref": "#/definitions/SecretBackendConfigResult"
+                        },
                         "content": {
                             "$ref": "#/definitions/SecretContentParams"
                         },
                         "error": {
                             "$ref": "#/definitions/Error"
+                        },
+                        "latest-revision": {
+                            "type": "integer"
                         }
                     },
                     "additionalProperties": false,
@@ -49473,6 +50141,9 @@
                 "PinnedLeadershipResult": {
                     "type": "object",
                     "properties": {
+                        "error": {
+                            "$ref": "#/definitions/Error"
+                        },
                         "result": {
                             "type": "object",
                             "patternProperties": {

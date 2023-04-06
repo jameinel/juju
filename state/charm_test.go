@@ -113,6 +113,51 @@ func (s *CharmSuite) testCharm(c *gc.C) {
 		})
 }
 
+func (s *CharmSuite) TestCharmFromSha256(c *gc.C) {
+	ch, err := s.State.Charm(s.curl)
+	c.Assert(err, jc.ErrorIsNil)
+
+	dummy, err := s.State.CharmFromSha256(ch.BundleSha256()[0:7])
+
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(dummy.String(), gc.Equals, s.curl.String())
+	c.Assert(dummy.Revision(), gc.Equals, 1)
+	c.Assert(dummy.StoragePath(), gc.Equals, "dummy-path")
+	c.Assert(dummy.BundleSha256(), gc.Equals, "quantal-dummy-1-sha256")
+	c.Assert(dummy.IsUploaded(), jc.IsTrue)
+	meta := dummy.Meta()
+	c.Assert(meta.Name, gc.Equals, "dummy")
+	config := dummy.Config()
+	c.Assert(config.Options["title"], gc.Equals,
+		charm.Option{
+			Default:     "My Title",
+			Description: "A descriptive title used for the application.",
+			Type:        "string",
+		},
+	)
+	actions := dummy.Actions()
+	c.Assert(actions, gc.NotNil)
+	c.Assert(actions.ActionSpecs, gc.Not(gc.HasLen), 0)
+	c.Assert(actions.ActionSpecs["snapshot"], gc.NotNil)
+	c.Assert(actions.ActionSpecs["snapshot"].Params, gc.Not(gc.HasLen), 0)
+	c.Assert(actions.ActionSpecs["snapshot"], gc.DeepEquals,
+		charm.ActionSpec{
+			Description: "Take a snapshot of the database.",
+			Params: map[string]interface{}{
+				"type":        "object",
+				"title":       "snapshot",
+				"description": "Take a snapshot of the database.",
+				"properties": map[string]interface{}{
+					"outfile": map[string]interface{}{
+						"description": "The file to write out to.",
+						"type":        "string",
+						"default":     "foo.bz2",
+					},
+				},
+			},
+		})
+}
+
 func (s *CharmSuite) TestRemovedCharmNotFound(c *gc.C) {
 	s.remove(c)
 	s.checkRemoved(c)
@@ -137,26 +182,15 @@ func (s *CharmSuite) TestCharmNotFound(c *gc.C) {
 	c.Assert(err, jc.Satisfies, errors.IsNotFound)
 }
 
+func (s *CharmSuite) TestCharmFromSha256NotFound(c *gc.C) {
+	_, err := s.State.CharmFromSha256("abcd0123")
+	c.Assert(err, gc.ErrorMatches, `charm with sha256 "abcd0123" not found`)
+	c.Assert(err, jc.Satisfies, errors.IsNotFound)
+}
+
 func (s *CharmSuite) dummyCharm(c *gc.C, curlOverride string) state.CharmInfo {
 	info := state.CharmInfo{
 		Charm:       testcharms.Repo.CharmDir("dummy"),
-		StoragePath: "dummy-1",
-		SHA256:      "dummy-1-sha256",
-		Version:     "dummy-146-g725cfd3-dirty",
-	}
-	if curlOverride != "" {
-		info.ID = charm.MustParseURL(curlOverride)
-	} else {
-		info.ID = charm.MustParseURL(
-			fmt.Sprintf("local:quantal/%s-%d", info.Charm.Meta().Name, info.Charm.Revision()),
-		)
-	}
-	return info
-}
-
-func (s *CharmSuite) dummyCAASCharm(c *gc.C, curlOverride string) state.CharmInfo {
-	info := state.CharmInfo{
-		Charm:       testcharms.Repo.CharmDir("dummy-kubernetes"),
 		StoragePath: "dummy-1",
 		SHA256:      "dummy-1-sha256",
 		Version:     "dummy-146-g725cfd3-dirty",
@@ -703,21 +737,33 @@ func (s *CharmSuite) TestAddCharmMetadata(c *gc.C) {
 	dummy1.StoragePath = ""
 	ch1, err := s.State.AddCharmMetadata(dummy1)
 	c.Assert(err, jc.ErrorIsNil)
-	c.Assert(ch1.IsPlaceholder(), jc.IsFalse)
-	c.Assert(ch1.IsUploaded(), jc.IsFalse, gc.Commentf("expected charm with missing SHA/storage path to have the PendingUpload flag set"))
+	c.Check(ch1.IsPlaceholder(), jc.IsFalse)
+	c.Check(ch1.IsUploaded(), jc.IsFalse, gc.Commentf("expected charm with missing SHA/storage path to have the PendingUpload flag set"))
 
 	// Check that uploading the same charm ID yields the same charm
 	ch, err := s.State.AddCharmMetadata(dummy1)
 	c.Assert(err, jc.ErrorIsNil)
-	c.Assert(ch1, gc.DeepEquals, ch)
+	c.Check(ch1, gc.DeepEquals, ch)
 
 	// Check that a charm with populated sha/storage path is flagged as
 	// uploaded.
 	dummy2 := s.dummyCharm(c, "ch:quantal/dummy-2")
 	ch2, err := s.State.AddCharmMetadata(dummy2)
 	c.Assert(err, jc.ErrorIsNil)
-	c.Assert(ch2.IsPlaceholder(), jc.IsFalse)
-	c.Assert(ch2.IsUploaded(), jc.IsTrue, gc.Commentf("expected charm with populated SHA/storage path to have the PendingUpload flag unset"))
+	c.Check(ch2.IsPlaceholder(), jc.IsFalse)
+	c.Check(ch2.IsUploaded(), jc.IsTrue, gc.Commentf("expected charm with populated SHA/storage path to have the PendingUpload flag unset"))
+}
+
+func (s *CharmSuite) TestAddCharmMetadataUpdatesPlaceholder(c *gc.C) {
+	// The charm revision updater adds a placeholder charm doc into the db.
+	// Ensure that AddCharmMetadata can handle that.
+	err := s.State.AddCharmPlaceholder(charm.MustParseURL("ch:quantal/testme-2"))
+	c.Assert(err, jc.ErrorIsNil)
+
+	testme := s.dummyCharm(c, "ch:quantal/testme-2")
+	ch2, err := s.State.AddCharmMetadata(testme)
+	c.Assert(err, jc.ErrorIsNil)
+	c.Check(ch2.IsPlaceholder(), jc.IsFalse)
 }
 
 func (s *CharmSuite) TestAllCharmURLs(c *gc.C) {

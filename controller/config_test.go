@@ -364,18 +364,6 @@ var newConfigTests = []struct {
 		},
 		expectError: `invalid max charm/agent state sizes: combined value should not exceed mongo's 16M per-document limit, got 17000000`,
 	}, {
-		about: "invalid non-synced-writes-to-raft-log - string",
-		config: controller.Config{
-			controller.NonSyncedWritesToRaftLog: "I live dangerously",
-		},
-		expectError: `non-synced-writes-to-raft-log: expected bool, got string\("I live dangerously"\)`,
-	}, {
-		about: "invalid batch-raft-fsm - string",
-		config: controller.Config{
-			controller.BatchRaftFSM: "I live dangerously",
-		},
-		expectError: `batch-raft-fsm: expected bool, got string\("I live dangerously"\)`,
-	}, {
 		about: "public-dns-address: expect string, got number",
 		config: controller.Config{
 			controller.PublicDNSAddress: 42,
@@ -399,6 +387,17 @@ var newConfigTests = []struct {
 			controller.ControllerResourceDownloadLimit: "-42",
 		},
 		expectError: `negative controller-resource-download-limit \(-42\) not valid, use 0 to disable the limit`,
+	}, {
+		about: "login token refresh url",
+		config: controller.Config{
+			controller.LoginTokenRefreshURL: `https://xxxx`,
+		},
+	}, {
+		about: "invalid login token refresh url",
+		config: controller.Config{
+			controller.LoginTokenRefreshURL: `xxxx`,
+		},
+		expectError: `logic token refresh URL "xxxx" not valid`,
 	}, {}}
 
 func (s *ConfigSuite) TestNewConfig(c *gc.C) {

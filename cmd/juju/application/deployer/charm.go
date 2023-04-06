@@ -5,15 +5,15 @@ package deployer
 
 import (
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 
 	"github.com/juju/charm/v10"
 	jujuclock "github.com/juju/clock"
 	"github.com/juju/cmd/v3"
 	"github.com/juju/errors"
+	"github.com/juju/featureflag"
 	"github.com/juju/gnuflag"
+	"github.com/kr/pretty"
 
 	"github.com/juju/juju/api/client/application"
 	applicationapi "github.com/juju/juju/api/client/application"
@@ -22,11 +22,13 @@ import (
 	app "github.com/juju/juju/apiserver/facades/client/application"
 	"github.com/juju/juju/cmd/juju/application/utils"
 	"github.com/juju/juju/cmd/juju/common"
+	corecharm "github.com/juju/juju/core/charm"
 	"github.com/juju/juju/core/constraints"
 	"github.com/juju/juju/core/devices"
 	"github.com/juju/juju/core/instance"
 	"github.com/juju/juju/core/series"
 	coreseries "github.com/juju/juju/core/series"
+	"github.com/juju/juju/feature"
 	"github.com/juju/juju/storage"
 )
 
@@ -95,48 +97,13 @@ func (d *deployCharm) deploy(
 	}
 
 	// Process the --config args.
-	// We may have a single file arg specified, in which case
-	// it points to a YAML file keyed on the charm name and
-	// containing values for any charm settings.
-	// We may also have key/value pairs representing
-	// charm settings which overrides anything in the YAML file.
-	// If more than one file is specified, that is an error.
-	var configYAML []byte
-	files, err := d.configOptions.AbsoluteFileNames(ctx)
+	appConfig, configYAML, err := utils.ProcessConfig(ctx, d.model.Filesystem(), d.configOptions, d.trust)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if len(files) > 1 {
-		return errors.Errorf("only a single config YAML file can be specified, got %d", len(files))
-	}
-	if len(files) == 1 {
-		configYAML, err = os.ReadFile(files[0])
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-	attr, err := d.configOptions.ReadConfigPairs(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	appConfig := make(map[string]string)
-	for k, v := range attr {
-		appConfig[k] = v.(string)
-
-		// Handle @ syntax for including file contents as values so we
-		// are consistent to how 'juju config' works
-		if len(appConfig[k]) < 1 || appConfig[k][0] != '@' {
-			continue
-		}
-
-		if appConfig[k], err = utils.ReadValue(ctx, d.model.Filesystem(), appConfig[k][1:]); err != nil {
-			return errors.Trace(err)
-		}
-	}
-
-	// Expand the trust flag into the appConfig
-	if d.trust {
-		appConfig[app.TrustConfigOptionName] = strconv.FormatBool(d.trust)
+	// At deploy time, there's no need to include "trust=false" as missing is the same thing.
+	if !d.trust {
+		delete(appConfig, app.TrustConfigOptionName)
 	}
 
 	bakeryClient, err := d.model.BakeryClient()
@@ -204,7 +171,7 @@ func (d *deployCharm) deploy(
 		Cons:             d.constraints,
 		ApplicationName:  applicationName,
 		NumUnits:         numUnits,
-		ConfigYAML:       string(configYAML),
+		ConfigYAML:       configYAML,
 		Config:           appConfig,
 		Placement:        d.placement,
 		Storage:          d.storage,
@@ -380,8 +347,9 @@ func (l *localCharm) PrepareAndDeploy(ctx *cmd.Context, deployAPI DeployerAPI, _
 
 type repositoryCharm struct {
 	deployCharm
-	userRequestedURL *charm.URL
-	clock            jujuclock.Clock
+	userRequestedURL               *charm.URL
+	clock                          jujuclock.Clock
+	uploadExistingPendingResources UploadExistingPendingResourcesFunc
 }
 
 // String returns a string description of the deployer.
@@ -406,9 +374,66 @@ func (c *repositoryCharm) String() string {
 	return fmt.Sprintf("%s%s%s", str, revision, channel)
 }
 
-// PrepareAndDeploy finishes preparing to deploy a charm store charm,
+// PrepareAndDeploy finishes preparing to deploy a repository charm,
 // then deploys it.
 func (c *repositoryCharm) PrepareAndDeploy(ctx *cmd.Context, deployAPI DeployerAPI, resolver Resolver) error {
+	if featureflag.Enabled(feature.ServerSideCharmDeploy) && deployAPI.BestFacadeVersion("Application") >= 18 {
+		var base *series.Base
+		if !c.baseFlag.Empty() {
+			base = &c.baseFlag
+		}
+		if err := c.validateCharmFlags(); err != nil {
+			return errors.Trace(err)
+		}
+
+		var channel *string
+		if c.id.Origin.CharmChannel().String() != "" {
+			str := c.id.Origin.CharmChannel().String()
+			channel = &str
+		}
+
+		// Process the --config args.
+		appName := c.userRequestedURL.Name
+		if c.applicationName != "" {
+			appName = c.applicationName
+		}
+		configYAML, err := utils.CombinedConfig(ctx, c.model.Filesystem(), c.configOptions, appName)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		info, localPendingResources, errs := deployAPI.DeployFromRepository(application.DeployFromRepositoryArg{
+			CharmName:        c.userRequestedURL.Name,
+			ApplicationName:  c.applicationName,
+			AttachStorage:    c.attachStorage,
+			Base:             base,
+			Channel:          channel,
+			ConfigYAML:       configYAML,
+			Cons:             c.constraints,
+			Devices:          c.devices,
+			DryRun:           c.dryRun,
+			EndpointBindings: c.bindings,
+			Force:            c.force,
+			NumUnits:         &c.numUnits,
+			Placement:        c.placement,
+			Revision:         c.id.Origin.Revision,
+			Resources:        c.resources,
+			Storage:          c.storage,
+			Trust:            c.trust,
+		})
+
+		uploadErr := c.uploadExistingPendingResources(c.applicationName, localPendingResources, deployAPI, c.model.Filesystem())
+		if uploadErr != nil {
+			ctx.Errorf("Unable to upload resources for %v, consider using --attach-resource. \n %v", c.applicationName, uploadErr)
+		}
+
+		ctx.Infof("%s", pretty.Sprint(info))
+		for _, err := range errs {
+			ctx.Errorf(err.Error())
+		}
+		return nil
+	}
+
 	userRequestedURL := c.userRequestedURL
 	location := "charmhub"
 
@@ -455,18 +480,25 @@ func (c *repositoryCharm) PrepareAndDeploy(ctx *cmd.Context, deployAPI DeployerA
 		}
 	}
 
-	selector := seriesSelector{
-		charmURLSeries:      userRequestedURL.Series,
-		seriesFlag:          seriesFlag,
-		supportedSeries:     supportedSeries,
-		supportedJujuSeries: workloadSeries,
-		force:               c.force,
-		conf:                modelCfg,
-		fromBundle:          false,
+	selector := corecharm.SeriesSelector{
+		CharmURLSeries:      userRequestedURL.Series,
+		SeriesFlag:          seriesFlag,
+		SupportedSeries:     supportedSeries,
+		SupportedJujuSeries: workloadSeries,
+		Force:               c.force,
+		Conf:                modelCfg,
+		FromBundle:          false,
+		Logger:              logger,
+		UsingImageID:        (c.constraints.HasImageID() || c.modelConstraints.HasImageID()),
+	}
+	err = selector.Validate()
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	// Get the series to use.
-	series, err := selector.charmSeries()
+	series, err := selector.CharmSeries()
+
 	logger.Tracef("Using series %q from %v to deploy %v", series, supportedSeries, userRequestedURL)
 
 	imageStream := modelCfg.ImageStream()

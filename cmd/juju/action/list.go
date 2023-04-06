@@ -36,15 +36,12 @@ type listCommand struct {
 const listDoc = `
 List the actions available to run on the target application, with a short
 description.  To show the full schema for the actions, use --schema.
+`
 
-Examples:
+const examples = `
     juju actions postgresql
     juju actions postgresql --format yaml
     juju actions postgresql --schema
-
-See also:
-    run
-    show-action
 `
 
 // Set up the output.
@@ -72,11 +69,16 @@ func (c *listCommand) SetFlags(f *gnuflag.FlagSet) {
 
 func (c *listCommand) Info() *cmd.Info {
 	info := jujucmd.Info(&cmd.Info{
-		Name:    "actions",
-		Args:    "<application>",
-		Purpose: "List actions defined for an application.",
-		Doc:     listDoc,
-		Aliases: []string{"list-actions"},
+		Name:     "actions",
+		Args:     "<application>",
+		Purpose:  "List actions defined for an application.",
+		Doc:      listDoc,
+		Aliases:  []string{"list-actions"},
+		Examples: examples,
+		SeeAlso: []string{
+			"run",
+			"show-action",
+		},
 	})
 	return info
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/juju/juju/apiserver/facade"
 	jujucontroller "github.com/juju/juju/controller"
 	"github.com/juju/juju/core/cache"
+	coredatabase "github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/lease"
 	"github.com/juju/juju/core/multiwatcher"
 	"github.com/juju/juju/core/presence"
@@ -43,16 +44,18 @@ type sharedServerContext struct {
 	centralHub          SharedHub
 	presence            presence.Recorder
 	leaseManager        lease.Manager
-	raftOpQueue         Queue
 	logger              loggo.Logger
 	cancel              <-chan struct{}
 	charmhubHTTPClient  facade.HTTPClient
+	dbGetter            coredatabase.DBGetter
 
 	configMutex      sync.RWMutex
 	controllerConfig jujucontroller.Config
 	features         set.Strings
 
 	unsubscribe func()
+
+	entityHasPermission entityHasPermissionFunc
 }
 
 type sharedServerConfig struct {
@@ -63,9 +66,10 @@ type sharedServerConfig struct {
 	presence            presence.Recorder
 	leaseManager        lease.Manager
 	controllerConfig    jujucontroller.Config
-	raftOpQueue         Queue
 	logger              loggo.Logger
 	charmhubHTTPClient  facade.HTTPClient
+	dbGetter            coredatabase.DBGetter
+	entityHasPermission entityHasPermissionFunc
 }
 
 func (c *sharedServerConfig) validate() error {
@@ -90,8 +94,8 @@ func (c *sharedServerConfig) validate() error {
 	if c.controllerConfig == nil {
 		return errors.NotValidf("nil controllerConfig")
 	}
-	if c.raftOpQueue == nil {
-		return errors.NotValidf("nil raftOpQueue")
+	if c.dbGetter == nil {
+		return errors.NotValidf("nil dbGetter")
 	}
 	return nil
 }
@@ -109,8 +113,9 @@ func newSharedServerContext(config sharedServerConfig) (*sharedServerContext, er
 		leaseManager:        config.leaseManager,
 		logger:              config.logger,
 		controllerConfig:    config.controllerConfig,
-		raftOpQueue:         config.raftOpQueue,
 		charmhubHTTPClient:  config.charmhubHTTPClient,
+		dbGetter:            config.dbGetter,
+		entityHasPermission: config.entityHasPermission,
 	}
 	ctx.features = config.controllerConfig.Features()
 	// We are able to get the current controller config before subscribing to changes

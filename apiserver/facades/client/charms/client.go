@@ -260,56 +260,19 @@ func (a *APIv5) AddCharmWithAuthorization(args params.AddCharmWithAuth) (params.
 }
 
 func (a *API) addCharmWithAuthorization(args params.AddCharmWithAuth) (params.CharmOriginResult, error) {
-	if args.Origin.Source != "charm-hub" {
+	if commoncharm.OriginSource(args.Origin.Source) != commoncharm.OriginCharmHub {
 		return params.CharmOriginResult{}, errors.Errorf("unknown schema for charm URL %q", args.URL)
 	}
 
 	if args.Origin.Base.Name == "" || args.Origin.Base.Channel == "" {
-		return params.CharmOriginResult{}, errors.BadRequestf("base required for charm-hub charms")
+		return params.CharmOriginResult{}, errors.BadRequestf("base required for Charmhub charms")
 	}
 
 	if err := a.checkCanWrite(); err != nil {
 		return params.CharmOriginResult{}, err
 	}
 
-	// Only the Charmhub API gives us the metadata we need to support async
-	// charm downloads, so don't do it for legacy Charmstore ones.
-	if commoncharm.OriginSource(args.Origin.Source) == commoncharm.OriginCharmHub {
-		actualOrigin, err := a.queueAsyncCharmDownload(args)
-		if err != nil {
-			return params.CharmOriginResult{}, errors.Trace(err)
-		}
-
-		origin, err := convertOrigin(actualOrigin)
-		if err != nil {
-			return params.CharmOriginResult{}, errors.Trace(err)
-		}
-		return params.CharmOriginResult{
-			Origin: origin,
-		}, nil
-	}
-
-	charmURL, err := charm.ParseURL(args.URL)
-	if err != nil {
-		return params.CharmOriginResult{}, err
-	}
-
-	downloader, err := a.newDownloader(services.CharmDownloaderConfig{
-		Logger:             logger,
-		CharmhubHTTPClient: a.charmhubHTTPClient,
-		StorageFactory:     a.newStorage,
-		StateBackend:       a.backendState,
-		ModelBackend:       a.backendModel,
-	})
-	if err != nil {
-		return params.CharmOriginResult{}, errors.Trace(err)
-	}
-
-	requestedOrigin, err := ConvertParamsOrigin(args.Origin)
-	if err != nil {
-		return params.CharmOriginResult{}, apiservererrors.ServerError(err)
-	}
-	actualOrigin, err := downloader.DownloadAndStore(charmURL, requestedOrigin, args.Force)
+	actualOrigin, err := a.queueAsyncCharmDownload(args)
 	if err != nil {
 		return params.CharmOriginResult{}, errors.Trace(err)
 	}
@@ -365,7 +328,7 @@ func (a *API) queueAsyncCharmDownload(args params.AddCharmWithAuth) (corecharm.O
 	metaRes := essentialMeta[0]
 
 	_, err = a.backendState.AddCharmMetadata(state.CharmInfo{
-		Charm: charmInfoAdapter{metaRes},
+		Charm: corecharm.NewCharmInfoAdapter(metaRes),
 		ID:    charmURL,
 	})
 	if err != nil {
@@ -373,40 +336,6 @@ func (a *API) queueAsyncCharmDownload(args params.AddCharmWithAuth) (corecharm.O
 	}
 
 	return metaRes.ResolvedOrigin, nil
-}
-
-// charmInfoAdapter wraps an EssentialMetadata object and implements the
-// charm.Charm interface so it can be passed to state.AddCharm.
-type charmInfoAdapter struct {
-	meta corecharm.EssentialMetadata
-}
-
-func (adapter charmInfoAdapter) Meta() *charm.Meta {
-	return adapter.meta.Meta
-}
-
-func (adapter charmInfoAdapter) Manifest() *charm.Manifest {
-	return adapter.meta.Manifest
-}
-
-func (adapter charmInfoAdapter) Config() *charm.Config {
-	return adapter.meta.Config
-}
-
-func (adapter charmInfoAdapter) LXDProfile() *charm.LXDProfile {
-	return nil // not part of the essential metadata
-}
-
-func (adapter charmInfoAdapter) Metrics() *charm.Metrics {
-	return nil // not part of the essential metadata
-}
-
-func (adapter charmInfoAdapter) Actions() *charm.Actions {
-	return nil // not part of the essential metadata
-}
-
-func (adapter charmInfoAdapter) Revision() int {
-	return 0 // not part of the essential metadata
 }
 
 // ResolveCharms resolves the given charm URLs with an optionally specified

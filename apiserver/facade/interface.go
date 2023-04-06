@@ -4,7 +4,6 @@
 package facade
 
 import (
-	"context"
 	"net/http"
 	"net/url"
 	"time"
@@ -12,12 +11,12 @@ import (
 	"github.com/juju/names/v4"
 
 	"github.com/juju/juju/core/cache"
+	coredatabase "github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/leadership"
 	"github.com/juju/juju/core/lease"
 	"github.com/juju/juju/core/multiwatcher"
 	"github.com/juju/juju/core/permission"
 	"github.com/juju/juju/core/presence"
-	"github.com/juju/juju/core/raftlease"
 	"github.com/juju/juju/state"
 )
 
@@ -56,18 +55,6 @@ type LeadershipContext interface {
 	// SingularClaimer returns a lease.Claimer for singular leases for
 	// this context's model.
 	SingularClaimer() (lease.Claimer, error)
-}
-
-// RaftContext describes methods for handling raft related capabilities.
-type RaftContext interface {
-
-	// ApplyLease attempts to apply the command on to the raft FSM. It only
-	// takes a command and enqueues that against the raft instance. If the raft
-	// instance is already processing a application, then back pressure is
-	// applied to the caller and a ErrEnqueueDeadlineExceeded will be sent.
-	// It's up to the caller to retry or drop depending on how the retry
-	// algorithm is implemented.
-	ApplyLease(context.Context, raftlease.Command) error
 }
 
 // Context exposes useful capabilities to a Facade.
@@ -158,24 +145,22 @@ type Context interface {
 	// RequestRecorder defines a metrics collector for outbound requests.
 	RequestRecorder() RequestRecorder
 
-	// Raft returns a lease context for managing raft.
-	Raft() RaftContext
-
 	// HTTPClient returns an HTTP client to use for the given purpose.
 	HTTPClient(purpose HTTPClientPurpose) HTTPClient
+
+	// ControllerDB returns a TrackedDB reference for the controller database.
+	ControllerDB() (coredatabase.TrackedDB, error)
 }
 
 // RequestRecorder is implemented by types that can record information about
 // successful and unsuccessful http requests.
 type RequestRecorder interface {
-	// Record an outgoing request which produced an http.Response.
+	// Record an outgoing request that produced a http.Response.
 	Record(method string, url *url.URL, res *http.Response, rtt time.Duration)
 
-	// Record an outgoing request which returned back an error.
+	// RecordError records an outgoing request that returned back an error.
 	RecordError(method string, url *url.URL, err error)
 }
-
-//go:generate go run github.com/golang/mock/mockgen -package mocks -destination mocks/facade_mock.go github.com/juju/juju/apiserver/facade Resources,Authorizer
 
 // Authorizer represents the authenticated entity using the API server.
 type Authorizer interface {
@@ -215,9 +200,12 @@ type Authorizer interface {
 	// target by the authenticated entity.
 	HasPermission(operation permission.Access, target names.Tag) (bool, error)
 
-	// UserHasPermission reports whether the given access is allowed for the given
-	// target by the given user.
-	UserHasPermission(user names.UserTag, operation permission.Access, target names.Tag) (bool, error)
+	// EntityHasPermission reports whether the given access is allowed for the given
+	// target by the given entity.
+	EntityHasPermission(entity names.Tag, operation permission.Access, target names.Tag) (bool, error)
+
+	// AuthTokenString returns the jwt passed to login.
+	AuthTokenString() string
 
 	// ConnectedModel returns the UUID of the model to which the API
 	// connection was made.

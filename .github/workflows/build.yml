@@ -29,15 +29,21 @@ jobs:
            - { os: darwin, arch: amd64 }
 
     steps:
-    - name: Checkout
+    - name: "Checkout"
       uses: actions/checkout@v3
 
-    - name: Set up Go
-      uses: actions/setup-go@v3
+    - name: "Set up Go"
+      uses: actions/setup-go@v4
       with:
         go-version-file: 'go.mod'
         cache: true
-
-    - name: Build
+    
+    - name: "Install musl"
+      if: (matrix.os == 'linux')
+      shell: bash
       run: |
-        GOOS=${{ matrix.platform.os }} GOARCH=${{ matrix.platform.arch }} make go-install
+        sudo make MUSL_CROSS_COMPILE=0 MUSL_PLACEMENT=local musl-install
+
+    - name: "Build"
+      run: |
+        GOOS=${{ matrix.platform.os }} GOARCH=${{ matrix.platform.arch }} make go-build

@@ -20,8 +20,6 @@ type LeasesSuite struct {
 	testing.IsolationSuite
 
 	appName string
-	machine string
-	pinArgs []interface{}
 }
 
 var _ = gc.Suite(&LeasesSuite{})
@@ -55,7 +53,8 @@ func (s *LeasesSuite) TestLeases(c *gc.C) {
 
 	fix := &Fixture{leases: leases}
 	fix.RunTest(c, func(manager *lease.Manager, _ *testclock.Clock) {
-		leases := getReader(c, manager).Leases()
+		leases, err := getReader(c, manager).Leases()
+		c.Assert(err, jc.ErrorIsNil)
 		c.Check(leases, gc.DeepEquals, map[string]string{s.appName: "redis/0"})
 	})
 }

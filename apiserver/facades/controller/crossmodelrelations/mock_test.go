@@ -24,28 +24,18 @@ import (
 	"github.com/juju/juju/apiserver/facades/controller/crossmodelrelations"
 	"github.com/juju/juju/core/crossmodel"
 	coremacaroon "github.com/juju/juju/core/macaroon"
-	corefirewall "github.com/juju/juju/core/network/firewall"
+	coresecrets "github.com/juju/juju/core/secrets"
 	"github.com/juju/juju/core/status"
 	"github.com/juju/juju/core/watcher"
+	"github.com/juju/juju/environs/config"
 	"github.com/juju/juju/state"
 	coretesting "github.com/juju/juju/testing"
 )
 
-type mockStatePool struct {
-	st map[string]commoncrossmodel.Backend
-}
-
-func (st *mockStatePool) Get(modelUUID string) (commoncrossmodel.Backend, func(), error) {
-	backend, ok := st.st[modelUUID]
-	if !ok {
-		return nil, nil, errors.NotFoundf("model for uuid %s", modelUUID)
-	}
-	return backend, func() {}, nil
-}
-
 type mockState struct {
 	testing.Stub
 	crossmodelrelations.CrossModelRelationsState
+	modelConfig           coretesting.Attrs
 	relations             map[string]*mockRelation
 	remoteApplications    map[string]*mockRemoteApplication
 	applications          map[string]*mockApplication
@@ -54,13 +44,14 @@ type mockState struct {
 	offerConnections      map[int]*mockOfferConnection
 	offerConnectionsByKey map[string]*mockOfferConnection
 	remoteEntities        map[names.Tag]string
-	firewallRules         map[corefirewall.WellKnownServiceType]*state.FirewallRule
 	ingressNetworks       map[string][]string
+	secrets               map[string]coresecrets.SecretMetadata
 	migrationActive       bool
 }
 
 func newMockState() *mockState {
 	return &mockState{
+		modelConfig:           make(coretesting.Attrs),
 		relations:             make(map[string]*mockRelation),
 		remoteApplications:    make(map[string]*mockRemoteApplication),
 		applications:          make(map[string]*mockApplication),
@@ -69,9 +60,13 @@ func newMockState() *mockState {
 		offerNames:            make(map[string]string),
 		offerConnections:      make(map[int]*mockOfferConnection),
 		offerConnectionsByKey: make(map[string]*mockOfferConnection),
-		firewallRules:         make(map[corefirewall.WellKnownServiceType]*state.FirewallRule),
 		ingressNetworks:       make(map[string][]string),
+		secrets:               make(map[string]coresecrets.SecretMetadata),
 	}
+}
+
+func (st *mockState) ControllerTag() names.ControllerTag {
+	return coretesting.ControllerTag
 }
 
 func (st *mockState) ApplicationOfferForUUID(offerUUID string) (*crossmodel.ApplicationOffer, error) {
@@ -91,6 +86,10 @@ func (st *mockState) ApplicationOffer(offerName string) (*crossmodel.Application
 	return nil, errors.NotFoundf("offer %v", offerName)
 }
 
+func (st *mockState) ModelTag() names.ModelTag {
+	return coretesting.ModelTag
+}
+
 func (st *mockState) ModelUUID() string {
 	return coretesting.ModelTag.Id()
 }
@@ -99,7 +98,16 @@ func (st *mockState) Model() (crossmodelrelations.Model, error) {
 	return &mockModel{}, nil
 }
 
+func (st *mockState) ModelConfig() (*config.Config, error) {
+	attrs := coretesting.FakeConfig().Merge(st.modelConfig)
+	return config.New(config.NoDefaults, attrs)
+}
+
 func (st *mockState) ApplyOperation(state.ModelOperation) error {
+	return nil
+}
+
+func (st *mockState) RemoveSecretConsumer(consumer names.Tag) error {
 	return nil
 }
 
@@ -115,7 +123,7 @@ func (st *mockState) AddRelation(eps ...state.Endpoint) (commoncrossmodel.Relati
 	return rel, nil
 }
 
-func (st *mockState) AddOfferConnection(arg state.AddOfferConnectionParams) (crossmodelrelations.OfferConnection, error) {
+func (st *mockState) AddOfferConnection(arg state.AddOfferConnectionParams) (commoncrossmodel.OfferConnection, error) {
 	if _, ok := st.offerConnections[arg.RelationId]; ok {
 		return nil, errors.AlreadyExistsf("offer connection for relation %d", arg.RelationId)
 	}
@@ -131,19 +139,12 @@ func (st *mockState) AddOfferConnection(arg state.AddOfferConnectionParams) (cro
 	return oc, nil
 }
 
-func (st *mockState) FirewallRule(service corefirewall.WellKnownServiceType) (*state.FirewallRule, error) {
-	if r, ok := st.firewallRules[service]; ok {
-		return r, nil
-	}
-	return nil, errors.NotFoundf("firewall rule for %v", service)
-}
-
 func (st *mockState) SaveIngressNetworks(relationKey string, cidrs []string) (state.RelationNetworks, error) {
 	st.ingressNetworks[relationKey] = cidrs
 	return nil, nil
 }
 
-func (st *mockState) OfferConnectionForRelation(relationKey string) (crossmodelrelations.OfferConnection, error) {
+func (st *mockState) OfferConnectionForRelation(relationKey string) (commoncrossmodel.OfferConnection, error) {
 	oc, ok := st.offerConnectionsByKey[relationKey]
 	if !ok {
 		return nil, errors.NotFoundf("offer connection details for relation %v", relationKey)
@@ -270,6 +271,40 @@ func (st *mockState) Application(id string) (commoncrossmodel.Application, error
 		return nil, errors.NotFoundf("application %q", id)
 	}
 	return a, nil
+}
+
+func (st *mockState) GetSecretConsumerInfo(token string) (names.Tag, string, error) {
+	st.MethodCall(st, "GetSecretConsumerInfo", token)
+	if err := st.NextErr(); err != nil {
+		return nil, "", err
+	}
+	for e, t := range st.remoteEntities {
+		if t == token {
+			return e, e.Id() + "-uuid", nil
+		}
+	}
+	return nil, "", errors.NotFoundf("token %v", token)
+}
+
+func (st *mockState) GetSecret(uri *coresecrets.URI) (*coresecrets.SecretMetadata, error) {
+	st.MethodCall(st, "GetSecret", uri)
+	if err := st.NextErr(); err != nil {
+		return nil, err
+	}
+	md, ok := st.secrets[uri.ID]
+	if ok {
+		return &md, nil
+	}
+	return nil, errors.NotFoundf("secret id %q", uri.ID)
+}
+
+type mockSecretsWatcher struct {
+	*mockWatcher
+	changes chan []string
+}
+
+func (w *mockSecretsWatcher) Changes() <-chan []string {
+	return w.changes
 }
 
 type mockFirewallState struct {
@@ -571,7 +606,6 @@ func (a *mockApplication) Status() (status.StatusInfo, error) {
 }
 
 type mockOfferConnection struct {
-	crossmodelrelations.OfferConnection
 	sourcemodelUUID string
 	relationId      int
 	relationKey     string
@@ -581,6 +615,10 @@ type mockOfferConnection struct {
 
 func (m *mockOfferConnection) OfferUUID() string {
 	return m.offerUUID
+}
+
+func (m *mockOfferConnection) UserName() string {
+	return m.username
 }
 
 type mockRelationUnit struct {

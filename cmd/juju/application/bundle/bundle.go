@@ -250,6 +250,17 @@ func applicationConfigValue(key string, valueMap interface{}) (interface{}, erro
 // processing the bundle. They are for informational purposes and do
 // not require failing the bundle deployment.
 func ComposeAndVerifyBundle(base BundleDataSource, pathToOverlays []string) (*charm.BundleData, []error, error) {
+
+	verifyConstraints := func(s string) error {
+		_, err := constraints.Parse(s)
+		return err
+	}
+	// verify that the base bundle does not contain image-id constraint
+	err := verifyBaseBundle(base)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
 	var dsList []charm.BundleDataSource
 	unMarshallErrors := make([]error, 0)
 	unMarshallErrors = append(unMarshallErrors, gatherErrors(base)...)
@@ -268,7 +279,9 @@ func ComposeAndVerifyBundle(base BundleDataSource, pathToOverlays []string) (*ch
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-	if err = verifyBundle(bundleData, base.BasePath()); err != nil {
+
+	// verify composed (base + overlay bundles)
+	if err = verifyBundle(bundleData, base.BasePath(), verifyConstraints); err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 
@@ -286,11 +299,22 @@ func gatherErrors(ds BundleDataSource) []error {
 	return returnErrors
 }
 
-func verifyBundle(data *charm.BundleData, bundleDir string) error {
-	verifyConstraints := func(s string) error {
-		_, err := constraints.Parse(s)
-		return err
+func verifyBaseBundle(base BundleDataSource) error {
+	verifyBaseConstraints := func(s string) error {
+		bundleConstraints, err := constraints.Parse(s)
+		if err != nil {
+			return err
+		}
+		if bundleConstraints.HasImageID() {
+			return errors.NotSupportedf("'image-id' constraint in a base bundle")
+		}
+		return nil
 	}
+
+	return verifyBundle(base.Parts()[0].Data, base.BasePath(), verifyBaseConstraints)
+}
+
+func verifyBundle(data *charm.BundleData, bundleDir string, verifyConstraints func(string) error) error {
 	verifyStorage := func(s string) error {
 		_, err := storage.ParseConstraints(s)
 		return err
@@ -299,6 +323,7 @@ func verifyBundle(data *charm.BundleData, bundleDir string) error {
 		_, err := devices.ParseConstraints(s)
 		return err
 	}
+
 	var verifyError error
 	if bundleDir == "" {
 		verifyError = data.Verify(verifyConstraints, verifyStorage, verifyDevices)

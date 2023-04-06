@@ -2,7 +2,6 @@
 // Licensed under the AGPLv3, see LICENCE file for details.
 
 //go:build (go1.3 && ignore) || !linux
-// +build go1.3,ignore !linux
 
 package lxd
 
@@ -21,7 +20,7 @@ type containerInitialiser struct {
 var _ container.Initialiser = (*containerInitialiser)(nil)
 
 // NewContainerInitialiser  - on anything but Linux this is a NOP
-func NewContainerInitialiser(string) container.Initialiser {
+func NewContainerInitialiser(string, string) container.Initialiser {
 	return &containerInitialiser{}
 }
 

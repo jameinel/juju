@@ -6,17 +6,20 @@ package testing
 import (
 	"strings"
 
-	"github.com/juju/juju/core/permission"
 	"github.com/juju/names/v4"
+
+	"github.com/juju/juju/core/permission"
 )
 
 // FakeAuthorizer implements the facade.Authorizer interface.
 type FakeAuthorizer struct {
-	Tag         names.Tag
-	Controller  bool
-	ModelUUID   string
-	AdminTag    names.UserTag
-	HasWriteTag names.UserTag
+	Tag           names.Tag
+	Controller    bool
+	ModelUUID     string
+	AdminTag      names.UserTag
+	HasConsumeTag names.UserTag
+	HasWriteTag   names.UserTag
+	AuthToken     string
 }
 
 func (fa FakeAuthorizer) AuthOwner(tag names.Tag) bool {
@@ -131,19 +134,23 @@ func (fa FakeAuthorizer) ConnectedModel() string {
 	return fa.ModelUUID
 }
 
-// UserHasPermission returns true if the passed user is admin or has a name equal to
+// EntityHasPermission returns true if the passed entity is admin or has a name equal to
 // the pre-set admin tag.
-func (fa FakeAuthorizer) UserHasPermission(user names.UserTag, operation permission.Access, target names.Tag) (bool, error) {
-	if user.Name() == "admin" {
+func (fa FakeAuthorizer) EntityHasPermission(entity names.Tag, operation permission.Access, target names.Tag) (bool, error) {
+	if entity.Kind() == names.UserTagKind && entity.Id() == "admin" {
 		return true, nil
 	}
 	emptyTag := names.UserTag{}
-	if fa.AdminTag != emptyTag && user == fa.AdminTag {
+	if fa.AdminTag != emptyTag && entity == fa.AdminTag {
 		return true, nil
 	}
-	ut := fa.Tag.(names.UserTag)
-	if ut == user {
+	if operation == permission.ConsumeAccess && fa.HasConsumeTag != emptyTag && entity == fa.HasConsumeTag {
 		return true, nil
 	}
 	return false, nil
+}
+
+// AuthTokenString returns the jwt passed to login.
+func (fa FakeAuthorizer) AuthTokenString() string {
+	return fa.AuthToken
 }

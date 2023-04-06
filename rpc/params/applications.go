@@ -545,3 +545,139 @@ type ExposeInfoResult struct {
 	// for the application will be exposed to 0.0.0.0/0.
 	ExposedEndpoints map[string]ExposedEndpoint `json:"exposed-endpoints,omitempty"`
 }
+
+// DeployFromRepositoryArgs holds arguments for multiple charms
+// to be deployed.
+type DeployFromRepositoryArgs struct {
+	Args []DeployFromRepositoryArg
+}
+
+// DeployFromRepositoryArg is all data required to deploy a
+// charm from a repository.
+type DeployFromRepositoryArg struct {
+	// CharmName is a string identifying the name of the thing to deploy.
+	// Required.
+	CharmName string
+
+	// ApplicationName is the name to give the application. Optional. By
+	// default, the charm name and the application name will be the same.
+	ApplicationName string
+
+	// AttachStorage contains IDs of existing storage that should be
+	// attached to the application unit that will be deployed. This
+	// may be non-empty only if NumUnits is 1.
+	AttachStorage []string
+
+	// Base describes the OS base intended to be used by the charm.
+	Base *Base `json:"base,omitempty"`
+
+	// Channel is the channel in the repository to deploy from.
+	// This is an optional value. Required if revision is provided.
+	// Defaults to “stable” if not defined nor required.
+	Channel *string `json:"channel,omitempty"`
+
+	// ConfigYAML is a string that overrides the default config.yml.
+	ConfigYAML string
+
+	// Cons contains constraints on where units of this application
+	// may be placed.
+	Cons constraints.Value
+
+	// Devices contains Constraints specifying how devices should be
+	// handled.
+	Devices map[string]devices.Constraints
+
+	// DryRun just shows what the deploy would do, including finding the
+	// charm; determining version, channel and base to use; validation
+	// of the config. Does not actually download or deploy the charm.
+	DryRun bool
+
+	// EndpointBindings
+	EndpointBindings map[string]string `json:"endpoint-bindings,omitempty"`
+
+	// Force can be set to true to bypass any checks for charm-specific
+	// requirements ("assumes" sections in charm metadata, supported series,
+	// LXD profile allow list)
+	Force bool `json:"force,omitempty"`
+
+	// NumUnits is the number of units to deploy. Defaults to 1 if no
+	// value provided. Synonymous with scale for kubernetes charms.
+	NumUnits *int `json:"num-units,omitempty"`
+
+	// Placement directives define on which machines the unit(s) must be
+	// created.
+	Placement []*instance.Placement
+
+	// Revision is the charm revision number. Requires the channel
+	// be explicitly set.
+	Revision *int `json:"revision,omitempty"`
+
+	// Resources is a collection of resource names for the
+	// application, with the value being the revision of the
+	// resource to use if default revision is not desired.
+	Resources map[string]string `json:"resources,omitempty"`
+
+	// Storage contains Constraints specifying how storage should be
+	// handled.
+	Storage map[string]storage.Constraints
+
+	//  Trust allows charm to run hooks that require access credentials
+	Trust bool
+}
+
+type DeployFromRepositoryResults struct {
+	Results []DeployFromRepositoryResult
+}
+
+// DeployFromRepositoryResult contains the result of deploying
+// a repository charm.
+type DeployFromRepositoryResult struct {
+	// Errors holds errors accumulated during validation of
+	// deployment, or errors during deployment
+	Errors []*Error
+
+	// Info
+	Info DeployFromRepositoryInfo
+
+	// PendingResourceUploads returns a collection of data
+	// required to upload a specific resource for this charm.
+	// Deploy will validate the resource request against the
+	// charm, but not the upload data. Only resources indicated
+	// as local upload will be included. They have already been
+	// added as Pending.
+	PendingResourceUploads []*PendingResourceUpload
+}
+
+// DeployFromRepositoryInfo describes the charm deployed.
+type DeployFromRepositoryInfo struct {
+	// Architecture is the architecture used to deploy the charm.
+	Architecture string `json:"architecture"`
+	// Base is the base used to deploy the charm.
+	Base Base `json:"base,omitempty"`
+	// Channel is a string representation of the channel used to
+	// deploy the charm.
+	Channel string `json:"channel"`
+	// EffectiveChannel is the channel actually deployed from as determined
+	// by the charmhub response.
+	EffectiveChannel *string `json:"effective-channel,omitempty"`
+	// Is the name of the application deployed. This may vary from
+	// the charm name provided if differs in the metadata.yaml and
+	// no provided on the cli.
+	Name string `json:"name"`
+	// Revision is the revision of the charm deployed.
+	Revision int `json:"revision"`
+}
+
+// PendingResourceUpload holds data required to upload a
+// local resource if required.
+type PendingResourceUpload struct {
+	// Name is the name of the resource.
+	Name string
+
+	// Filename is the name of the file as it exists on disk.
+	// Sometimes referred to as the path.
+	Filename string
+
+	// Type of the resource, a string matching one of the resource.Type
+	Type string
+}

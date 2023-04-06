@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/juju/charm/v10"
-	charmresource "github.com/juju/charm/v10/resource"
 	"github.com/juju/cmd/v3"
 	"github.com/juju/collections/set"
 	"github.com/juju/errors"
@@ -144,13 +143,18 @@ type refreshCommand struct {
 	Channel    charm.Channel
 	channelStr string
 
-	// Config is a config file variable, pointing at a YAML file containing
-	// the application config to update.
-	Config cmd.FileVar
+	// ConfigOptions records k=v attributes from command arguments
+	// and/or specified files containing key values.
+	ConfigOptions common.ConfigFlag
 
 	// Storage is a map of storage constraints, keyed on the storage name
 	// defined in charm storage metadata, to add or update during upgrade.
 	Storage map[string]storage.Constraints
+
+	// Trust signifies that the charm should have access to trusted credentials.
+	// That is, hooks run by the charm can access cloud credentials and other
+	// trusted access credentials.
+	Trust bool
 }
 
 const refreshDoc = `
@@ -212,6 +216,10 @@ regardless of potential havoc, so long as the following conditions hold:
 
 The new charm may add new relations and configuration settings.
 
+The new charm may also need to be granted access to trusted credentials.
+Use --trust to grant such access.
+Or use --trust=false to revoke such access.
+
 --switch and --path are mutually exclusive.
 
 --path and --revision are mutually exclusive. The revision of the updated charm
@@ -241,15 +249,16 @@ func (c *refreshCommand) SetFlags(f *gnuflag.FlagSet) {
 	c.ModelCommandBase.SetFlags(f)
 	f.BoolVar(&c.Force, "force", false, "Allow a charm to be refreshed which bypasses LXD profile allow list")
 	f.BoolVar(&c.ForceUnits, "force-units", false, "Refresh all units immediately, even if in error state")
-	f.StringVar(&c.channelStr, "channel", "", "Channel to use when getting the charm or bundle from the charm store or charm hub")
+	f.StringVar(&c.channelStr, "channel", "", "Channel to use when getting the charm from Charmhub")
 	f.BoolVar(&c.ForceBase, "force-series", false, "Refresh even if series of deployed applications are not supported by the new charm")
 	f.StringVar(&c.SwitchURL, "switch", "", "Crossgrade to a different charm")
 	f.StringVar(&c.CharmPath, "path", "", "Refresh to a charm located at path")
 	f.IntVar(&c.Revision, "revision", -1, "Explicit revision of current charm")
 	f.Var(stringMap{&c.Resources}, "resource", "Resource to be uploaded to the controller")
 	f.Var(storageFlag{&c.Storage, nil}, "storage", "Charm storage constraints")
-	f.Var(&c.Config, "config", "Path to yaml-formatted application config")
+	f.Var(&c.ConfigOptions, "config", "Either a path to yaml-formatted application config file or a key=value pair ")
 	f.StringVar(&c.BindToSpaces, "bind", "", "Configure application endpoint bindings to spaces")
+	f.BoolVar(&c.Trust, "trust", false, "Allows charm to run hooks that require access credentials")
 }
 
 func (c *refreshCommand) Init(args []string) error {
@@ -377,43 +386,26 @@ func (c *refreshCommand) Run(ctx *cmd.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	charmID, err := factory.Run(cfg)
-	switch {
-	case err == nil:
-		curl := charmID.URL
-		charmOrigin := charmID.Origin
+	charmID, runErr := factory.Run(cfg)
+	if runErr != nil && !errors.Is(runErr, refresher.ErrAlreadyUpToDate) {
+		// Process errors.Is(runErr, refresher.ErrAlreadyUpToDate) after reviewing resources.
+		if termErr, ok := errors.Cause(runErr).(*common.TermsRequiredError); ok {
+			return errors.Trace(termErr.UserErr())
+		}
+		return block.ProcessBlockedError(runErr, block.BlockChange)
+	}
+	curl := charmID.URL
+	charmOrigin := charmID.Origin
+	if runErr == nil {
 		// The current charm URL that's been found and selected.
 		channel := ""
 		if charmOrigin.Source == corecharm.CharmHub {
 			channel = fmt.Sprintf(" in channel %s", charmID.Origin.Channel.String())
 		}
 		ctx.Infof("Added %s charm %q, revision %d%s, to the model", charmOrigin.Source, curl.Name, curl.Revision, channel)
-	case errors.Is(err, refresher.ErrAlreadyUpToDate) && c.Channel.String() != oldOrigin.CoreCharmOrigin().Channel.String():
-		ctx.Infof("%s. Note: all future refreshes will now use channel %q", err.Error(), charmID.Origin.Channel.String())
-	case errors.Is(err, refresher.ErrAlreadyUpToDate) && len(c.Resources) == 0:
-		// Charm already up-to-date and no resources to refresh.
-		ctx.Infof(err.Error())
-		return nil
-	case errors.Is(err, refresher.ErrAlreadyUpToDate) && len(c.Resources) > 0:
-		ctx.Infof("%s. Attempt to update resources requested.", err.Error())
-	default:
-		if termErr, ok := errors.Cause(err).(*common.TermsRequiredError); ok {
-			return errors.Trace(termErr.UserErr())
-		}
-		return block.ProcessBlockedError(err, block.BlockChange)
 	}
 
 	// Next, upgrade resources.
-	resourceLister, err := c.NewResourceLister(apiRoot)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	curl := charmID.URL
-	charmsClient := c.NewCharmClient(apiRoot)
-	charmInfo, err := charmsClient.CharmInfo(curl.String())
-	if err != nil {
-		return errors.Trace(err)
-	}
 	origin, err := commoncharm.CoreCharmOrigin(charmID.Origin)
 	if err != nil {
 		return errors.Trace(err)
@@ -422,12 +414,33 @@ func (c *refreshCommand) Run(ctx *cmd.Context) error {
 		URL:    curl,
 		Origin: origin,
 	}
-	resourceIDs, err := c.upgradeResources(apiRoot, resourceLister, chID, charmInfo.Meta.Resources)
+	resourceIDs, err := c.upgradeResources(apiRoot, chID)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// Process the factory Run error from above where the charm itself is
+	// already up-to-date. There are 2 scenarios where we should continue.
+	// 1. There is a change to the charm's channel.
+	// 2. There is a resource change to process.
+	if errors.Is(runErr, refresher.ErrAlreadyUpToDate) {
+		ctx.Infof(runErr.Error())
+		if len(resourceIDs) == 0 && c.Channel.String() == oldOrigin.CoreCharmOrigin().Channel.String() {
+			return nil
+		}
+		if c.Channel.String() != oldOrigin.CoreCharmOrigin().Channel.String() {
+			ctx.Infof("Note: all future refreshes will now use channel %q", charmID.Origin.Channel.String())
+		}
+		if len(resourceIDs) > 0 {
+			ctx.Infof("resources to be upgraded")
+		}
+	}
 
 	// Print out the updated endpoint binding plan.
+	charmsClient := c.NewCharmClient(apiRoot)
+	charmInfo, err := charmsClient.CharmInfo(curl.String())
+	if err != nil {
+		return errors.Trace(err)
+	}
 	var bindingsChangelog []string
 	curBindings := applicationInfo.EndpointBindings
 	appDefaultSpace := curBindings[""]
@@ -438,17 +451,15 @@ func (c *refreshCommand) Run(ctx *cmd.Context) error {
 	c.Bindings, bindingsChangelog = mergeBindings(newCharmEndpoints, curBindings, c.Bindings, appDefaultSpace)
 
 	// Finally, upgrade the application.
-	var configYAML []byte
-	if c.Config.Path != "" {
-		configYAML, err = c.Config.Read(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	appConfig, configYAML, err := utils.ProcessConfig(ctx, c.Filesystem(), &c.ConfigOptions, c.Trust)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	charmCfg := application.SetCharmConfig{
 		ApplicationName:    c.ApplicationName,
 		CharmID:            chID,
-		ConfigSettingsYAML: string(configYAML),
+		ConfigSettings:     appConfig,
+		ConfigSettingsYAML: configYAML,
 		Force:              c.Force,
 		ForceBase:          c.ForceBase,
 		ForceUnits:         c.ForceUnits,
@@ -516,12 +527,20 @@ func (c *refreshCommand) parseBindFlag(apiRoot base.APICallCloser) error {
 // DeployResources should accept a resource-specific client instead.
 func (c *refreshCommand) upgradeResources(
 	apiRoot base.APICallCloser,
-	resourceLister utils.ResourceLister,
 	chID application.CharmID,
-	meta map[string]charmresource.Meta,
 ) (map[string]string, error) {
+	resourceLister, err := c.NewResourceLister(apiRoot)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	charmsClient := c.NewCharmClient(apiRoot)
+	meta, err := utils.GetMetaResources(chID.URL, charmsClient)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	filtered, err := utils.GetUpgradeResources(
-		chID.URL,
+		chID,
+		charmsClient,
 		resourceLister,
 		c.ApplicationName,
 		c.Resources,

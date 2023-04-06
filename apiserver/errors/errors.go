@@ -128,8 +128,6 @@ func ServerErrorAndStatus(err error) (*params.Error, int) {
 		status = http.StatusConflict
 	case params.CodeNotLeader:
 		status = http.StatusTemporaryRedirect
-	case params.CodeLeaseError:
-		status = leaseStatusCode(err1)
 	}
 	return err1, status
 }
@@ -156,6 +154,7 @@ func ServerError(err error) *params.Error {
 		notLeaderError               *NotLeaderError
 		redirectError                *RedirectError
 		upgradeSeriesValidationError *UpgradeSeriesValidationError
+		accessRequiredError          *AccessRequiredError
 	)
 	// Skip past annotations when looking for the code.
 	err = errors.Cause(err)
@@ -252,9 +251,9 @@ func ServerError(err error) *params.Error {
 		info = notLeaderError.AsMap()
 	case errors.Is(err, DeadlineExceededError):
 		code = params.CodeDeadlineExceeded
-	case lease.IsLeaseError(err):
-		code = params.CodeLeaseError
-		info = leaseErrorInfoMap(err)
+	case errors.As(err, &accessRequiredError):
+		code = params.CodeAccessRequired
+		info = accessRequiredError.AsMap()
 	default:
 		code = params.ErrCode(err)
 	}
@@ -264,6 +263,16 @@ func ServerError(err error) *params.Error {
 		Code:    code,
 		Info:    info,
 	}
+}
+
+// ServerErrors converts a slice of error into a slice
+// of apiserver errors.
+func ServerErrors(errs []error) []*params.Error {
+	convertedErrors := make([]*params.Error, len(errs))
+	for i, err := range errs {
+		convertedErrors[i] = ServerError(err)
+	}
+	return convertedErrors
 }
 
 func DestroyErr(desc string, ids []string, errs []error) error {
@@ -347,8 +356,6 @@ func RestoreError(err error) error {
 		return NewNotLeaderError(serverAddress, serverID)
 	case params.IsCodeDeadlineExceeded(err):
 		return fmt.Errorf(msg+"%w", errors.Hide(DeadlineExceededError))
-	case params.IsLeaseError(err):
-		return rehydrateLeaseError(err)
 	case params.IsCodeTryAgain(err):
 		return ErrTryAgain
 	default:

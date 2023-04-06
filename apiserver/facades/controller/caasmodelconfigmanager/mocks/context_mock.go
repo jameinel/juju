@@ -10,6 +10,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	facade "github.com/juju/juju/apiserver/facade"
 	cache "github.com/juju/juju/core/cache"
+	database "github.com/juju/juju/core/database"
 	leadership "github.com/juju/juju/core/leadership"
 	lease "github.com/juju/juju/core/lease"
 	multiwatcher "github.com/juju/juju/core/multiwatcher"
@@ -125,6 +126,20 @@ func (mr *MockAuthorizerMockRecorder) AuthOwner(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthOwner", reflect.TypeOf((*MockAuthorizer)(nil).AuthOwner), arg0)
 }
 
+// AuthTokenString mocks base method.
+func (m *MockAuthorizer) AuthTokenString() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AuthTokenString")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// AuthTokenString indicates an expected call of AuthTokenString.
+func (mr *MockAuthorizerMockRecorder) AuthTokenString() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthTokenString", reflect.TypeOf((*MockAuthorizer)(nil).AuthTokenString))
+}
+
 // AuthUnitAgent mocks base method.
 func (m *MockAuthorizer) AuthUnitAgent() bool {
 	m.ctrl.T.Helper()
@@ -151,6 +166,21 @@ func (m *MockAuthorizer) ConnectedModel() string {
 func (mr *MockAuthorizerMockRecorder) ConnectedModel() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConnectedModel", reflect.TypeOf((*MockAuthorizer)(nil).ConnectedModel))
+}
+
+// EntityHasPermission mocks base method.
+func (m *MockAuthorizer) EntityHasPermission(arg0 names.Tag, arg1 permission.Access, arg2 names.Tag) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EntityHasPermission", arg0, arg1, arg2)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// EntityHasPermission indicates an expected call of EntityHasPermission.
+func (mr *MockAuthorizerMockRecorder) EntityHasPermission(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EntityHasPermission", reflect.TypeOf((*MockAuthorizer)(nil).EntityHasPermission), arg0, arg1, arg2)
 }
 
 // GetAuthTag mocks base method.
@@ -180,21 +210,6 @@ func (m *MockAuthorizer) HasPermission(arg0 permission.Access, arg1 names.Tag) (
 func (mr *MockAuthorizerMockRecorder) HasPermission(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPermission", reflect.TypeOf((*MockAuthorizer)(nil).HasPermission), arg0, arg1)
-}
-
-// UserHasPermission mocks base method.
-func (m *MockAuthorizer) UserHasPermission(arg0 names.UserTag, arg1 permission.Access, arg2 names.Tag) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UserHasPermission", arg0, arg1, arg2)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UserHasPermission indicates an expected call of UserHasPermission.
-func (mr *MockAuthorizerMockRecorder) UserHasPermission(arg0, arg1, arg2 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UserHasPermission", reflect.TypeOf((*MockAuthorizer)(nil).UserHasPermission), arg0, arg1, arg2)
 }
 
 // MockContext is a mock of Context interface.
@@ -275,6 +290,21 @@ func (m *MockContext) Controller() *cache.Controller {
 func (mr *MockContextMockRecorder) Controller() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Controller", reflect.TypeOf((*MockContext)(nil).Controller))
+}
+
+// ControllerDB mocks base method.
+func (m *MockContext) ControllerDB() (database.TrackedDB, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ControllerDB")
+	ret0, _ := ret[0].(database.TrackedDB)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ControllerDB indicates an expected call of ControllerDB.
+func (mr *MockContextMockRecorder) ControllerDB() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ControllerDB", reflect.TypeOf((*MockContext)(nil).ControllerDB))
 }
 
 // Dispose mocks base method.
@@ -432,20 +462,6 @@ func (m *MockContext) Presence() facade.Presence {
 func (mr *MockContextMockRecorder) Presence() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Presence", reflect.TypeOf((*MockContext)(nil).Presence))
-}
-
-// Raft mocks base method.
-func (m *MockContext) Raft() facade.RaftContext {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Raft")
-	ret0, _ := ret[0].(facade.RaftContext)
-	return ret0
-}
-
-// Raft indicates an expected call of Raft.
-func (mr *MockContextMockRecorder) Raft() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Raft", reflect.TypeOf((*MockContext)(nil).Raft))
 }
 
 // RequestRecorder mocks base method.

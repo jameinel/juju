@@ -1093,10 +1093,6 @@ func ModelBackendFromStorageBackend(sb *StorageBackend) modelBackend {
 	return sb.mb
 }
 
-func (st *State) IsUserSuperuser(user names.UserTag) (bool, error) {
-	return st.isUserSuperuser(user)
-}
-
 func (st *State) ModelQueryForUser(user names.UserTag, isSuperuser bool) (mongo.Query, SessionCloser, error) {
 	return st.modelQueryForUser(user, isSuperuser)
 }
@@ -1138,6 +1134,11 @@ func ApplicationBranches(m *Model, appName string) ([]*Generation, error) {
 func MachinePortOps(st *State, m description.Machine) ([]txn.Op, error) {
 	resolver := &importer{st: st}
 	return []txn.Op{resolver.machinePortsOp(m)}, nil
+}
+
+func ApplicationPortOps(st *State, a description.Application) ([]txn.Op, error) {
+	resolver := &importer{st: st}
+	return []txn.Op{resolver.applicationPortsOp(a)}, nil
 }
 
 func GetSecretNextRotateTime(c *gc.C, st *State, id string) time.Time {

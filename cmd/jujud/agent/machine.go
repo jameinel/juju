@@ -63,8 +63,6 @@ import (
 	coremodel "github.com/juju/juju/core/model"
 	"github.com/juju/juju/core/paths"
 	"github.com/juju/juju/core/presence"
-	"github.com/juju/juju/core/raft/queue"
-	"github.com/juju/juju/core/raftlease"
 	"github.com/juju/juju/core/status"
 	"github.com/juju/juju/environs"
 	jujunames "github.com/juju/juju/juju/names"
@@ -411,8 +409,6 @@ type MachineAgent struct {
 	mongoDialCollector         *mongometrics.DialCollector
 	preUpgradeSteps            upgrades.PreUpgradeStepsFunc
 
-	// Only API servers have hubs. This is temporary until the apiserver and
-	// peergrouper have manifolds.
 	centralHub    *pubsub.StructuredHub
 	pubsubMetrics *centralhub.PubsubMetrics
 
@@ -639,8 +635,6 @@ func (a *MachineAgent) makeEngineCreator(
 				return engineConfigFunc(controllerMetricsSink)
 			},
 			SetupLogging:            agentconf.SetupAgentLogging,
-			LeaseFSM:                raftlease.NewFSM(),
-			RaftOpQueue:             queue.NewOpQueue(clock.WallClock),
 			DependencyEngineMetrics: metrics,
 			CharmhubHTTPClient:      charmhubHTTPClient,
 		}
@@ -667,7 +661,6 @@ func (a *MachineAgent) makeEngineCreator(
 			Clock:              clock.WallClock,
 			LocalHub:           localHub,
 			CentralHub:         a.centralHub,
-			LeaseFSM:           manifoldsCfg.LeaseFSM,
 		}); err != nil {
 			// If the introspection worker failed to start, we just log error
 			// but continue. It is very unlikely to happen in the real world
@@ -1233,50 +1226,6 @@ func openStatePool(
 		return nil, jworker.ErrTerminateAgent
 	}
 	return pool, nil
-}
-
-// startWorkerAfterUpgrade starts a worker to run the specified child worker
-// but only after waiting for upgrades to complete.
-func (a *MachineAgent) startWorkerAfterUpgrade(runner jworker.Runner, name string, start func() (worker.Worker, error)) {
-	_ = runner.StartWorker(name, func() (worker.Worker, error) {
-		return a.upgradeWaiterWorker(name, start), nil
-	})
-}
-
-// upgradeWaiterWorker runs the specified worker after upgrades have completed.
-func (a *MachineAgent) upgradeWaiterWorker(name string, start func() (worker.Worker, error)) worker.Worker {
-	return jworker.NewSimpleWorker(func(stop <-chan struct{}) error {
-		// Wait for the agent upgrade and upgrade steps to complete (or for us to be stopped).
-		for _, ch := range []<-chan struct{}{
-			a.upgradeComplete.Unlocked(),
-			a.initialUpgradeCheckComplete.Unlocked(),
-		} {
-			select {
-			case <-stop:
-				return nil
-			case <-ch:
-			}
-		}
-		logger.Debugf("upgrades done, starting worker %q", name)
-
-		// Upgrades are done, start the worker.
-		w, err := start()
-		if err != nil {
-			return err
-		}
-		// Wait for worker to finish or for us to be stopped.
-		done := make(chan error, 1)
-		go func() {
-			done <- w.Wait()
-		}()
-		select {
-		case err := <-done:
-			return errors.Annotatef(err, "worker %q exited", name)
-		case <-stop:
-			logger.Debugf("stopping so killing worker %q", name)
-			return worker.Stop(w)
-		}
-	})
 }
 
 // WorkersStarted returns a channel that's closed once all top level workers

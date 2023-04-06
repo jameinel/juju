@@ -12,6 +12,7 @@ import (
 	"github.com/juju/clock"
 	"github.com/juju/errors"
 	"github.com/juju/names/v4"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"gopkg.in/macaroon.v2"
 	"gopkg.in/yaml.v2"
 
@@ -39,6 +40,14 @@ const (
 	localOfferPermissionExpiryTime = 3 * time.Minute
 )
 
+// RelationInfoFromMacaroons returns any relation and offer in the macaroons' declared caveats.
+func RelationInfoFromMacaroons(mac macaroon.Slice) (string, string, bool) {
+	declared := checkers.InferDeclared(coremacaroon.MacaroonNamespace, mac)
+	relKey, ok1 := declared[relationKey]
+	offerUUID, ok2 := declared[offeruuidKey]
+	return relKey, offerUUID, ok1 && ok2
+}
+
 // CrossModelAuthorizer authorises any cmr operation presented to it.
 type CrossModelAuthorizer struct{}
 
@@ -52,10 +61,14 @@ func (CrossModelAuthorizer) AuthorizeOps(ctx context.Context, authorizedOp baker
 	return allowed, nil, nil
 }
 
+type tokenPermissionFunc func(token jwt.Token, subject names.Tag) (permission.Access, error)
+
 // AuthContext is used to validate macaroons used to access
 // application offers.
 type AuthContext struct {
-	pool StatePool
+	systemState     Backend
+	tokenPermission tokenPermissionFunc
+	tokenParser     authentication.TokenParser
 
 	clock              clock.Clock
 	offerThirdPartyKey *bakery.KeyPair
@@ -67,15 +80,19 @@ type AuthContext struct {
 // NewAuthContext creates a new authentication context for checking
 // macaroons used with application offer requests.
 func NewAuthContext(
-	pool StatePool,
+	systemState Backend,
 	offerThirdPartyKey *bakery.KeyPair,
 	offerBakery authentication.ExpirableStorageBakery,
+	tokenParser authentication.TokenParser,
+	tokenPermission tokenPermissionFunc,
 ) (*AuthContext, error) {
 	ctxt := &AuthContext{
-		pool:               pool,
+		systemState:        systemState,
 		clock:              clock.WallClock,
 		offerBakery:        offerBakery,
 		offerThirdPartyKey: offerThirdPartyKey,
+		tokenParser:        tokenParser,
+		tokenPermission:    tokenPermission,
 	}
 	return ctxt, nil
 }
@@ -137,12 +154,7 @@ func (a *AuthContext) CheckOfferAccessCaveat(caveat string) (*offerPermissionChe
 // returns a list of caveats to add to the discharge macaroon.
 func (a *AuthContext) CheckLocalAccessRequest(details *offerPermissionCheck) ([]checkers.Caveat, error) {
 	authlogger.Debugf("authenticate local offer access: %+v", details)
-	st, releaser, err := a.pool.Get(details.SourceModelUUID)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	defer releaser()
-	if err := a.checkOfferAccess(st, details.User, details.OfferUUID); err != nil {
+	if err := a.checkOfferAccess(a.systemState.UserPermission, details.User, details.OfferUUID); err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -158,46 +170,40 @@ func (a *AuthContext) CheckLocalAccessRequest(details *offerPermissionCheck) ([]
 	return firstPartyCaveats, nil
 }
 
-func (a *AuthContext) checkOfferAccess(st Backend, username, offerUUID string) error {
+type userAccessFunc func(names.UserTag, names.Tag) (permission.Access, error)
+
+func (a *AuthContext) checkOfferAccess(userAccess userAccessFunc, username, offerUUID string) error {
 	userTag := names.NewUserTag(username)
-	isAdmin, err := a.hasControllerAdminAccess(st, userTag)
-	if err != nil {
+	isAdmin, err := a.hasAccess(userAccess, userTag, permission.SuperuserAccess, a.systemState.ControllerTag())
+	if err != nil && !errors.Is(err, &apiservererrors.AccessRequiredError{}) {
 		return apiservererrors.ErrPerm
 	}
 	if isAdmin {
 		return nil
 	}
-	isAdmin, err = a.hasModelAdminAccess(st, userTag)
-	if err != nil {
+	isAdmin, err = a.hasAccess(userAccess, userTag, permission.AdminAccess, a.systemState.ModelTag())
+	if err != nil && !errors.Is(err, &apiservererrors.AccessRequiredError{}) {
 		return apiservererrors.ErrPerm
 	}
 	if isAdmin {
 		return nil
 	}
-	access, err := st.GetOfferAccess(offerUUID, userTag)
-	if err != nil && !errors.IsNotFound(err) {
-		return apiservererrors.ErrPerm
+	ok, err := a.hasAccess(userAccess, userTag, permission.ConsumeAccess, names.NewApplicationOfferTag(offerUUID))
+	if errors.Is(err, &apiservererrors.AccessRequiredError{}) {
+		return err
 	}
-	if !access.EqualOrGreaterOfferAccessThan(permission.ConsumeAccess) {
+	if !ok || err != nil {
 		return apiservererrors.ErrPerm
 	}
 	return nil
 }
 
-func (api *AuthContext) hasControllerAdminAccess(st Backend, userTag names.UserTag) (bool, error) {
-	isAdmin, err := common.HasPermission(st.UserPermission, userTag, permission.SuperuserAccess, st.ControllerTag())
+func (a *AuthContext) hasAccess(userAccess func(names.UserTag, names.Tag) (permission.Access, error), userTag names.UserTag, access permission.Access, target names.Tag) (bool, error) {
+	has, err := common.HasPermission(userAccess, userTag, access, target)
 	if errors.IsNotFound(err) {
 		return false, nil
 	}
-	return isAdmin, err
-}
-
-func (api *AuthContext) hasModelAdminAccess(st Backend, userTag names.UserTag) (bool, error) {
-	isAdmin, err := common.HasPermission(st.UserPermission, userTag, permission.AdminAccess, st.ModelTag())
-	if errors.IsNotFound(err) {
-		return false, nil
-	}
-	return isAdmin, err
+	return has, err
 }
 
 func (a *AuthContext) offerPermissionYaml(sourceModelUUID, username, offerURL, relationKey string, permission permission.Access) (string, error) {
@@ -429,4 +435,20 @@ func (a *authenticator) CheckRelationMacaroons(ctx context.Context, relationTag 
 	}
 	_, err := a.checkMacaroons(ctx, mac, version, requiredValues, crossModelRelateOp(relationTag.Id()))
 	return err
+}
+
+// CheckOfferToken verifies that session auth token allows access to the offer.
+func (a *authenticator) CheckOfferToken(ctx context.Context, authToken string) (string, error) {
+	tok, entity, err := a.ctxt.tokenParser.Parse(ctx, authToken)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	userAccess := func(user names.UserTag, target names.Tag) (permission.Access, error) {
+		if entity.Tag() != user {
+			return permission.NoAccess, nil
+		}
+		return a.ctxt.tokenPermission(tok, target)
+	}
+	username := entity.Tag().Id()
+	return username, a.ctxt.checkOfferAccess(userAccess, username, a.offerUUID)
 }

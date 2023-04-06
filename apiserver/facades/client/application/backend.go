@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/juju/charm/v10"
+	"github.com/juju/charm/v10/resource"
 	"github.com/juju/errors"
 	"github.com/juju/names/v4"
 	"github.com/juju/schema"
@@ -14,6 +15,7 @@ import (
 	"gopkg.in/juju/environschema.v1"
 
 	"github.com/juju/juju/apiserver/common/storagecommon"
+	"github.com/juju/juju/apiserver/facades/client/charms/services"
 	"github.com/juju/juju/cloud"
 	"github.com/juju/juju/controller"
 	coreconfig "github.com/juju/juju/core/config"
@@ -33,8 +35,12 @@ import (
 type Backend interface {
 	AllModelUUIDs() ([]string, error)
 	Application(string) (Application, error)
+	ApplicationOfferForUUID(offerUUID string) (*crossmodel.ApplicationOffer, error)
 	ApplyOperation(state.ModelOperation) error
 	AddApplication(state.AddApplicationArgs) (Application, error)
+	AddPendingResource(string, resource.Resource) (string, error)
+	RemovePendingResources(applicationID string, pendingIDs map[string]string) error
+	AddCharmMetadata(info state.CharmInfo) (Charm, error)
 	RemoteApplication(string) (RemoteApplication, error)
 	AddRemoteApplication(state.AddRemoteApplicationParams) (RemoteApplication, error)
 	AddRelation(...state.Endpoint) (Relation, error)
@@ -54,6 +60,8 @@ type Backend interface {
 	SaveEgressNetworks(relationKey string, cidrs []string) (state.RelationNetworks, error)
 	Branch(string) (Generation, error)
 	state.EndpointBinding
+	ModelConstraints() (constraints.Value, error)
+	services.StateBackend
 }
 
 // BlockChecker defines the block-checking functionality required by
@@ -119,11 +127,17 @@ type Bindings interface {
 // details on the methods, see the methods on state.Charm with
 // the same names.
 type Charm interface {
+	CharmMeta
 	Config() *charm.Config
-	Manifest() *charm.Manifest
-	Meta() *charm.Meta
 	URL() *charm.URL
 	String() string
+	IsUploaded() bool
+}
+
+// CharmMeta describes methods that inform charm operation.
+type CharmMeta interface {
+	Manifest() *charm.Manifest
+	Meta() *charm.Meta
 }
 
 // Machine defines a subset of the functionality provided by the
@@ -131,6 +145,8 @@ type Charm interface {
 // details on the methods, see the methods on state.Machine with
 // the same names.
 type Machine interface {
+	Base() state.Base
+	HardwareCharacteristics() (*instance.HardwareCharacteristics, error)
 	PublicAddress() (network.SpaceAddress, error)
 	IsLockedForSeriesUpgrade() (bool, error)
 	IsParentLockedForSeriesUpgrade() (bool, error)
@@ -306,6 +322,42 @@ func (s stateShim) AddApplication(args state.AddApplicationArgs) (Application, e
 	return stateApplicationShim{a, s.State}, nil
 }
 
+// Note that the usedID is only used in some of the implementations of the
+// AddPendingResource
+func (s stateShim) AddPendingResource(appName string, chRes resource.Resource) (string, error) {
+	return s.State.Resources().AddPendingResource(appName, "", chRes)
+}
+
+// RemovePendingResources removes any pending resources for the named application
+// Mainly used as a cleanup if an error is raised during the deployment
+func (s stateShim) RemovePendingResources(applicationID string, pendingIDs map[string]string) error {
+	return s.State.Resources().RemovePendingAppResources(applicationID, pendingIDs)
+}
+
+func (s stateShim) AddCharmMetadata(info state.CharmInfo) (Charm, error) {
+	c, err := s.State.AddCharmMetadata(info)
+	if err != nil {
+		return nil, err
+	}
+	return stateCharmShim{Charm: c}, nil
+}
+
+func (s stateShim) UpdateUploadedCharm(info state.CharmInfo) (services.UploadedCharm, error) {
+	c, err := s.State.UpdateUploadedCharm(info)
+	if err != nil {
+		return nil, err
+	}
+	return stateCharmShim{Charm: c}, nil
+}
+
+func (s stateShim) PrepareCharmUpload(curl *charm.URL) (services.UploadedCharm, error) {
+	c, err := s.State.PrepareCharmUpload(curl)
+	if err != nil {
+		return nil, err
+	}
+	return stateCharmShim{Charm: c}, nil
+}
+
 type remoteApplicationShim struct {
 	*state.RemoteApplication
 }
@@ -410,10 +462,18 @@ func (s stateShim) Resources() Resources {
 	return s.State.Resources()
 }
 
-type OfferConnection interface{}
+type OfferConnection interface {
+	UserName() string
+	OfferUUID() string
+}
 
 func (s stateShim) OfferConnectionForRelation(key string) (OfferConnection, error) {
 	return s.State.OfferConnectionForRelation(key)
+}
+
+func (s stateShim) ApplicationOfferForUUID(offerUUID string) (*crossmodel.ApplicationOffer, error) {
+	offers := state.NewApplicationOffers(s.State)
+	return offers.ApplicationOfferForUUID(offerUUID)
 }
 
 func (s stateShim) Branch(name string) (Generation, error) {

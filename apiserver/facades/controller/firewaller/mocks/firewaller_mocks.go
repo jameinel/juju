@@ -10,8 +10,8 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	firewall "github.com/juju/juju/apiserver/common/firewall"
+	controller "github.com/juju/juju/controller"
 	network "github.com/juju/juju/core/network"
-	firewall0 "github.com/juju/juju/core/network/firewall"
 	config "github.com/juju/juju/environs/config"
 	params "github.com/juju/juju/rpc/params"
 	state "github.com/juju/juju/state"
@@ -72,6 +72,21 @@ func (mr *MockStateMockRecorder) Application(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Application", reflect.TypeOf((*MockState)(nil).Application), arg0)
 }
 
+// ControllerConfig mocks base method.
+func (m *MockState) ControllerConfig() (controller.Config, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ControllerConfig")
+	ret0, _ := ret[0].(controller.Config)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ControllerConfig indicates an expected call of ControllerConfig.
+func (mr *MockStateMockRecorder) ControllerConfig() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ControllerConfig", reflect.TypeOf((*MockState)(nil).ControllerConfig))
+}
+
 // FindEntity mocks base method.
 func (m *MockState) FindEntity(arg0 names.Tag) (state.Entity, error) {
 	m.ctrl.T.Helper()
@@ -87,21 +102,6 @@ func (mr *MockStateMockRecorder) FindEntity(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindEntity", reflect.TypeOf((*MockState)(nil).FindEntity), arg0)
 }
 
-// FirewallRule mocks base method.
-func (m *MockState) FirewallRule(arg0 firewall0.WellKnownServiceType) (*state.FirewallRule, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FirewallRule", arg0)
-	ret0, _ := ret[0].(*state.FirewallRule)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// FirewallRule indicates an expected call of FirewallRule.
-func (mr *MockStateMockRecorder) FirewallRule(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FirewallRule", reflect.TypeOf((*MockState)(nil).FirewallRule), arg0)
-}
-
 // GetMacaroon mocks base method.
 func (m *MockState) GetMacaroon(arg0 names.Tag) (*macaroon.Macaroon, error) {
 	m.ctrl.T.Helper()
@@ -115,6 +115,20 @@ func (m *MockState) GetMacaroon(arg0 names.Tag) (*macaroon.Macaroon, error) {
 func (mr *MockStateMockRecorder) GetMacaroon(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMacaroon", reflect.TypeOf((*MockState)(nil).GetMacaroon), arg0)
+}
+
+// IsController mocks base method.
+func (m *MockState) IsController() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsController")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsController indicates an expected call of IsController.
+func (mr *MockStateMockRecorder) IsController() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsController", reflect.TypeOf((*MockState)(nil).IsController))
 }
 
 // KeyRelation mocks base method.

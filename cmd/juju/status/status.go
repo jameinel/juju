@@ -123,48 +123,56 @@ The '--format' option allows you to specify how the status report is formatted.
   --format=yaml
                     Provide information in a JSON or YAML formats for 
                     programmatic use.
+`
 
-Examples:
+const usageExamples = `
+Report the status of units hosted on machine 0:
 
-    # Report the status of units hosted on machine 0
     juju status 0
 
-    # Report the status of the the mysql application
+Report the status of the the mysql application:
+
     juju status mysql
 
-    # Report the status for applications that start with nova-
+Report the status for applications that start with nova-:
+
     juju status nova-*
 
-    # Include information about storage and relations in output
+Include information about storage and relations in output:
+
     juju status --storage --relations
 
-    # Provide output as valid JSON
+Provide output as valid JSON:
+
     juju status --format=json
 
-    # Watch the status every five seconds
+Watch the status every five seconds:
+
     juju status --watch 5s
 
-    # Show only applications/units in active status
+Show only applications/units in active status:
+
     juju status active
 
-    # Show only applications/units in error status
+Show only applications/units in error status:
+
     juju status error
-
-See also:
-
-    machines
-    show-model
-    show-debug-log
-    show-status-log
-    storage
 `
 
 func (c *statusCommand) Info() *cmd.Info {
 	return jujucmd.Info(&cmd.Info{
-		Name:    "status",
-		Args:    "[<selector> [...]]",
-		Purpose: usageSummary,
-		Doc:     usageDetails,
+		Name:     "status",
+		Args:     "[<selector> [...]]",
+		Purpose:  usageSummary,
+		Doc:      usageDetails,
+		Examples: usageExamples,
+		SeeAlso: []string{
+			"machines",
+			"show-model",
+			"show-debug-log",
+			"show-status-log",
+			"storage",
+		},
 	})
 }
 
@@ -345,29 +353,29 @@ func (c *statusCommand) runStatus(ctx *cmd.Context) error {
 			ctx.Infof("provided %s always enabled in non tabular formats", joinedMsg)
 		}
 	}
-	formatterParams := newStatusFormatterParams{
-		status:         status,
-		controllerName: controllerName,
-		outputName:     c.out.Name(),
-		isoTime:        c.isoTime,
-		showRelations:  showRelations,
-		activeBranch:   activeBranch,
+	formatterParams := NewStatusFormatterParams{
+		Status:         status,
+		ControllerName: controllerName,
+		OutputName:     c.out.Name(),
+		ISOTime:        c.isoTime,
+		ShowRelations:  showRelations,
+		ActiveBranch:   activeBranch,
 	}
 	if showStorage {
 		storageInfo, err := c.getStorageInfo(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		formatterParams.storage = storageInfo
+		formatterParams.Storage = storageInfo
 		if storageInfo == nil || storageInfo.Empty() {
 			if c.out.Name() == "tabular" {
 				// hide storage section for tabular view if nothing to show.
-				formatterParams.storage = nil
+				formatterParams.Storage = nil
 			}
 		}
 	}
 
-	formatted, err := newStatusFormatter(formatterParams).format()
+	formatted, err := NewStatusFormatter(formatterParams).Format()
 	if err != nil {
 		return errors.Trace(err)
 	}

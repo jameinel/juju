@@ -4,11 +4,11 @@
 package lease_test
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"github.com/juju/clock/testclock"
-
 	"github.com/juju/errors"
 	"github.com/juju/names/v4"
 	jc "github.com/juju/testing/checkers"
@@ -110,7 +110,7 @@ func (store *Store) expireLeases() {
 }
 
 // Leases is part of the lease.Store interface.
-func (store *Store) Leases(keys ...lease.Key) map[lease.Key]lease.Info {
+func (store *Store) Leases(_ context.Context, keys ...lease.Key) (map[lease.Key]lease.Info, error) {
 	filter := make(map[lease.Key]bool)
 	filtering := len(keys) > 0
 	if filtering {
@@ -128,18 +128,23 @@ func (store *Store) Leases(keys ...lease.Key) map[lease.Key]lease.Info {
 		}
 		result[k] = v
 	}
-	return result
+	return result, nil
 }
 
 // LeaseGroup is part of the lease.Store interface.
-func (store *Store) LeaseGroup(namespace, modelUUID string) map[lease.Key]lease.Info {
+func (store *Store) LeaseGroup(ctx context.Context, namespace, modelUUID string) (map[lease.Key]lease.Info, error) {
+	leases, err := store.Leases(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	results := make(map[lease.Key]lease.Info)
-	for key, info := range store.Leases() {
+	for key, info := range leases {
 		if key.Namespace == namespace && key.ModelUUID == modelUUID {
 			results[key] = info
 		}
 	}
-	return results
+	return results, nil
 }
 
 func (store *Store) closeIfEmpty() {
@@ -201,30 +206,30 @@ func (store *Store) call(method string, args []interface{}) error {
 }
 
 // ClaimLease is part of the corelease.Store interface.
-func (store *Store) ClaimLease(key lease.Key, request lease.Request, stop <-chan struct{}) error {
+func (store *Store) ClaimLease(_ context.Context, key lease.Key, request lease.Request) error {
 	return store.call("ClaimLease", []interface{}{key, request})
 }
 
 // ExtendLease is part of the corelease.Store interface.
-func (store *Store) ExtendLease(key lease.Key, request lease.Request, stop <-chan struct{}) error {
+func (store *Store) ExtendLease(_ context.Context, key lease.Key, request lease.Request) error {
 	return store.call("ExtendLease", []interface{}{key, request})
 }
 
-func (store *Store) RevokeLease(lease lease.Key, holder string, stop <-chan struct{}) error {
+func (store *Store) RevokeLease(_ context.Context, lease lease.Key, holder string) error {
 	return store.call("RevokeLease", []interface{}{lease, holder})
 }
 
 // PinLease is part of the corelease.Store interface.
-func (store *Store) PinLease(key lease.Key, entity string, stop <-chan struct{}) error {
+func (store *Store) PinLease(_ context.Context, key lease.Key, entity string) error {
 	return store.call("PinLease", []interface{}{key, entity})
 }
 
 // UnpinLease is part of the corelease.Store interface.
-func (store *Store) UnpinLease(key lease.Key, entity string, stop <-chan struct{}) error {
+func (store *Store) UnpinLease(_ context.Context, key lease.Key, entity string) error {
 	return store.call("UnpinLease", []interface{}{key, entity})
 }
 
-func (store *Store) Pinned() map[lease.Key][]string {
+func (store *Store) Pinned(_ context.Context) (map[lease.Key][]string, error) {
 	_ = store.call("Pinned", nil)
 	return map[lease.Key][]string{
 		{
@@ -237,7 +242,7 @@ func (store *Store) Pinned() map[lease.Key][]string {
 			ModelUUID: "ignored modelUUID",
 			Lease:     "lolwut",
 		}: {names.NewMachineTag("666").String()},
-	}
+	}, nil
 }
 
 // call defines a expected method call on a Store; it encodes:

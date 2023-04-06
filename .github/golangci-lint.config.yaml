@@ -32,9 +32,11 @@ linters:
     - ineffassign
     - misspell
     - unconvert
-    - deadcode
-    - varcheck
+    - exportloopref
+    - unused
 run:
   timeout: 30m
+  modules-download-mode: readonly
 skip-dirs:
   - acceptancetests
+  - _deps

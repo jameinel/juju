@@ -82,7 +82,6 @@ func (s *MigrationSuite) TestKnownCollections(c *gc.C) {
 		deviceConstraintsC,
 
 		// crossmodelrelations
-		firewallRulesC,
 		remoteApplicationsC,
 		applicationOffersC,
 		offerConnectionsC,
@@ -95,6 +94,7 @@ func (s *MigrationSuite) TestKnownCollections(c *gc.C) {
 		secretRevisionsC,
 		secretRotateC,
 		secretConsumersC,
+		secretRemoteConsumersC,
 		secretPermissionsC,
 	)
 
@@ -582,6 +582,7 @@ func (s *MigrationSuite) TestConstraintsDocFields(c *gc.C) {
 		"VirtType",
 		"Zones",
 		"AllocatePublicIP",
+		"ImageID",
 	)
 	s.AssertExportedFields(c, constraintsDoc{}, fields)
 }

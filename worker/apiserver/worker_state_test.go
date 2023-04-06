@@ -118,8 +118,8 @@ func (s *WorkerStateSuite) TestStart(c *gc.C) {
 		LogSinkConfig:       &logSinkConfig,
 		LeaseManager:        s.leaseManager,
 		MetricsCollector:    s.metricsCollector,
-		RaftOpQueue:         s.queue,
 		SysLogger:           s.sysLogger,
 		CharmhubHTTPClient:  s.charmhubHTTPClient,
+		DBGetter:            s.dbGetter,
 	})
 }

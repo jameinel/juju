@@ -4,20 +4,16 @@
 package lxd
 
 import (
-	"fmt"
 	"math/rand"
-	"net"
 	"os/exec"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/juju/collections/set"
 	"github.com/juju/errors"
 	"github.com/juju/os/v2/series"
 	"github.com/juju/packaging/v2/manager"
 	"github.com/juju/proxy"
-	"github.com/lxc/lxd/shared"
 
 	"github.com/juju/juju/container"
 	"github.com/juju/juju/packaging"
@@ -28,12 +24,12 @@ import (
 var hostSeries = series.HostSeries
 
 type containerInitialiser struct {
-	getExecCommand      func(string, ...string) *exec.Cmd
-	configureLxdProxies func(_ proxy.Settings, isRunningLocally func() (bool, error), newLocalServer func() (*Server, error)) error
-	configureLxdBridge  func() error
-	isRunningLocally    func() (bool, error)
-	newLocalServer      func() (*Server, error)
-	lxdSnapChannel      string
+	containerNetworkingMethod string
+	getExecCommand            func(string, ...string) *exec.Cmd
+	configureLxdProxies       func(_ proxy.Settings, isRunningLocally func() (bool, error), newLocalServer func() (*Server, error)) error
+	isRunningLocally          func() (bool, error)
+	newLocalServer            func() (*Server, error)
+	lxdSnapChannel            string
 }
 
 //go:generate go run github.com/golang/mock/mockgen -package mocks -destination mocks/snap_manager_mock.go github.com/juju/juju/container/lxd SnapManager
@@ -57,14 +53,14 @@ var _ container.Initialiser = (*containerInitialiser)(nil)
 
 // NewContainerInitialiser returns an instance used to perform the steps
 // required to allow a host machine to run a LXC container.
-func NewContainerInitialiser(lxdSnapChannel string) container.Initialiser {
+func NewContainerInitialiser(lxdSnapChannel, containerNetworkingMethod string) container.Initialiser {
 	ci := &containerInitialiser{
-		getExecCommand:   exec.Command,
-		lxdSnapChannel:   lxdSnapChannel,
-		isRunningLocally: isRunningLocally,
-		newLocalServer:   NewLocalServer,
+		containerNetworkingMethod: containerNetworkingMethod,
+		getExecCommand:            exec.Command,
+		lxdSnapChannel:            lxdSnapChannel,
+		isRunningLocally:          isRunningLocally,
+		newLocalServer:            NewLocalServer,
 	}
-	ci.configureLxdBridge = ci.internalConfigureLXDBridge
 	ci.configureLxdProxies = internalConfigureLXDProxies
 	return ci
 }
@@ -79,24 +75,53 @@ func (ci *containerInitialiser) Initialise() error {
 	if err := ensureDependencies(ci.lxdSnapChannel, localSeries); err != nil {
 		return errors.Trace(err)
 	}
-	err = ci.configureLxdBridge()
-	if err != nil {
-		return errors.Trace(err)
-	}
 	proxies := proxy.DetectProxies()
 	err = ci.configureLxdProxies(proxies, ci.isRunningLocally, ci.newLocalServer)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	output, err := ci.getExecCommand(
-		"lxd",
-		"init",
-		"--auto",
-	).CombinedOutput()
+	var output []byte
+	if ci.containerNetworkingMethod == "local" {
+		output, err = ci.getExecCommand(
+			"lxd",
+			"init",
+			"--auto",
+		).CombinedOutput()
 
-	if err == nil {
-		return nil
+		if err == nil {
+			return nil
+		}
+
+	} else {
+
+		lxdInitCfg := `config: {}
+networks: []
+storage_pools:
+- config: {}
+  description: ""
+  name: default
+  driver: dir
+profiles:
+- config: {}
+  description: ""
+  devices:
+    root:
+      path: /
+      pool: default
+      type: disk
+  name: default
+projects: []
+cluster: null`
+
+		cmd := ci.getExecCommand("lxd", "init", "--preseed")
+		cmd.Stdin = strings.NewReader(lxdInitCfg)
+
+		output, err = cmd.CombinedOutput()
+
+		if err == nil {
+			return nil
+		}
 	}
 
 	out := string(output)
@@ -105,7 +130,7 @@ func (ci *containerInitialiser) Initialise() error {
 		return nil
 	}
 
-	return errors.Annotate(err, "running lxd init --auto: "+out)
+	return errors.Annotate(err, "running lxd init: "+out)
 }
 
 // ConfigureLXDProxies will try to set the lxc config core.proxy_http and
@@ -155,33 +180,6 @@ var df = func(path string) (uint64, error) {
 	return uint64(statfs.Bsize) * statfs.Bfree, nil
 }
 
-func (ci *containerInitialiser) internalConfigureLXDBridge() error {
-	server, err := ci.newLocalServer()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// We do not support LXD versions without the network API,
-	// which was added in 2.3.
-	if !server.networkAPISupport {
-		return errors.NotSupportedf("versions of LXD without network API")
-	}
-
-	profile, eTag, err := server.GetProfile(lxdDefaultProfileName)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// If there are no suitable bridged NICs in the profile,
-	// ensure the bridge is set up and create one.
-	if server.verifyNICsWithAPI(getProfileNICs(profile)) == nil {
-		return nil
-	}
-	return server.ensureDefaultNetworking(profile, eTag)
-}
-
-var interfaceAddrs = func() ([]net.Addr, error) {
-	return net.InterfaceAddrs()
-}
-
 // ensureDependencies install the required dependencies for running LXD.
 func ensureDependencies(lxdSnapChannel, series string) error {
 	// If the snap is already installed, check whether the operator asked
@@ -217,92 +215,13 @@ func ensureDependencies(lxdSnapChannel, series string) error {
 // lxdViaSnap interrogates the location of the Snap LXD socket in order
 // to determine if LXD is being provided via that method.
 var lxdViaSnap = func() bool {
-	return shared.IsUnixSocket("/var/snap/lxd/common/lxd/unix.socket")
+	return IsUnixSocket("/var/snap/lxd/common/lxd/unix.socket")
 }
 
 // randomizedOctetRange is a variable for testing purposes.
 var randomizedOctetRange = func() []int {
 	rand.Seed(time.Now().UnixNano())
 	return rand.Perm(255)
-}
-
-// getKnownV4IPsAndCIDRs iterates all of the known Addresses on this machine
-// and groups them up into known CIDRs and IP addresses.
-func getKnownV4IPsAndCIDRs(addrFunc func() ([]net.Addr, error)) ([]net.IP, []*net.IPNet, error) {
-	addrs, err := addrFunc()
-	if err != nil {
-		return nil, nil, errors.Annotate(err, "cannot get network interface addresses")
-	}
-
-	knownIPs := []net.IP{}
-	seenIPs := set.NewStrings()
-	knownCIDRs := []*net.IPNet{}
-	seenCIDRs := set.NewStrings()
-	for _, netAddr := range addrs {
-		ip, ipNet, err := net.ParseCIDR(netAddr.String())
-		if err != nil {
-			continue
-		}
-		if ip.To4() == nil {
-			continue
-		}
-		if !seenIPs.Contains(ip.String()) {
-			knownIPs = append(knownIPs, ip)
-			seenIPs.Add(ip.String())
-		}
-		if !seenCIDRs.Contains(ipNet.String()) {
-			knownCIDRs = append(knownCIDRs, ipNet)
-			seenCIDRs.Add(ipNet.String())
-		}
-	}
-	return knownIPs, knownCIDRs, nil
-}
-
-// findNextAvailableIPv4Subnet scans the list of interfaces on the machine
-// looking for 10.0.0.0/16 networks and returns the next subnet not in
-// use, having first detected the highest subnet. The next subnet can
-// actually be lower if we overflowed 255 whilst seeking out the next
-// unused subnet. If all subnets are in use an error is returned.
-//
-// TODO(frobware): this is not an ideal solution as it doesn't take
-// into account any static routes that may be set up on the machine.
-//
-// TODO(frobware): this only caters for IPv4 setups.
-func findNextAvailableIPv4Subnet() (string, error) {
-	knownIPs, knownCIDRs, err := getKnownV4IPsAndCIDRs(interfaceAddrs)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-
-	randomized3rdSegment := randomizedOctetRange()
-	for _, i := range randomized3rdSegment {
-		// lxd randomizes the 2nd and 3rd segments, we should be fine with the
-		// 3rd only
-		ip, ip10network, err := net.ParseCIDR(fmt.Sprintf("10.0.%d.0/24", i))
-		if err != nil {
-			return "", errors.Trace(err)
-		}
-
-		collides := false
-		for _, kIP := range knownIPs {
-			if ip10network.Contains(kIP) {
-				collides = true
-				break
-			}
-		}
-		if !collides {
-			for _, kNet := range knownCIDRs {
-				if kNet.Contains(ip) || ip10network.Contains(kNet.IP) {
-					collides = true
-					break
-				}
-			}
-		}
-		if !collides {
-			return fmt.Sprintf("%d", i), nil
-		}
-	}
-	return "", errors.New("could not find unused subnet")
 }
 
 func isRunningLocally() (bool, error) {

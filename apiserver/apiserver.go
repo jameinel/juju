@@ -48,6 +48,7 @@ import (
 
 	"github.com/juju/juju/core/resources"
 
+	coredatabase "github.com/juju/juju/core/database"
 	"github.com/juju/juju/pubsub/apiserver"
 	controllermsg "github.com/juju/juju/pubsub/controller"
 	"github.com/juju/juju/resource"
@@ -69,6 +70,10 @@ type Server struct {
 	wg        sync.WaitGroup
 
 	shared *sharedServerContext
+
+	// jwtTokenService manages the refresh of the login
+	// token public key.
+	jwtTokenService *jwtService
 
 	// tag of the machine where the API server is running.
 	tag                    names.Tag
@@ -199,12 +204,14 @@ type ServerConfig struct {
 	// ExecEmbeddedCommand is a function which creates an embedded Juju CLI instance.
 	ExecEmbeddedCommand ExecEmbeddedCommandFunc
 
-	// RaftOpQueue is used by the API to apply operations to the raft
-	// instance.
-	RaftOpQueue Queue
-
 	// CharmhubHTTPClient is the HTTP client used for Charmhub API requests.
 	CharmhubHTTPClient facade.HTTPClient
+
+	// DBGetter supplies sql.DB references on request, for named databases.
+	DBGetter coredatabase.DBGetter
+
+	// EntityHasPermissionFunc checks whether a target has the required permission.
+	EntityHasPermissionFunc entityHasPermissionFunc
 }
 
 // Validate validates the API server configuration.
@@ -253,9 +260,6 @@ func (c ServerConfig) Validate() error {
 	if c.MetricsCollector == nil {
 		return errors.NotValidf("missing MetricsCollector")
 	}
-	if c.RaftOpQueue == nil {
-		return errors.NotValidf("missing RaftOpQueue")
-	}
 	return nil
 }
 
@@ -278,7 +282,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	// Important note:
 	// Do not manipulate the state within NewServer as the API
 	// server needs to run before mongo upgrades have happened and
-	// any state manipulation may be be relying on features of the
+	// any state manipulation may be relying on features of the
 	// database added by upgrades. Here be dragons.
 	return newServer(cfg)
 }
@@ -303,9 +307,10 @@ func newServer(cfg ServerConfig) (_ *Server, err error) {
 		presence:            cfg.Presence,
 		leaseManager:        cfg.LeaseManager,
 		controllerConfig:    controllerConfig,
-		raftOpQueue:         cfg.RaftOpQueue,
 		logger:              loggo.GetLogger("juju.apiserver"),
 		charmhubHTTPClient:  cfg.CharmhubHTTPClient,
+		dbGetter:            cfg.DBGetter,
+		entityHasPermission: cfg.EntityHasPermissionFunc,
 	})
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -359,6 +364,24 @@ func newServer(cfg ServerConfig) (_ *Server, err error) {
 
 		healthStatus: "starting",
 	}
+	if refreshURL := controllerConfig.LoginTokenRefreshURL(); refreshURL != "" {
+		if !strings.Contains(refreshURL, "wellknown") {
+			refreshURL = strings.Trim(refreshURL, "/") + "/.well-known/jwks.json"
+		}
+		srv.jwtTokenService = &jwtService{
+			refreshURL: refreshURL,
+		}
+
+		httpClient := &http.Client{
+			Timeout: 30 * time.Second,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		if err := srv.jwtTokenService.RegisterJWKSCache(context.TODO(), httpClient); err != nil {
+			logger.Warningf("failed to refresh jwt cache: %v", err)
+		}
+	}
 	srv.updateAgentRateLimiter(controllerConfig)
 	srv.updateResourceDownloadLimiters(controllerConfig)
 
@@ -383,7 +406,7 @@ func newServer(cfg ServerConfig) (_ *Server, err error) {
 	srv.shared.cancel = srv.tomb.Dying()
 
 	// The auth context for authenticating access to application offers.
-	srv.offerAuthCtxt, err = newOfferAuthcontext(cfg.StatePool)
+	srv.offerAuthCtxt, err = newOfferAuthContext(cfg.StatePool, srv.jwtTokenService)
 	if err != nil {
 		unsubscribeControllerConfig()
 		return nil, errors.Trace(err)
@@ -578,7 +601,7 @@ func (w httpRequestRecorderWrapper) Record(method string, url *url.URL, res *htt
 	w.collector.TotalRequestsDuration.WithLabelValues(w.modelUUID, url.Host).Observe(rtt.Seconds())
 }
 
-// Record an outgoing request which returned back an error.
+// RecordError records an outgoing request that returned back an error.
 func (w httpRequestRecorderWrapper) RecordError(method string, url *url.URL, err error) {
 	// Note: Do not log url.Path as REST queries _can_ include the name of the
 	// entities (charms, architectures, etc).
@@ -621,6 +644,7 @@ func (srv *Server) loop(ready chan struct{}) error {
 
 func (srv *Server) endpoints() ([]apihttp.Endpoint, error) {
 	const modelRoutePrefix = "/model/:modeluuid"
+	const charmsObjectsRoutePrefix = "/:bucket/charms/:object"
 
 	type handler struct {
 		pattern         string
@@ -651,6 +675,7 @@ func (srv *Server) endpoints() ([]apihttp.Endpoint, error) {
 				Handler:       h,
 				Authenticator: srv.authenticator,
 				Authorizer:    handler.authorizer,
+				TokenParser:   srv.jwtTokenService,
 			}
 		}
 		if !handler.noModelUUID {
@@ -658,6 +683,11 @@ func (srv *Server) endpoints() ([]apihttp.Endpoint, error) {
 				h = &httpcontext.QueryModelHandler{
 					Handler: h,
 					Query:   ":modeluuid",
+				}
+			} else if strings.HasPrefix(handler.pattern, charmsObjectsRoutePrefix) {
+				h = &httpcontext.BucketModelHandler{
+					Handler: h,
+					Query:   ":bucket",
 				}
 			} else {
 				h = &httpcontext.ImpliedModelHandler{
@@ -683,7 +713,8 @@ func (srv *Server) endpoints() ([]apihttp.Endpoint, error) {
 	debugLogHandler := newDebugLogDBHandler(
 		httpCtxt, srv.authenticator,
 		tagKindAuthorizer{names.MachineTagKind, names.ControllerAgentTagKind, names.UserTagKind,
-			names.ApplicationTagKind})
+			names.ApplicationTagKind},
+		srv.jwtTokenService)
 	pubsubHandler := newPubSubHandler(httpCtxt, srv.shared.centralHub)
 	logSinkHandler := logsink.NewHTTPHandler(
 		newAgentLogWriteCloserFunc(httpCtxt, srv.logSinkWriter, &srv.apiServerLoggers),
@@ -720,6 +751,15 @@ func (srv *Server) endpoints() ([]apihttp.Endpoint, error) {
 		GetHandler:  modelCharmsHandler.ServeGet,
 	}
 	modelCharmsUploadAuthorizer := tagKindAuthorizer{names.UserTagKind}
+
+	modelObjectsCharmsHandler := &objectsCharmHandler{
+		ctxt: httpCtxt,
+	}
+	modelObjectsCharmsHTTPHandler := &objectsCharmHTTPHandler{
+		GetHandler:          modelObjectsCharmsHandler.ServeGet,
+		LegacyCharmsHandler: modelCharmsHTTPHandler,
+	}
+
 	modelToolsUploadHandler := &toolsUploadHandler{
 		ctxt:          httpCtxt,
 		stateAuthFunc: httpCtxt.stateForRequestAuthenticatedUser,
@@ -767,7 +807,12 @@ func (srv *Server) endpoints() ([]apihttp.Endpoint, error) {
 		},
 	}
 
-	controllerAdminAuthorizer := controllerAdminAuthorizer{systemState}
+	controllerAdminAuthorizer := controllerAdminAuthorizer{
+		controllerTag: systemState.ControllerTag(),
+		entityHasPermission: func() entityHasPermissionFunc {
+			return srv.shared.entityHasPermission
+		},
+	}
 	migrateCharmsHandler := &charmsHandler{
 		ctxt:          httpCtxt,
 		dataDir:       srv.dataDir,
@@ -930,6 +975,10 @@ func (srv *Server) endpoints() ([]apihttp.Endpoint, error) {
 		methods:    []string{"POST"},
 		handler:    modelCharmsHTTPHandler,
 		authorizer: modelCharmsUploadAuthorizer,
+	}, {
+		pattern: charmsObjectsRoutePrefix,
+		methods: []string{"GET"},
+		handler: modelObjectsCharmsHTTPHandler,
 	}}
 	if srv.registerIntrospectionHandlers != nil {
 		add := func(subpath string, h http.Handler) {
@@ -1066,6 +1115,7 @@ func (srv *Server) serveConn(
 	if err != nil {
 		conn.ServeRoot(&errRoot{errors.Trace(err)}, recorderFactory, serverError)
 	} else {
+		srv.shared.entityHasPermission = h.EntityHasPermission
 		// Set up the admin apis used to accept logins and direct
 		// requests to the relevant business facade.
 		// There may be more than one since we need a new API each

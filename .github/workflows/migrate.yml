@@ -30,7 +30,7 @@ jobs:
 
       - name: Setup LXD
         if: matrix.cloud == 'lxd'
-        uses: canonical/setup-lxd@90d76101915da56a42a562ba766b1a77019242fd
+        uses: canonical/setup-lxd@ea57509243d3cf39f8ab926e021bb353947b01b5
 
       - name: Install Juju 3.0
         run: sudo snap install juju --channel 3.0/stable
@@ -45,7 +45,7 @@ jobs:
           # TODO: add users/permissions/models and test that those migrate over
 
       - name: Set up Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
 
       - name: Set up Go env
         run: |

@@ -14,11 +14,13 @@ import (
 	"github.com/juju/charm/v10/assumes"
 	"github.com/juju/errors"
 	"github.com/juju/names/v4"
+	"github.com/juju/schema"
 	"github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/utils/v3"
 	"github.com/juju/version/v2"
 	gc "gopkg.in/check.v1"
+	"gopkg.in/juju/environschema.v1"
 
 	apitesting "github.com/juju/juju/api/testing"
 	"github.com/juju/juju/apiserver/common"
@@ -131,6 +133,7 @@ func (s *ApplicationSuite) SetUpTest(c *gc.C) {
 		Endpoints:   []charm.Relation{{Name: "database", Interface: "mysql", Role: "provider"}},
 		Spaces:      []*environs.ProviderSpaceInfo{},
 		Macaroon:    testMac,
+		AuthToken:   "auth-token",
 	}
 
 	s.consumeApplicationArgs = params.ConsumeApplicationArgs{
@@ -143,7 +146,8 @@ func (s *ApplicationSuite) SetUpTest(c *gc.C) {
 				Endpoints:              []params.RemoteEndpoint{{Name: "database", Interface: "mysql", Role: "provider"}},
 				OfferURL:               "othermodel.hosted-mysql",
 			},
-			Macaroon: testMac,
+			Macaroon:  testMac,
+			AuthToken: "auth-token",
 		}},
 	}
 }
@@ -188,6 +192,7 @@ func (s *ApplicationSuite) setup(c *gc.C) *gomock.Controller {
 		s.backend,
 		s.storageAccess,
 		s.authorizer,
+		nil,
 		nil,
 		s.blockChecker,
 		s.model,
@@ -351,6 +356,36 @@ func (s *ApplicationSuite) TestSetCharm(c *gc.C) {
 		ApplicationName: "postgresql",
 		CharmURL:        curl.String(),
 		CharmOrigin:     createCharmOriginFromURL(curl),
+	})
+	c.Assert(err, jc.ErrorIsNil)
+}
+
+func (s *ApplicationSuite) TestSetCharmEverything(c *gc.C) {
+	ctrl := s.setup(c)
+	defer ctrl.Finish()
+
+	ch := s.expectDefaultCharm(ctrl)
+	curl := charm.MustParseURL("ch:something-else")
+	s.backend.EXPECT().Charm(curl).Return(ch, nil)
+
+	app := s.expectDefaultApplication(ctrl)
+	app.EXPECT().SetCharm(state.SetCharmConfig{
+		Charm:          &state.Charm{},
+		CharmOrigin:    createStateCharmOriginFromURL(curl),
+		ConfigSettings: charm.Settings{"stringOption": "foo", "intOption": int64(666)},
+	})
+
+	schemaFields, defaults, err := application.AddTrustSchemaAndDefaults(environschema.Fields{}, schema.Defaults{})
+	c.Assert(err, jc.ErrorIsNil)
+	app.EXPECT().UpdateApplicationConfig(coreconfig.ConfigAttributes{"trust": true}, nil, schemaFields, defaults)
+	s.backend.EXPECT().Application("postgresql").Return(app, nil)
+
+	err = s.api.SetCharm(params.ApplicationSetCharm{
+		ApplicationName:    "postgresql",
+		CharmURL:           curl.String(),
+		CharmOrigin:        createCharmOriginFromURL(curl),
+		ConfigSettings:     map[string]string{"trust": "true", "stringOption": "foo"},
+		ConfigSettingsYAML: `postgresql: {"stringOption": "bar", "intOption": 666}`,
 	})
 	c.Assert(err, jc.ErrorIsNil)
 }
@@ -551,7 +586,7 @@ func (s *ApplicationSuite) TestSetCharmUpgradeFormat(c *gc.C) {
 			Track: "22.04",
 			Risk:  "stable",
 		},
-	}}}, nil)
+	}}}, defaultCharmConfig)
 	curl := charm.MustParseURL("ch:postgresql")
 	s.backend.EXPECT().Charm(curl).Return(ch, nil)
 
@@ -2371,6 +2406,29 @@ func (s *ApplicationSuite) TestSetRelationSuspendedFalse(c *gc.C) {
 	})
 	c.Assert(err, jc.ErrorIsNil)
 	c.Assert(results.OneError(), gc.IsNil)
+}
+
+func (s *ApplicationSuite) TestSetRelationSuspendedPermission(c *gc.C) {
+	ctrl := s.setup(c)
+	defer ctrl.Finish()
+
+	rel := s.expectRelation(ctrl, "wordpress:db mysql:db", true)
+	s.backend.EXPECT().Relation(123).Return(rel, nil)
+
+	offerConn := mocks.NewMockOfferConnection(ctrl)
+	offerConn.EXPECT().OfferUUID().Return("offer-uuid")
+	offerConn.EXPECT().UserName().Return("fred")
+	s.backend.EXPECT().OfferConnectionForRelation("wordpress:db mysql:db").Return(offerConn, nil)
+	s.backend.EXPECT().ApplicationOfferForUUID("offer-uuid").Return(&crossmodel.ApplicationOffer{OfferUUID: "mysql"}, nil)
+
+	results, err := s.api.SetRelationsSuspended(params.RelationSuspendedArgs{
+		Args: []params.RelationSuspendedArg{{
+			RelationId: 123,
+			Suspended:  false,
+		}},
+	})
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(results.OneError(), gc.ErrorMatches, "permission denied")
 }
 
 func (s *ApplicationSuite) TestSetNonOfferRelationStatus(c *gc.C) {

@@ -5,6 +5,7 @@ package firewaller
 
 import (
 	"sort"
+	"strconv"
 
 	"github.com/juju/collections/set"
 	"github.com/juju/errors"
@@ -17,7 +18,6 @@ import (
 	apiservererrors "github.com/juju/juju/apiserver/errors"
 	"github.com/juju/juju/apiserver/facade"
 	"github.com/juju/juju/core/network"
-	corefirewall "github.com/juju/juju/core/network/firewall"
 	"github.com/juju/juju/core/status"
 	"github.com/juju/juju/rpc/params"
 	"github.com/juju/juju/state"
@@ -167,6 +167,54 @@ func (f *FirewallerAPI) watchOneModelOpenedPorts(tag names.Tag) (string, []strin
 		return f.resources.Register(watch), changes, nil
 	}
 	return "", nil, watcher.EnsureErr(watch)
+}
+
+// ModelFirewallRules returns the firewall rules that this model is
+// configured to open
+func (f *FirewallerAPI) ModelFirewallRules() (params.IngressRulesResult, error) {
+	cfg, err := f.st.ModelConfig()
+	if err != nil {
+		return params.IngressRulesResult{Error: apiservererrors.ServerError(err)}, nil
+	}
+	ctrlCfg, err := f.st.ControllerConfig()
+	if err != nil {
+		return params.IngressRulesResult{Error: apiservererrors.ServerError(err)}, nil
+	}
+	isController := f.st.IsController()
+
+	var rules []params.IngressRule
+	sshAllow := cfg.SSHAllow()
+	if len(sshAllow) != 0 {
+		portRange := params.FromNetworkPortRange(network.MustParsePortRange("22"))
+		rules = append(rules, params.IngressRule{PortRange: portRange, SourceCIDRs: sshAllow})
+	}
+	if isController {
+		portRange := params.FromNetworkPortRange(network.MustParsePortRange(strconv.Itoa(ctrlCfg.APIPort())))
+		rules = append(rules, params.IngressRule{PortRange: portRange, SourceCIDRs: []string{"0.0.0.0/0"}})
+	}
+	if isController && ctrlCfg.AutocertDNSName() != "" {
+		portRange := params.FromNetworkPortRange(network.MustParsePortRange("80"))
+		rules = append(rules, params.IngressRule{PortRange: portRange, SourceCIDRs: []string{"0.0.0.0/0"}})
+	}
+	return params.IngressRulesResult{
+		Rules: rules,
+	}, nil
+}
+
+// WatchModelFirewallRules returns a NotifyWatcher that notifies of
+// potential changes to a model's configured firewall rules
+func (f *FirewallerAPI) WatchModelFirewallRules() (params.NotifyWatchResult, error) {
+	watch, err := NewModelFirewallRulesWatcher(f.st)
+	if err != nil {
+		return params.NotifyWatchResult{Error: apiservererrors.ServerError(err)}, nil
+	}
+
+	if _, ok := <-watch.Changes(); ok {
+		return params.NotifyWatchResult{NotifyWatcherId: f.resources.Register(watch)}, nil
+	} else {
+		err := watcher.EnsureErr(watch)
+		return params.NotifyWatchResult{Error: apiservererrors.ServerError(err)}, nil
+	}
 }
 
 // GetAssignedMachine returns the assigned machine tag (if any) for
@@ -347,25 +395,6 @@ func (f *FirewallerAPI) SetRelationsStatus(args params.SetStatus) (params.ErrorR
 			Message: entity.Info,
 		})
 		result.Results[i].Error = apiservererrors.ServerError(err)
-	}
-	return result, nil
-}
-
-// FirewallRules returns the firewall rules for the specified well known service types.
-func (f *FirewallerAPI) FirewallRules(args params.KnownServiceArgs) (params.ListFirewallRulesResults, error) {
-	var result params.ListFirewallRulesResults
-	for _, knownService := range args.KnownServices {
-		rule, err := f.st.FirewallRule(corefirewall.WellKnownServiceType(knownService))
-		if err != nil && !errors.IsNotFound(err) {
-			return result, apiservererrors.ServerError(err)
-		}
-		if err != nil {
-			continue
-		}
-		result.Rules = append(result.Rules, params.FirewallRule{
-			KnownService:   knownService,
-			WhitelistCIDRS: rule.WhitelistCIDRs(),
-		})
 	}
 	return result, nil
 }
@@ -655,4 +684,11 @@ func (f *FirewallerAPI) watchModelSubnets(filterFn func(interface{}) bool) (stri
 		return f.resources.Register(watch), changes, nil
 	}
 	return "", nil, watcher.EnsureErr(watch)
+}
+
+func setEquals(a, b set.Strings) bool {
+	if a.Size() != b.Size() {
+		return false
+	}
+	return a.Intersection(b).Size() == a.Size()
 }

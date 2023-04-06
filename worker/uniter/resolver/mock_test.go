@@ -32,6 +32,11 @@ type mockOpFactory struct {
 	op mockOp
 }
 
+func (f *mockOpFactory) NewInstall(charmURL string) (operation.Operation, error) {
+	f.MethodCall(f, "NewInstall", charmURL)
+	return f.op, f.NextErr()
+}
+
 func (f *mockOpFactory) NewUpgrade(charmURL string) (operation.Operation, error) {
 	f.MethodCall(f, "NewUpgrade", charmURL)
 	return f.op, f.NextErr()
@@ -115,7 +120,6 @@ func (op mockOp) Commit(st operation.State) (*operation.State, error) {
 type mockCharmDirGuard struct {
 	fortress.Guard
 	testing.Stub
-	commit func(operation.State) (*operation.State, error)
 }
 
 func (l *mockCharmDirGuard) Unlock() error {

@@ -25,7 +25,7 @@ type ExternalControllerInfoResult struct {
 	Error  *Error                  `json:"error"`
 }
 
-// SetControllersInfoParams contains the parameters for setting the
+// SetExternalControllersInfoParams contains the parameters for setting the
 // info for a set of external controllers.
 type SetExternalControllersInfoParams struct {
 	Controllers []SetExternalControllerInfoParams `json:"controllers"`
@@ -183,6 +183,9 @@ type ConsumeApplicationArg struct {
 
 	// Macaroon is used for authentication.
 	Macaroon *macaroon.Macaroon `json:"macaroon,omitempty"`
+
+	// AuthToken is the JWT used for auth.
+	AuthToken string `json:"auth-token,omitempty"`
 
 	// ControllerInfo contains connection details to the controller
 	// hosting the offer.
@@ -545,6 +548,9 @@ type RegisterRemoteRelationArg struct {
 
 	// BakeryVersion is the version of the bakery used to mint macaroons.
 	BakeryVersion bakery.Version `json:"bakery-version,omitempty"`
+
+	// AuthToken is the JWT used for auth.
+	AuthToken string `json:"auth-token,omitempty"`
 }
 
 // RegisterRemoteRelationArgs holds args used to add remote relations.
@@ -558,7 +564,7 @@ type RegisterRemoteRelationResult struct {
 	Error  *Error                 `json:"error,omitempty"`
 }
 
-// RemoteRemoteRelationResults has a set of remote relation results.
+// RegisterRemoteRelationResults has a set of remote relation results.
 type RegisterRemoteRelationResults struct {
 	Results []RegisterRemoteRelationResult `json:"results,omitempty"`
 }
@@ -626,6 +632,7 @@ type RemoteApplicationInfoResults struct {
 type ConsumeOfferDetails struct {
 	Offer          *ApplicationOfferDetails `json:"offer,omitempty"`
 	Macaroon       *macaroon.Macaroon       `json:"macaroon,omitempty"`
+	AuthToken      string                   `json:"auth-token,omitempty"`
 	ControllerInfo *ExternalControllerInfo  `json:"external-controller,omitempty"`
 }
 
@@ -654,7 +661,7 @@ type RemoteEntities struct {
 	Tokens []string `json:"tokens"`
 }
 
-// RelationUnit holds a remote relation token and a unit tag.
+// RemoteRelationUnit holds a remote relation token and a unit tag.
 type RemoteRelationUnit struct {
 	RelationToken string         `json:"relation-token"`
 	Unit          string         `json:"unit"`
@@ -667,7 +674,7 @@ type RemoteRelationUnits struct {
 	RelationUnits []RemoteRelationUnit `json:"relation-units"`
 }
 
-// ModifyModelAccessRequest holds the parameters for making grant and revoke offer calls.
+// ModifyOfferAccessRequest holds the parameters for making grant and revoke offer calls.
 type ModifyOfferAccessRequest struct {
 	Changes []ModifyOfferAccess `json:"changes"`
 }
