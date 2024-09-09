@@ -51,7 +51,7 @@ This document provides a detailed specification of
 
 - **Facade** A registered and versioned type which is addressed by API 
   requests. It creates an instance providing a set of methods for one 
-  entity or a cohesive functionality.
+  entity for cohesive functionality.
 - **JSON** JavaScript Object Notation
 - **RPC** Remote Procedure Calls
 - **WebSocket** A full-duplex TCP communication protocol standardized by
