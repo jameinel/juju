@@ -51,8 +51,16 @@ a facade instance. This type implements a set of *methods* for handling of the
 requests as described in the [specification document](juju-api-design-specification.md).
 
 All API facade packages are located inside the package
-[apiserver](https://github.com/juju/juju/tree/master/apiserver). For example, here you'll
-find the package [agent](https://github.com/juju/juju/tree/master/apiserver/agent), which
+[apiserver](https://github.com/juju/juju/tree/master/apiserver). They are further broken down into three main
+categories [controller](https://github.com/juju/juju/tree/master/apiserver/facades/controller),
+[agent](https://github.com/juju/juju/tree/master/apiserver/facades/agent),
+and [client](https://github.com/juju/juju/tree/master/apiserver/facades/client).
+This divides the broad categorization of what client would use this functionality. Controller defines facades
+that are used by workers that run solely inside the controller (provisioner, model manager), agent is facades
+for workers that are driven by machine and unit agents, and client is for external client functionality.
+
+For example, here you'll
+find the package [agent](https://github.com/juju/juju/tree/master/apiserver/facades/agent/agent), which
 implements the API interface used by Machine and Unit agents.
 
 You can see that in the `init()` function it registers the factory for version 0 of the
