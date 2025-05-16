@@ -118,6 +118,18 @@ type Server struct {
 	agentRateLimitMax  int
 	agentRateLimitRate time.Duration
 	agentRateLimit     *ratelimit.Bucket
+	// identityRateLimitMax and Rate track a given identity (user or
+	// agent), and limit how quickly they can login. Default is to not
+	// allow much burst and only 1 login/s.
+	identityRateLimitMax int
+	identityRateLimitRate time.Duration
+	identityRateLimit map[string]*ratelimit.Bucket
+	// addressRateLimitMax and Rate track a given IP address trying to connect
+	// we want to avoid hard DOS, so we slow things down a little bit from any
+	// given address. We allow a bit more burst
+	addressRateLimitMax int
+	addressRateLimitRate time.Duration
+	addressRateLimit map[string]*ratelimit.Bucket
 
 	// resourceLock is used to limit the number of
 	// concurrent resource downloads to units.
@@ -378,7 +390,7 @@ func newServer(cfg ServerConfig) (_ *Server, err error) {
 
 		healthStatus: "starting",
 	}
-	srv.updateAgentRateLimiter(controllerConfig)
+	srv.updateRateLimiting(controllerConfig)
 	srv.updateResourceDownloadLimiters(controllerConfig)
 
 	// We are able to get the current controller config before subscribing to changes
@@ -391,7 +403,7 @@ func newServer(cfg ServerConfig) (_ *Server, err error) {
 				logger.Criticalf("programming error in %s message data: %v", topic, err)
 				return
 			}
-			srv.updateAgentRateLimiter(data.Config)
+			srv.updateRateLimiting(data.Config)
 			srv.updateResourceDownloadLimiters(data.Config)
 		})
 	if err != nil {
@@ -473,6 +485,10 @@ func (srv *Server) Report() map[string]interface{} {
 	result := map[string]interface{}{
 		"agent-ratelimit-max":  srv.agentRateLimitMax,
 		"agent-ratelimit-rate": srv.agentRateLimitRate,
+		"identity-ratelimit-max":  srv.identityRateLimitMax,
+		"identity-ratelimit-rate": srv.identityRateLimitRate,
+		"address-ratelimit-max":  srv.addressRateLimitMax,
+		"address-ratelimit-rate": srv.addressRateLimitRate,
 	}
 
 	if srv.publicDNSName_ != "" {
@@ -503,7 +519,7 @@ func (srv *Server) Wait() error {
 	return srv.tomb.Wait()
 }
 
-func (srv *Server) updateAgentRateLimiter(cfg controller.Config) {
+func (srv *Server) updateRateLimiting(cfg controller.Config) {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 	srv.agentRateLimitMax = cfg.AgentRateLimitMax()
@@ -514,6 +530,11 @@ func (srv *Server) updateAgentRateLimiter(cfg controller.Config) {
 	} else {
 		srv.agentRateLimit = nil
 	}
+	srv.identityRateLimitMax = cfg.AgentRateLimitMax()
+	srv.identityRateLimitRate = cfg.AgentRateLimitRate()
+	srv.addressRateLimitMax = cfg.AgentRateLimitMax()
+	srv.addressRateLimitRate = cfg.AgentRateLimitRate()
+	// TODO (jam): 2025-05-16 reset the existing buckets
 }
 
 func (srv *Server) updateResourceDownloadLimiters(cfg controller.Config) {
@@ -543,6 +564,21 @@ func (srv *Server) getAgentToken() error {
 	defer srv.mu.Unlock()
 	// agentRateLimit is nil if rate limiting is disabled.
 	if srv.agentRateLimit == nil {
+		return nil
+	}
+
+	// Try to take one token, but don't wait any time for it.
+	if _, ok := srv.agentRateLimit.TakeMaxDuration(1, 0); !ok {
+		return apiservererrors.ErrTryAgain
+	}
+	return nil
+}
+
+func (srv *Server) getIdentityToken(identity string) error {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	// agentRateLimit is nil if rate limiting is disabled.
+	if ! srv.identityRateLimit {
 		return nil
 	}
 

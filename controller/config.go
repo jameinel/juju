@@ -63,6 +63,15 @@ const (
 	// the token bucket, in milliseconds (ms).
 	AgentRateLimitRate = "agent-ratelimit-rate"
 
+	// Each unique login identity
+	IdentityRateLimitMax = "identity-ratelimit-max"
+	IdentityRateLimitRate = "identity-ratelimit-rate"
+
+	// Each unique IP address
+	AddressRateLimitMax = "address-ratelimit-max"
+	AddressRateLimitRate = "address-ratelimit-rate"
+
+
 	// APIPortOpenDelay is a duration that the controller will wait
 	// between when the controller has been deemed to be ready to open
 	// the api-port and when the api-port is actually opened. This value
