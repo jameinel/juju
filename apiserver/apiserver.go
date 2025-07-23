@@ -121,15 +121,22 @@ type Server struct {
 	// identityRateLimitMax and Rate track a given identity (user or
 	// agent), and limit how quickly they can login. Default is to not
 	// allow much burst and only 1 login/s.
-	identityRateLimitMax int
-	identityRateLimitRate time.Duration
-	identityRateLimit map[string]*ratelimit.Bucket
+	identityRateLimitMax     int
+	identityRateLimitRate    time.Duration
+	identityRateLimitMaxWait time.Duration
+	identityRateLimitBuckets map[string]*ratelimit.Bucket
 	// addressRateLimitMax and Rate track a given IP address trying to connect
 	// we want to avoid hard DOS, so we slow things down a little bit from any
 	// given address. We allow a bit more burst
-	addressRateLimitMax int
+	addressRateLimitMax  int
 	addressRateLimitRate time.Duration
-	addressRateLimit map[string]*ratelimit.Bucket
+	// addressRateLimitMaxWait will allow us to wait up to this timeout before we decide that we need to EAGAIN
+	addressRateLimitMaxWait time.Duration
+	addressRateLimitBuckets map[string]*ratelimit.Bucket
+
+	// TODO: jam 2025-07-23 We probably want 2 other request limits
+	//  one limit would define the requests per connection limit
+	//  another probably limits total requests
 
 	// resourceLock is used to limit the number of
 	// concurrent resource downloads to units.
@@ -483,12 +490,13 @@ func (srv *Server) Report() map[string]interface{} {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 	result := map[string]interface{}{
-		"agent-ratelimit-max":  srv.agentRateLimitMax,
-		"agent-ratelimit-rate": srv.agentRateLimitRate,
-		"identity-ratelimit-max":  srv.identityRateLimitMax,
-		"identity-ratelimit-rate": srv.identityRateLimitRate,
-		"address-ratelimit-max":  srv.addressRateLimitMax,
-		"address-ratelimit-rate": srv.addressRateLimitRate,
+		"agent-ratelimit-max":       srv.agentRateLimitMax,
+		"agent-ratelimit-rate":      srv.agentRateLimitRate,
+		"identity-ratelimit-max":    srv.identityRateLimitMax,
+		"identity-ratelimit-rate":   srv.identityRateLimitRate,
+		"address-ratelimit-max":     srv.addressRateLimitMax,
+		"address-ratelimit-rate":    srv.addressRateLimitRate,
+		"address-ratelimit-maxwait": srv.addressRateLimitMaxWait,
 	}
 
 	if srv.publicDNSName_ != "" {
@@ -530,11 +538,35 @@ func (srv *Server) updateRateLimiting(cfg controller.Config) {
 	} else {
 		srv.agentRateLimit = nil
 	}
-	srv.identityRateLimitMax = cfg.AgentRateLimitMax()
-	srv.identityRateLimitRate = cfg.AgentRateLimitRate()
-	srv.addressRateLimitMax = cfg.AgentRateLimitMax()
-	srv.addressRateLimitRate = cfg.AgentRateLimitRate()
+	// TODO (jam): 2025-07-23 update the config values here
+	/// srv.identityRateLimitMax = cfg.AgentRateLimitMax()
+	/// srv.identityRateLimitRate = cfg.AgentRateLimitRate()
+	srv.identityRateLimitMax = 2
+	srv.identityRateLimitMaxWait = time.Second
+	srv.identityRateLimitRate = 1
+	/// srv.addressRateLimitMax = cfg.AgentRateLimitMax()
+	/// srv.addressRateLimitMaxWait = cfg.AgentRateLimitMax()
+	/// srv.addressRateLimitRate = cfg.AgentRateLimitRate()
+	srv.addressRateLimitMax = 2
+	srv.addressRateLimitMaxWait = time.Second
+	// Max burst of 2 connections, and a new connection 1/s
+	// TODO (jam): 2025-07-23 this seems quite aggressive but good for testing
+	srv.addressRateLimitRate = 1
 	// TODO (jam): 2025-05-16 reset the existing buckets
+	if srv.identityRateLimitBuckets == nil {
+		if srv.addressRateLimitMax > 0 {
+			srv.identityRateLimitBuckets = make(map[string]*ratelimit.Bucket)
+		}
+	} else if srv.addressRateLimitMax <= 0 {
+		srv.identityRateLimitBuckets = nil
+	}
+	if srv.addressRateLimitBuckets == nil {
+		if srv.addressRateLimitMax > 0 {
+			srv.addressRateLimitBuckets = make(map[string]*ratelimit.Bucket)
+		}
+	} else if srv.addressRateLimitMax <= 0 {
+		srv.addressRateLimitBuckets = nil
+	}
 }
 
 func (srv *Server) updateResourceDownloadLimiters(cfg controller.Config) {
@@ -578,12 +610,48 @@ func (srv *Server) getIdentityToken(identity string) error {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 	// agentRateLimit is nil if rate limiting is disabled.
-	if ! srv.identityRateLimit {
+	if srv.identityRateLimitBuckets == nil {
 		return nil
 	}
 
-	// Try to take one token, but don't wait any time for it.
-	if _, ok := srv.agentRateLimit.TakeMaxDuration(1, 0); !ok {
+	identityBucket, exists := srv.identityRateLimitBuckets[identity]
+	if !exists {
+		identityBucket = ratelimit.NewBucketWithClock(
+			srv.identityRateLimitRate, int64(srv.identityRateLimitMax), rateClock{srv.clock})
+		srv.identityRateLimitBuckets[identity] = identityBucket
+	}
+	// Try to take a token for this new connection from this address. Wait up to MaxWait before deciding that the client needs to try again
+	// maxWait := srv.addressRateLimitMaxWait
+	// if maxWait < 0 {
+	// 	maxWait = infinityDuration
+	// }
+	if _, ok := identityBucket.TakeMaxDuration(1, srv.identityRateLimitMaxWait); !ok {
+		return apiservererrors.ErrTryAgain
+	}
+	return nil
+}
+
+const infinityDuration time.Duration = 0x7fffffffffffffff
+
+func (srv *Server) getAddressToken(remoteAddr string) error {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	// srv.addressRateLimitBuckets is nil if rate limiting is disabled.
+	if srv.addressRateLimitBuckets == nil {
+		return nil
+	}
+	addrBucket, exists := srv.addressRateLimitBuckets[remoteAddr]
+	if !exists {
+		addrBucket = ratelimit.NewBucketWithClock(
+			srv.addressRateLimitRate, int64(srv.addressRateLimitMax), rateClock{srv.clock})
+		srv.addressRateLimitBuckets[remoteAddr] = addrBucket
+	}
+	// Try to take a token for this new connection from this address. Wait up to MaxWait before deciding that the client needs to try again
+	// maxWait := srv.addressRateLimitMaxWait
+	// if maxWait < 0 {
+	// 	maxWait = infinityDuration
+	// }
+	if _, ok := addrBucket.TakeMaxDuration(1, srv.addressRateLimitMaxWait); !ok {
 		return apiservererrors.ErrTryAgain
 	}
 	return nil
@@ -1123,6 +1191,19 @@ func (srv *Server) apiHandler(w http.ResponseWriter, req *http.Request) {
 	apiObserver := srv.newObserver()
 	apiObserver.Join(req, connectionID)
 	defer apiObserver.Leave()
+
+	if err := srv.getAddressToken(req.RemoteAddr); err != nil {
+		// Should probably use a better structure for the error here
+		if errors.Is(err, apiservererrors.ErrTryAgain) {
+			// TODO (jam): 2025-07-23 Should this be a configurable retry delay, or exponential backoff or?
+			//  we do configure how long we will hang server-side for a token to be made available
+			//  but ideally we would also have some mechanism for pushing back on the clients that they
+			//  would listen to
+			w.Header().Set("Retry-After", "1")
+		}
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
 
 	websocket.Serve(w, req, func(conn *websocket.Conn) {
 		modelUUID := httpcontext.RequestModelUUID(req)

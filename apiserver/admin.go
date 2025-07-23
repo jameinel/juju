@@ -225,13 +225,17 @@ func (a *admin) authenticate(ctx context.Context, req params.LoginRequest) (*aut
 		if err == nil {
 			result.tag = tag
 		}
+		if err := a.srv.getIdentityToken(req.AuthTag); err != nil {
+			logger.Tracef("rate limiting for identity: %s", req.AuthTag)
+			return nil, errors.Trace(err)
+		}
 		if err != nil || tag.Kind() != names.UserTagKind {
 			// Either the tag is invalid, or
 			// it's not a user; rate limit it.
 			a.srv.metricsCollector.LoginAttempts.Inc()
 			defer a.srv.metricsCollector.LoginAttempts.Dec()
 
-			// Users are not rate limited, all other entities are.
+			// Agents are rate limited as a group, as well as per-identity
 			if err := a.srv.getAgentToken(); err != nil {
 				logger.Tracef("rate limiting for agent %s", req.AuthTag)
 				return nil, errors.Trace(err)
