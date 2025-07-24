@@ -220,13 +220,15 @@ func (a *admin) authenticate(ctx context.Context, req params.LoginRequest) (*aut
 	}
 
 	logger.Debugf("request authToken: %q", req.Token)
+	rateLogger.Debugf("request authToken: %q for %q", req.Token, req.AuthTag)
 	if req.Token == "" && req.AuthTag != "" {
 		tag, err := names.ParseTag(req.AuthTag)
 		if err == nil {
 			result.tag = tag
 		}
+		logger.Tracef("getting identity token for: %q", req.AuthTag)
 		if err := a.srv.getIdentityToken(req.AuthTag); err != nil {
-			logger.Tracef("rate limiting for identity: %s", req.AuthTag)
+			rateLogger.Debugf("rate limiting for identity: %q", req.AuthTag)
 			return nil, errors.Trace(err)
 		}
 		if err != nil || tag.Kind() != names.UserTagKind {
@@ -237,7 +239,7 @@ func (a *admin) authenticate(ctx context.Context, req params.LoginRequest) (*aut
 
 			// Agents are rate limited as a group, as well as per-identity
 			if err := a.srv.getAgentToken(); err != nil {
-				logger.Tracef("rate limiting for agent %s", req.AuthTag)
+				rateLogger.Tracef("rate limiting for agent %s", req.AuthTag)
 				return nil, errors.Trace(err)
 			}
 		}

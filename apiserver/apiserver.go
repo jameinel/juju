@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -61,6 +62,7 @@ import (
 )
 
 var logger = loggo.GetLogger("juju.apiserver")
+var rateLogger = logger.Child("rate")
 
 var defaultHTTPMethods = []string{"GET", "POST", "HEAD", "PUT", "DELETE", "OPTIONS"}
 
@@ -543,7 +545,7 @@ func (srv *Server) updateRateLimiting(cfg controller.Config) {
 	/// srv.identityRateLimitRate = cfg.AgentRateLimitRate()
 	srv.identityRateLimitMax = 2
 	srv.identityRateLimitMaxWait = time.Second
-	srv.identityRateLimitRate = 1
+	srv.identityRateLimitRate = time.Second
 	/// srv.addressRateLimitMax = cfg.AgentRateLimitMax()
 	/// srv.addressRateLimitMaxWait = cfg.AgentRateLimitMax()
 	/// srv.addressRateLimitRate = cfg.AgentRateLimitRate()
@@ -551,7 +553,7 @@ func (srv *Server) updateRateLimiting(cfg controller.Config) {
 	srv.addressRateLimitMaxWait = time.Second
 	// Max burst of 2 connections, and a new connection 1/s
 	// TODO (jam): 2025-07-23 this seems quite aggressive but good for testing
-	srv.addressRateLimitRate = 1
+	srv.addressRateLimitRate = time.Second
 	// TODO (jam): 2025-05-16 reset the existing buckets
 	if srv.identityRateLimitBuckets == nil {
 		if srv.addressRateLimitMax > 0 {
@@ -611,11 +613,13 @@ func (srv *Server) getIdentityToken(identity string) error {
 	defer srv.mu.Unlock()
 	// agentRateLimit is nil if rate limiting is disabled.
 	if srv.identityRateLimitBuckets == nil {
+		rateLogger.Debugf("identity rate limit buckets is nil, identity: %s", identity)
 		return nil
 	}
 
 	identityBucket, exists := srv.identityRateLimitBuckets[identity]
 	if !exists {
+		rateLogger.Debugf("creating ratelimit bucket for identity: %s", identity)
 		identityBucket = ratelimit.NewBucketWithClock(
 			srv.identityRateLimitRate, int64(srv.identityRateLimitMax), rateClock{srv.clock})
 		srv.identityRateLimitBuckets[identity] = identityBucket
@@ -626,8 +630,10 @@ func (srv *Server) getIdentityToken(identity string) error {
 	// 	maxWait = infinityDuration
 	// }
 	if _, ok := identityBucket.TakeMaxDuration(1, srv.identityRateLimitMaxWait); !ok {
+		rateLogger.Debugf("failed rate limit token for identity: %s", identity)
 		return apiservererrors.ErrTryAgain
 	}
+	rateLogger.Debugf("got rate limit token for identity: %s", identity)
 	return nil
 }
 
@@ -638,10 +644,12 @@ func (srv *Server) getAddressToken(remoteAddr string) error {
 	defer srv.mu.Unlock()
 	// srv.addressRateLimitBuckets is nil if rate limiting is disabled.
 	if srv.addressRateLimitBuckets == nil {
+		rateLogger.Debugf("address rate limit buckets is nil, address: %s", remoteAddr)
 		return nil
 	}
 	addrBucket, exists := srv.addressRateLimitBuckets[remoteAddr]
 	if !exists {
+		rateLogger.Debugf("creating new address bucket for addr: %s", remoteAddr)
 		addrBucket = ratelimit.NewBucketWithClock(
 			srv.addressRateLimitRate, int64(srv.addressRateLimitMax), rateClock{srv.clock})
 		srv.addressRateLimitBuckets[remoteAddr] = addrBucket
@@ -652,8 +660,10 @@ func (srv *Server) getAddressToken(remoteAddr string) error {
 	// 	maxWait = infinityDuration
 	// }
 	if _, ok := addrBucket.TakeMaxDuration(1, srv.addressRateLimitMaxWait); !ok {
+		rateLogger.Debugf("failed to get address token for: %s", remoteAddr)
 		return apiservererrors.ErrTryAgain
 	}
+	rateLogger.Debugf("got address token for: %s", remoteAddr)
 	return nil
 }
 
@@ -1192,7 +1202,12 @@ func (srv *Server) apiHandler(w http.ResponseWriter, req *http.Request) {
 	apiObserver.Join(req, connectionID)
 	defer apiObserver.Leave()
 
-	if err := srv.getAddressToken(req.RemoteAddr); err != nil {
+	remoteHost, _, err := net.SplitHostPort(req.RemoteAddr)
+	if err != nil {
+		rateLogger.Debugf("unable to split host port: %v", err)
+		remoteHost = req.RemoteAddr
+	}
+	if err := srv.getAddressToken(remoteHost); err != nil {
 		// Should probably use a better structure for the error here
 		if errors.Is(err, apiservererrors.ErrTryAgain) {
 			// TODO (jam): 2025-07-23 Should this be a configurable retry delay, or exponential backoff or?
