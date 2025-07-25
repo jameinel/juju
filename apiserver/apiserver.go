@@ -1216,7 +1216,7 @@ func (srv *Server) apiHandler(w http.ResponseWriter, req *http.Request) {
 			//  would listen to
 			w.Header().Set("Retry-After", "1")
 		}
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		http.Error(w, err.Error(), http.StatusTooManyRequests)
 		return
 	}
 

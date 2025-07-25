@@ -93,6 +93,9 @@ func NewServerWithConfig(c *gc.C, statePool *state.StatePool, cfg apiserver.Serv
 	tlsConfig := api.NewTLSConfig(certPool)
 	tlsConfig.ServerName = "juju-apiserver"
 	tlsConfig.Certificates = []tls.Certificate{*coretesting.ServerTLSCert}
+	// TODO (jam): 2025-07-25 investigate https://github.com/shaj13/tlslimit to have a way to avoid too many
+	// 	simultaneous TLS requests (apparently there was a failure mode where there was a slow build of socket
+	//  connections that all triggered their TLS handshakes simultaneously)
 	mux := apiserverhttp.NewMux()
 	httpServer := &httptest.Server{
 		Listener: listener,
