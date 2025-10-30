@@ -327,9 +327,19 @@ func (a *admin) authenticate(ctx context.Context, req params.LoginRequest) (*aut
 		return nil, errors.Unauthorizedf("invalid entity name or password")
 	}
 	// TODO(wallyworld) - we can't yet observe anonymous logins as entity must be non-nil
-	if !result.anonymousLogin {
-		a.apiObserver.Login(a.root.authInfo.Entity.Tag(), a.root.model.ModelTag(), controllerConn, req.UserData)
+	var tag names.Tag
+	if result.anonymousLogin {
+		tag = names.NewUserTag(api.AnonymousUsername)
+	} else {
+		tag = a.root.authInfo.Entity.Tag()
 	}
+	a.apiObserver.Login(tag, a.root.model.ModelTag(), controllerConn, req.UserData)
+	// if !result.anonymousLogin {
+	// 	go func() {
+	// 		<-time.After(time.Minute)
+	// 		_ = a.root.getRpcConn().Close()
+	// 	}()
+	// }
 	a.loggedIn = true
 
 	if startPinger {
