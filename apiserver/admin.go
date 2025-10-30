@@ -83,6 +83,7 @@ func (a *admin) login(ctx context.Context, req params.LoginRequest, loginVersion
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	logger.Criticalf("Login request from %v on file descriptor %v", req.AuthTag, ctx.Value("http-fd"))
 	if a.loggedIn {
 		// This can only happen if Login is called concurrently.
 		return fail, errAlreadyLoggedIn
@@ -334,12 +335,13 @@ func (a *admin) authenticate(ctx context.Context, req params.LoginRequest) (*aut
 		tag = a.root.authInfo.Entity.Tag()
 	}
 	a.apiObserver.Login(tag, a.root.model.ModelTag(), controllerConn, req.UserData)
-	// if !result.anonymousLogin {
-	// 	go func() {
-	// 		<-time.After(time.Minute)
-	// 		_ = a.root.getRpcConn().Close()
-	// 	}()
-	// }
+	if !result.anonymousLogin {
+		go func(httpFD any) {
+			<-time.After(time.Minute)
+			logger.Criticalf("Closing RpcConn: %v", httpFD)
+			_ = a.root.getRpcConn().Close()
+		}(ctx.Value("http-fd"))
+	}
 	a.loggedIn = true
 
 	if startPinger {

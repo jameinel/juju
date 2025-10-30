@@ -160,15 +160,41 @@ func (w *Worker) URL() string {
 	}
 }
 
+// extractRawFd gets the underlying file descriptor from the http connection.
+// This should only be used for informational purposes.
+func extractRawFd(c net.Conn) uintptr {
+	var fd uintptr = uintptr(0)
+	tcpConn, ok := c.(*net.TCPConn)
+	if !ok {
+		return fd
+	}
+	rawConn, err := tcpConn.SyscallConn()
+	if err != nil {
+		return fd
+	}
+	_ = rawConn.Control(func(localfd uintptr) {
+		fd = localfd
+	})
+	return fd
+}
+
+// recordRawFd adds the "http-fd" key containing the raw HTTP file descriptor
+// This can be used for tracking raw file descriptors to their login purpose
+func recordRawFd(ctx context.Context, c net.Conn) context.Context {
+	fd := extractRawFd(c)
+	return context.WithValue(ctx, "http-fd", fd)
+}
+
 func (w *Worker) loop() error {
 	serverLog := log.New(&loggoWrapper{
 		level:  loggo.WARNING,
 		logger: w.logger,
 	}, "", 0) // no prefix and no flags so log.Logger doesn't add extra prefixes
 	server := &http.Server{
-		Handler:   w.config.Mux,
-		TLSConfig: w.config.TLSConfig,
-		ErrorLog:  serverLog,
+		Handler:     w.config.Mux,
+		TLSConfig:   w.config.TLSConfig,
+		ErrorLog:    serverLog,
+		ConnContext: recordRawFd,
 	}
 	go func() {
 		err := server.Serve(tls.NewListener(w.holdable, w.config.TLSConfig))
