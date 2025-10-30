@@ -160,21 +160,40 @@ func (w *Worker) URL() string {
 	}
 }
 
+var logger = loggo.GetLogger("juju.httpserver")
+
 // extractRawFd gets the underlying file descriptor from the http connection.
 // This should only be used for informational purposes.
 func extractRawFd(c net.Conn) uintptr {
 	var fd uintptr = uintptr(0)
-	tcpConn, ok := c.(*net.TCPConn)
-	if !ok {
+	var tcpConn *net.TCPConn
+	switch v := c.(type) {
+	case *net.TCPConn:
+		tcpConn = v
+	case *tls.Conn:
+		tc := v.NetConn()
+		switch tc := tc.(type) {
+		case *net.TCPConn:
+			tcpConn = tc
+		}
+	}
+	if tcpConn == nil {
+		logger.Criticalf("not a TCPConn or tls.Conn wrapping TCPConn %T", c)
 		return fd
 	}
 	rawConn, err := tcpConn.SyscallConn()
 	if err != nil {
+		logger.Criticalf("not a SyscallConn: %v", err)
 		return fd
 	}
-	_ = rawConn.Control(func(localfd uintptr) {
+	err = rawConn.Control(func(localfd uintptr) {
 		fd = localfd
 	})
+	if err != nil {
+		logger.Criticalf("error grabbing rawConn fd: %v", err)
+	} else {
+		logger.Criticalf("extracted fd for connection: %v %v", c.RemoteAddr().String(), fd)
+	}
 	return fd
 }
 
