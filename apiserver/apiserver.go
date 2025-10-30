@@ -1092,8 +1092,29 @@ func (srv *Server) healthHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "%s\n", status)
 }
 
+// we always render the connectionID in hex, but we look up file ids in base10
+// this just makes a %X printing of a number look like base10
+// (iow, Sprintf("%X", toHex(100)) == "100")
+func toHex(i uint64) uint64 {
+	offset := 0
+	output := uint64(0)
+	for ; i > 0; i /= 10 {
+		output += (i % 10) << offset
+		offset += 4
+	}
+	return output
+}
+
 func (srv *Server) apiHandler(w http.ResponseWriter, req *http.Request) {
 	connectionID := atomic.AddUint64(&srv.lastConnectionID, 1)
+	httpFD := req.Context().Value("http-fd")
+	if httpFD != nil {
+		id, ok := httpFD.(uintptr)
+		if ok {
+			// We map the file descriptor into a base10 representation and put it in the upper 32 bits
+			connectionID |= toHex(uint64(id)) << 32
+		}
+	}
 
 	apiObserver := srv.newObserver()
 	apiObserver.Join(req, connectionID)
@@ -1101,7 +1122,7 @@ func (srv *Server) apiHandler(w http.ResponseWriter, req *http.Request) {
 
 	websocket.Serve(w, req, func(conn *websocket.Conn) {
 		modelUUID := httpcontext.RequestModelUUID(req)
-		logger.Tracef("got a request for model %q", modelUUID)
+		logger.Tracef("got a request for model %q on %v", modelUUID, req.Context().Value("http-fd"))
 		if err := srv.serveConn(
 			req.Context(),
 			conn,

@@ -300,7 +300,7 @@ func (a *authenticator) checkMacaroonCaveats(op bakery.Op, relationId, sourceMod
 func (a *authenticator) checkMacaroons(
 	ctx context.Context, mac macaroon.Slice, version bakery.Version, requiredValues map[string]string, op bakery.Op,
 ) (map[string]string, error) {
-	authlogger.Debugf("check %d macaroons with required attrs: %v", len(mac), requiredValues)
+	authlogger.Debugf("%v check %d macaroons with required attrs: %v", ctx.Value("http-fd"), len(mac), requiredValues)
 	for _, m := range mac {
 		if m == nil {
 			authlogger.Warningf("unexpected nil cross model macaroon")

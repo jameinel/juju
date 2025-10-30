@@ -335,12 +335,14 @@ func (a *admin) authenticate(ctx context.Context, req params.LoginRequest) (*aut
 		tag = a.root.authInfo.Entity.Tag()
 	}
 	a.apiObserver.Login(tag, a.root.model.ModelTag(), controllerConn, req.UserData)
-	if !result.anonymousLogin {
+	if result.anonymousLogin {
+		httpFD := ctx.Value("http-fd")
+		logger.Criticalf("Authenticating RpcConn: %v", httpFD)
 		go func(httpFD any) {
 			<-time.After(time.Minute)
 			logger.Criticalf("Closing RpcConn: %v", httpFD)
 			_ = a.root.getRpcConn().Close()
-		}(ctx.Value("http-fd"))
+		}(httpFD)
 	}
 	a.loggedIn = true
 

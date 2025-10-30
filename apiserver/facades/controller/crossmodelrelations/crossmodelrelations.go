@@ -179,6 +179,7 @@ func (api *CrossModelRelationsAPIv2) RegisterRemoteRelations(
 	}
 	for i, relation := range relations.Relations {
 		id, err := api.registerRemoteRelation(
+			api.ctx,
 			params.RegisterRemoteRelationArg{
 				ApplicationToken: relation.ApplicationToken,
 				SourceModelTag:   relation.SourceModelTag,
@@ -202,20 +203,20 @@ func (api *CrossModelRelationsAPIv2) RegisterRemoteRelations(
 // RegisterRemoteRelations sets up the model to participate
 // in the specified relations. This operation is idempotent.
 func (api *CrossModelRelationsAPIv3) RegisterRemoteRelations(
-	relations params.RegisterRemoteRelationArgs,
+	ctx context.Context, relations params.RegisterRemoteRelationArgs,
 ) (params.RegisterRemoteRelationResults, error) {
 	results := params.RegisterRemoteRelationResults{
 		Results: make([]params.RegisterRemoteRelationResult, len(relations.Relations)),
 	}
 	for i, relation := range relations.Relations {
-		id, err := api.registerRemoteRelation(relation)
+		id, err := api.registerRemoteRelation(ctx, relation)
 		results.Results[i].Result = id
 		results.Results[i].Error = apiservererrors.ServerError(err)
 	}
 	return results, nil
 }
 
-func (api *CrossModelRelationsAPIv3) registerRemoteRelation(relation params.RegisterRemoteRelationArg) (*params.RemoteRelationDetails, error) {
+func (api *CrossModelRelationsAPIv3) registerRemoteRelation(ctx context.Context, relation params.RegisterRemoteRelationArg) (*params.RemoteRelationDetails, error) {
 	logger.Debugf("register remote relation %+v", relation)
 	// TODO(wallyworld) - do this as a transaction so the result is atomic
 	// Perform some initial validation - is the local application alive?
@@ -228,7 +229,7 @@ func (api *CrossModelRelationsAPIv3) registerRemoteRelation(relation params.Regi
 
 	// Check that the supplied macaroon allows access.
 	auth := api.authCtxt.Authenticator()
-	attr, err := auth.CheckOfferMacaroons(api.ctx, api.st.ModelUUID(), appOffer.OfferUUID, relation.Macaroons, relation.BakeryVersion)
+	attr, err := auth.CheckOfferMacaroons(ctx, api.st.ModelUUID(), appOffer.OfferUUID, relation.Macaroons, relation.BakeryVersion)
 	if err != nil {
 		return nil, err
 	}
