@@ -69,6 +69,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m.pmu.Unlock()
 	logger.Debugf("ServeHTTP(%v): %v", r.URL, r.Context().Value("http-fd"))
 	p.ServeHTTP(w, r)
+	logger.Debugf("ServedHTTP(%v): %v", r.URL, r.Context().Value("http-fd"))
 }
 
 // AddHandler adds an http.Handler for the given method and pattern.
