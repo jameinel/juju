@@ -9,6 +9,7 @@ import (
 
 	"github.com/bmizerany/pat"
 	"github.com/juju/errors"
+	"github.com/juju/loggo"
 )
 
 // Mux is a pattern-based HTTP muxer, based on top of
@@ -56,6 +57,8 @@ func NewMux(opts ...muxOption) *Mux {
 
 type muxOption func(*Mux)
 
+var logger = loggo.GetLogger("juju.apiserver.apiserverhttp")
+
 // ServeHTTP is part of the http.Handler interface.
 //
 // ServeHTTP routes the request to a handler registered with
@@ -64,6 +67,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m.pmu.Lock()
 	p := m.p
 	m.pmu.Unlock()
+	logger.Debugf("ServeHTTP(%v): %v", r.URL, r.Context().Value("http-fd"))
 	p.ServeHTTP(w, r)
 }
 
