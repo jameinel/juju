@@ -26,6 +26,7 @@ type RestHTTPHandler struct {
 // ServeHTTP is defined on handler.Handler.
 func (h *RestHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
+	logger.Debugf("RestHTTPHandler.ServeHTTP: %v", r.Context().Value("http-fd"))
 	switch r.Method {
 	case "GET":
 		err = errors.Annotate(h.GetHandler(w, r), "cannot retrieve model data")
@@ -48,6 +49,7 @@ type modelRestHandler struct {
 
 // ServeGet handles http GET requests.
 func (h *modelRestHandler) ServeGet(w http.ResponseWriter, r *http.Request) error {
+	logger.Debugf("modelRestHandler.ServeGet: %v", r.Context().Value("http-fd"))
 	if r.Method != "GET" {
 		return errors.Trace(emitUnsupportedMethodErr(r.Method))
 	}

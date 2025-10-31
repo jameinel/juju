@@ -65,6 +65,7 @@ func (h *objectsCharmHandler) ServeUnsupported(w http.ResponseWriter, r *http.Re
 // rewrite the http request for it to be correctly processed by the legacy
 // '/charms' handler.
 func (h *objectsCharmHandler) ServeGet(w http.ResponseWriter, r *http.Request) error {
+	logger.Child("objectsCharmHandler").Debugf("ServeGet(%s): %v", r.URL, r.Context().Value("http-fd"))
 	st, _, err := h.ctxt.stateForRequestAuthenticated(r)
 	if err != nil {
 		return errors.Trace(err)
@@ -97,6 +98,7 @@ func (h *objectsCharmHandler) ServeGet(w http.ResponseWriter, r *http.Request) e
 // rewrite the http request for it to be correctly processed by the legacy
 // '/charms' handler.
 func (h *objectsCharmHandler) ServePut(w http.ResponseWriter, r *http.Request) error {
+	logger.Child("objectsCharmHandler").Debugf("ServePut(%s): %v", r.URL, r.Context().Value("http-fd"))
 	// Make sure the content type is zip.
 	contentType := r.Header.Get("Content-Type")
 	if contentType != "application/zip" {

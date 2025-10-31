@@ -182,6 +182,7 @@ func (h *logSinkHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if modelUUID := httpcontext.RequestModelUUID(req); modelUUID != "" {
 		resolvedModelUUID = modelUUID
 	}
+	logger.Debugf("logsink ServeHTTP: %v", req.Context().Value("http-fd"))
 
 	handler := func(socket *websocket.Conn) {
 		h.metrics.TotalConnections().Inc()

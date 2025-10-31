@@ -40,7 +40,7 @@ type pubsubHandler struct {
 // ServeHTTP implements the http.Handler interface.
 func (h *pubsubHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	handler := func(socket *websocket.Conn) {
-		h.logger.Debugf("start of *pubsubHandler.ServeHTTP")
+		h.logger.Debugf("start of *pubsubHandler.ServeHTTP: %v", req.Context().Value("http-fd"))
 		defer socket.Close()
 
 		// If we get to here, no more errors to report, so we report a nil

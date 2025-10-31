@@ -24,6 +24,7 @@ type UnitResourcesHandler struct {
 
 // ServeHTTP implements http.Handler.
 func (h *UnitResourcesHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+	logger.Child("UnitResourcesHandler").Debugf("ServeHTTP(%s): %v", req.URL, req.Context().Value("http-fd"))
 	switch req.Method {
 	case "GET":
 		opener, ph, err := h.NewOpener(req, names.UnitTagKind, names.ApplicationTagKind)

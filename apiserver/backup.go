@@ -24,6 +24,7 @@ type backupHandler struct {
 
 // ServeHTTP implements [http.Handler].
 func (h *backupHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+	logger.Child("backupHandler").Debugf("ServeHTTP(%s): %v", req.URL, req.Context().Value("http-fd"))
 	// Validate before authenticate because the authentication is dependent
 	// on the state connection that is determined during the validation.
 	st, err := h.ctxt.stateForRequestAuthenticatedUser(req)

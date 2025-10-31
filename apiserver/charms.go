@@ -64,6 +64,7 @@ type CharmsHTTPHandler struct {
 
 func (h *CharmsHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
+	logger.Debugf("CharmsHTTPHandler.ServeHTTP: %v", r.Context().Value("http-fd"))
 	switch r.Method {
 	case "POST":
 		err = errors.Annotate(h.PostHandler(w, r), "cannot upload charm")
@@ -97,6 +98,7 @@ func (h *charmsHandler) ServeUnsupported(w http.ResponseWriter, r *http.Request)
 
 func (h *charmsHandler) ServePost(w http.ResponseWriter, r *http.Request) error {
 	logger.Child("charmsHandler").Tracef("ServePost(%s)", r.URL)
+	logger.Child("charmsHandler").Debugf("ServePost(%s): %v", r.URL, r.Context().Value("http-fd"))
 	if r.Method != "POST" {
 		return errors.Trace(emitUnsupportedMethodErr(r.Method))
 	}
@@ -123,6 +125,7 @@ func (h *charmsHandler) ServePost(w http.ResponseWriter, r *http.Request) error 
 
 func (h *charmsHandler) ServeGet(w http.ResponseWriter, r *http.Request) error {
 	logger.Child("charmsHandler").Tracef("ServeGet(%s)", r.URL)
+	logger.Child("charmsHandler").Debugf("ServeGet(%s): %v", r.URL, r.Context().Value("http-fd"))
 	if r.Method != "GET" {
 		return errors.Trace(emitUnsupportedMethodErr(r.Method))
 	}

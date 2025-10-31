@@ -49,6 +49,7 @@ type ResourcesHandler struct {
 
 // ServeHTTP implements http.Handler.
 func (h *ResourcesHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+	logger.Child("ResourcesHandler").Debugf("ServeHTTP(%s): %v", req.URL, req.Context().Value("http-fd"))
 	backend, poolhelper, tag, err := h.StateAuthFunc(req, names.UserTagKind, names.MachineTagKind, names.ControllerAgentTagKind, names.ApplicationTagKind)
 	if err != nil {
 		if err := sendError(resp, err); err != nil {

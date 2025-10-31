@@ -37,6 +37,7 @@ type registerUserHandler struct {
 
 // ServeHTTP implements the http.Handler interface.
 func (h *registerUserHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	logger.Child("registerUserHandler").Debugf("ServeHTTP(%s): %v", req.URL, req.Context().Value("http-fd"))
 	if req.Method != "POST" {
 		err := sendError(w, errors.MethodNotAllowedf("unsupported method: %q", req.Method))
 		if err != nil {
