@@ -139,13 +139,17 @@ func Open(info *Info, opts DialOpts) (Connection, error) {
 		bakeryClient.Client = &httpc
 	}
 
-	// Technically when there's no CACert, we don't need this
-	// machinery, because we could just use http.DefaultTransport
+	// Technically, when there's no CACert, we don't need this
+	// machinery because we could just use http.DefaultTransport
 	// for everything, but it's easier just to leave it in place.
 	bakeryClient.Client.Transport = &hostSwitchingTransport{
 		primaryHost: dialResult.controllerRootAddr.Host,
 		primary: jujuhttp.NewHTTPTLSTransport(jujuhttp.TransportConfig{
 			TLSConfig: dialResult.tlsConfig,
+			// MaxIdleConns:        10,
+			// MaxIdleConnsPerHost: 2,
+			// MaxConnsPerHost:     5,
+			// IdleConnTimeout:     30 * time.Second,
 		}),
 		fallback: http.DefaultTransport,
 	}
@@ -1188,6 +1192,18 @@ func (s *state) Close() error {
 	// from completed requests that are still open.
 	// Note that this does nothing for connections in use, including those
 	// held open because someone failed to close a HTTP response body.
+	httpTransport, ok := s.bakeryClient.Client.Transport.(*http.Transport)
+	if false && ok {
+		// The transport was keeping too many idle connections open,
+		// even after we've asked it to close everything, so we get
+		// aggressive about changing the idle behavior. We can't set
+		// all of this to 0, because then it just reverts to the default.
+		logger.Criticalf("reseting idle connections to minimum as we are closing")
+		httpTransport.MaxConnsPerHost = 1
+		httpTransport.MaxIdleConns = 1
+		httpTransport.MaxIdleConnsPerHost = 1
+		httpTransport.DisableKeepAlives = true
+	}
 	s.bakeryClient.Client.CloseIdleConnections()
 
 	err := s.client.Close()

@@ -232,6 +232,20 @@ func (w *Worker) loop() error {
 		err := server.Shutdown(ctx)
 		w.catacomb.Kill(err)
 	}()
+	// TODO(jam): 2025-11-02 We don't seem to ever close idle connections. http.Server
+	//  doesn't seem to expose this in general functionality, but it does seem to trigger
+	//  this if you call SetKeepAlive even if you aren't making it False.
+	stopIdleReaperCh := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-stopIdleReaperCh:
+				return
+			case <-time.After(2 * time.Minute):
+				server.SetKeepAlivesEnabled(true)
+			}
+		}
+	}()
 
 	w.mu.Lock()
 	w.status = "running"
@@ -240,6 +254,7 @@ func (w *Worker) loop() error {
 	for {
 		select {
 		case <-w.catacomb.Dying():
+			close(stopIdleReaperCh)
 			w.mu.Lock()
 			w.status = "dying"
 			w.mu.Unlock()

@@ -218,6 +218,7 @@ require (
 	github.com/juju/go4 v0.0.0-20160222163258-40d72ab9641a // indirect
 	github.com/juju/gojsonpointer v0.0.0-20150204194629-afe8b77aa08f // indirect
 	github.com/juju/gojsonreference v0.0.0-20150204194633-f0d24ac5ee33 // indirect
+	github.com/juju/loggo/v2 v2.0.0 // indirect
 	github.com/juju/lru v1.0.0 // indirect
 	github.com/juju/mgo/v2 v2.0.2 // indirect
 	github.com/juju/usso v1.0.1 // indirect
@@ -321,3 +322,5 @@ require (
 replace gopkg.in/yaml.v2 => github.com/juju/yaml/v2 v2.0.0
 
 replace go.uber.org/mock => go.uber.org/mock v0.4.0
+
+replace github.com/juju/http/v2 => /home/jameinel/dev/go/src/github.com/juju/http
