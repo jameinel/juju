@@ -142,17 +142,20 @@ func Open(info *Info, opts DialOpts) (Connection, error) {
 	// Technically, when there's no CACert, we don't need this
 	// machinery because we could just use http.DefaultTransport
 	// for everything, but it's easier just to leave it in place.
+	tlsTransport := jujuhttp.NewHTTPTLSTransport(jujuhttp.TransportConfig{
+		TLSConfig: dialResult.tlsConfig,
+	})
+	// built-in DefaultTransport uses 100 max idle conns and 90s timeout.
+	// However, that is for all connections in a go process. We can be
+	// more aggressive since we create new transports per controller.
+	// If you leave these at 0, then it will never timeout
+	// idle connections.
+	tlsTransport.MaxIdleConns = 10
+	tlsTransport.IdleConnTimeout = 60 * time.Second
 	bakeryClient.Client.Transport = &hostSwitchingTransport{
 		primaryHost: dialResult.controllerRootAddr.Host,
-		primary: jujuhttp.NewHTTPTLSTransport(jujuhttp.TransportConfig{
-			TLSConfig: dialResult.tlsConfig,
-			// built-in DefaultTransport uses 100 max idle cons and 90s
-			// If you leave these at 0, then it will never timeout an
-			// idle connection.
-			MaxIdleConns:    10,
-			IdleConnTimeout: 60 * time.Second,
-		}),
-		fallback: http.DefaultTransport,
+		primary:     tlsTransport,
+		fallback:    http.DefaultTransport,
 	}
 
 	host := PreferredHost(info)
