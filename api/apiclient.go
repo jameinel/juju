@@ -146,10 +146,11 @@ func Open(info *Info, opts DialOpts) (Connection, error) {
 		primaryHost: dialResult.controllerRootAddr.Host,
 		primary: jujuhttp.NewHTTPTLSTransport(jujuhttp.TransportConfig{
 			TLSConfig: dialResult.tlsConfig,
-			// MaxIdleConns:        10,
-			// MaxIdleConnsPerHost: 2,
-			// MaxConnsPerHost:     5,
-			// IdleConnTimeout:     30 * time.Second,
+			// built-in DefaultTransport uses 100 max idle cons and 90s
+			// If you leave these at 0, then it will never timeout an
+			// idle connection.
+			MaxIdleConns:    10,
+			IdleConnTimeout: 60 * time.Second,
 		}),
 		fallback: http.DefaultTransport,
 	}

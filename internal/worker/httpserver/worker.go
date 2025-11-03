@@ -242,9 +242,9 @@ func (w *Worker) loop() error {
 			case <-stopIdleReaperCh:
 				return
 			case <-time.After(2 * time.Minute):
-				logger.Warningf("SetKeepAlivesEnabled(true) to reap idle connections")
-				server.SetKeepAlivesEnabled(false)
-				server.SetKeepAlivesEnabled(true)
+				logger.Warningf("not SetKeepAlivesEnabled(true) to reap idle connections")
+				// server.SetKeepAlivesEnabled(false)
+				// server.SetKeepAlivesEnabled(true)
 			}
 		}
 	}()
