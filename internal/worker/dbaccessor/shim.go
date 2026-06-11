@@ -20,6 +20,9 @@ type Client interface {
 	Cluster(context.Context) ([]dqlite.NodeInfo, error)
 	// Leader returns information about the current leader, if any.
 	Leader(ctx context.Context) (*dqlite.NodeInfo, error)
+	// Remove removes the node with the given ID from the Dqlite cluster.
+	// It must be called against the cluster leader.
+	Remove(ctx context.Context, id uint64) error
 }
 
 // DBApp describes methods of a Dqlite database application,

@@ -257,6 +257,117 @@ func (s *workerSuite) TestWorkerStartupExistingNode(c *gc.C) {
 	workertest.CleanKill(c, w)
 }
 
+func (s *workerSuite) TestWorkerExistingNodeRemovesDepartedNode(c *gc.C) {
+	defer s.setupMocks(c).Finish()
+
+	s.expectAnyLogs()
+	s.expectClock()
+	s.expectTrackedDBKill()
+
+	mgrExp := s.nodeManager.EXPECT()
+	mgrExp.EnsureDataDir().Return(c.MkDir(), nil)
+	mgrExp.IsExistingNode().Return(true, nil).AnyTimes()
+	mgrExp.IsLoopbackBound(gomock.Any()).Return(false, nil).AnyTimes()
+	mgrExp.IsLoopbackPreferred().Return(false).AnyTimes()
+	mgrExp.WithLogFuncOption().Return(nil)
+	mgrExp.WithTLSOption().Return(nil, nil)
+	mgrExp.WithTracingOption().Return(nil)
+
+	appExp := s.dbApp.EXPECT()
+	appExp.Ready(gomock.Any()).Return(nil)
+	appExp.Client(gomock.Any()).Return(s.client, nil).MinTimes(1)
+	appExp.ID().Return(uint64(666)).AnyTimes()
+	appExp.Close().Return(nil)
+	appExp.Handover(gomock.Any()).Return(nil)
+	s.expectWorkerRetry()
+
+	// We are the cluster leader, so we are responsible for removing
+	// departed nodes from the Dqlite cluster.
+	s.client.EXPECT().Leader(gomock.Any()).Return(&dqlite.NodeInfo{ID: 666}, nil)
+
+	// The cluster still references node 2 (10.6.6.8), but it is no longer in
+	// the controller details, so it should be removed. Node 1 remains, and we
+	// (node 666) are never removed.
+	s.client.EXPECT().Cluster(gomock.Any()).Return([]dqlite.NodeInfo{
+		{ID: 666, Address: "10.6.6.6:17666"},
+		{ID: 1, Address: "10.6.6.7:17666"},
+		{ID: 2, Address: "10.6.6.8:17666"},
+	}, nil).AnyTimes()
+	s.client.EXPECT().Remove(gomock.Any(), uint64(2)).Return(nil)
+
+	s.hub.EXPECT().Subscribe(apiserver.DetailsTopic, gomock.Any()).Return(func() {}, nil)
+
+	w := s.newWorker(c)
+	defer workertest.DirtyKill(c, w)
+	dbw := w.(*dbWorker)
+
+	ensureStartup(c, dbw)
+
+	select {
+	case dbw.apiServerChanges <- apiserver.Details{
+		Servers: map[string]apiserver.APIServer{
+			"0": {ID: "0", InternalAddress: "10.6.6.6:1234"},
+			"1": {ID: "1", InternalAddress: "10.6.6.7:1234"},
+		},
+	}:
+	case <-time.After(testing.LongWait):
+		c.Fatal("timed out waiting for cluster change to be processed")
+	}
+
+	workertest.CleanKill(c, w)
+}
+
+func (s *workerSuite) TestWorkerExistingNodeNonLeaderDoesNotRemove(c *gc.C) {
+	defer s.setupMocks(c).Finish()
+
+	s.expectAnyLogs()
+	s.expectClock()
+	s.expectTrackedDBKill()
+
+	mgrExp := s.nodeManager.EXPECT()
+	mgrExp.EnsureDataDir().Return(c.MkDir(), nil)
+	mgrExp.IsExistingNode().Return(true, nil).AnyTimes()
+	mgrExp.IsLoopbackBound(gomock.Any()).Return(false, nil).AnyTimes()
+	mgrExp.IsLoopbackPreferred().Return(false).AnyTimes()
+	mgrExp.WithLogFuncOption().Return(nil)
+	mgrExp.WithTLSOption().Return(nil, nil)
+	mgrExp.WithTracingOption().Return(nil)
+
+	appExp := s.dbApp.EXPECT()
+	appExp.Ready(gomock.Any()).Return(nil)
+	appExp.Client(gomock.Any()).Return(s.client, nil).MinTimes(1)
+	appExp.ID().Return(uint64(666)).AnyTimes()
+	appExp.Close().Return(nil)
+	appExp.Handover(gomock.Any()).Return(nil)
+	s.expectWorkerRetry()
+
+	// Some other node is the leader, so we must not attempt any removal.
+	// The absence of a Remove expectation asserts it is never called.
+	s.client.EXPECT().Leader(gomock.Any()).Return(&dqlite.NodeInfo{ID: 999}, nil)
+	s.client.EXPECT().Cluster(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	s.hub.EXPECT().Subscribe(apiserver.DetailsTopic, gomock.Any()).Return(func() {}, nil)
+
+	w := s.newWorker(c)
+	defer workertest.DirtyKill(c, w)
+	dbw := w.(*dbWorker)
+
+	ensureStartup(c, dbw)
+
+	select {
+	case dbw.apiServerChanges <- apiserver.Details{
+		Servers: map[string]apiserver.APIServer{
+			"0": {ID: "0", InternalAddress: "10.6.6.6:1234"},
+			"1": {ID: "1", InternalAddress: "10.6.6.7:1234"},
+		},
+	}:
+	case <-time.After(testing.LongWait):
+		c.Fatal("timed out waiting for cluster change to be processed")
+	}
+
+	workertest.CleanKill(c, w)
+}
+
 func (s *workerSuite) TestWorkerStartupExistingNodeWithLoopbackPreferred(c *gc.C) {
 	defer s.setupMocks(c).Finish()
 

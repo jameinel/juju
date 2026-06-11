@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/juju/clock"
+	"github.com/juju/collections/set"
 	"github.com/juju/errors"
 	"github.com/juju/worker/v3"
 	"github.com/juju/worker/v3/catacomb"
@@ -625,12 +626,14 @@ func (w *dbWorker) processAPIServerChange(apiDetails apiserver.Details) error {
 		}
 
 		// If we are an existing, previously clustered node,
-		// and the node is running, we have nothing to do.
+		// and the node is running, the only thing left to reconcile is
+		// whether any nodes have been removed from the controller and so
+		// need to be removed from the Dqlite cluster.
 		w.mu.RLock()
 		running := w.dbApp != nil
 		w.mu.RUnlock()
 		if running {
-			return nil
+			return errors.Trace(w.removeDepartedNodes(ctx, apiDetails))
 		}
 
 		// Make absolutely sure. We only reconfigure the cluster if the details
@@ -740,6 +743,83 @@ func (w *dbWorker) joinNodeToCluster(apiDetails apiserver.Details) error {
 
 	return errors.Trace(w.initialiseDqlite(
 		mgr.WithAddressOption(localAddr), mgr.WithClusterOption(clusterAddrs), withTLS))
+}
+
+// removeDepartedNodes reconciles the Dqlite cluster membership against the
+// current controller topology. Any Dqlite node whose address no longer
+// corresponds with a controller in the input details has been removed from
+// HA, so we remove it from the Dqlite cluster as well.
+//
+// Cluster membership changes must be issued against the leader, so this is a
+// no-op unless this node is the current Dqlite leader. As every controller's
+// worker receives the same details, gating on leadership ensures exactly one
+// node performs the removal.
+func (w *dbWorker) removeDepartedNodes(ctx context.Context, apiDetails apiserver.Details) error {
+	w.mu.RLock()
+	dbApp := w.dbApp
+	w.mu.RUnlock()
+	if dbApp == nil {
+		return nil
+	}
+
+	client, err := dbApp.Client(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// Only the leader can reconfigure cluster membership.
+	leader, err := client.Leader(ctx)
+	if err != nil {
+		return errors.Annotate(err, "determining Dqlite cluster leader")
+	}
+	if leader == nil || leader.ID != dbApp.ID() {
+		return nil
+	}
+
+	// Determine the host addresses of all the current controllers.
+	// If any controller is missing its internal address, the details are
+	// incomplete; we err on the side of caution and skip reconciliation
+	// rather than risk removing a node that is still a member.
+	currentHosts := set.NewStrings()
+	for _, server := range apiDetails.Servers {
+		if server.InternalAddress == "" {
+			w.cfg.Logger.Debugf("skipping Dqlite cluster reconciliation; incomplete server details")
+			return nil
+		}
+		host, _, err := net.SplitHostPort(server.InternalAddress)
+		if err != nil {
+			return errors.Annotatef(err, "splitting host/port for %s", server.InternalAddress)
+		}
+		currentHosts.Add(host)
+	}
+
+	members, err := client.Cluster(ctx)
+	if err != nil {
+		return errors.Annotate(err, "retrieving Dqlite cluster members")
+	}
+
+	for _, member := range members {
+		// Never remove ourselves.
+		if member.ID == dbApp.ID() {
+			continue
+		}
+
+		host, _, err := net.SplitHostPort(member.Address)
+		if err != nil {
+			return errors.Annotatef(err, "splitting host/port for %s", member.Address)
+		}
+		// This member still corresponds to a controller; leave it be.
+		if currentHosts.Contains(host) {
+			continue
+		}
+
+		w.cfg.Logger.Infof("removing departed node %d (%s) from Dqlite cluster", member.ID, member.Address)
+		if err := client.Remove(ctx, member.ID); err != nil {
+			return errors.Annotatef(err, "removing departed node %d from Dqlite cluster", member.ID)
+		}
+	}
+
+	return nil
 }
 
 // bindAddrFromServerDetails returns the internal IP address from the

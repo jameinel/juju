@@ -42,6 +42,12 @@ func (c *Client) Leader(ctx context.Context) (*dqlite.NodeInfo, error) {
 	return nil, nil
 }
 
+// Remove removes a node from the cluster. It is a no-op, as dqlite is not
+// available.
+func (c *Client) Remove(ctx context.Context, id uint64) error {
+	return nil
+}
+
 // FindLeader returns no leader and no error, as dqlite is not available.
 func FindLeader(ctx context.Context, store NodeStore, opts ...Option) (*Client, error) {
 	return nil, nil
