@@ -4,6 +4,8 @@
 package model
 
 import (
+	"fmt"
+
 	"github.com/juju/cmd/v3"
 	"github.com/juju/errors"
 	"github.com/juju/gnuflag"
@@ -21,12 +23,19 @@ func NewDumpDBCommand() cmd.Command {
 
 type dumpDBCommand struct {
 	modelcmd.ModelCommandBase
-	out cmd.Output
-	api DumpDBAPI
+	out                    cmd.Output
+	api                    DumpDBAPI
+	sanitize               bool
+	keepLowSensitivityData bool
 }
 
 const dumpDBHelpDoc = `
 dump-db returns all that is stored in the database for the specified model.
+
+Use --sanitize to redact known sensitive fields before sharing the output.
+This is a best-effort redaction; review the dump before sharing it.
+Use --keep-low-sensitivity-data with --sanitize to retain action logs and
+status information.
 
 Examples:
 
@@ -50,11 +59,47 @@ func (c *dumpDBCommand) Info() *cmd.Info {
 func (c *dumpDBCommand) SetFlags(f *gnuflag.FlagSet) {
 	c.ModelCommandBase.SetFlags(f)
 	c.out.AddFlags(f, "yaml", output.DefaultFormatters)
+	f.BoolVar(&c.sanitize, "sanitize", false, "redact known sensitive fields from the dump")
+	f.BoolVar(&c.keepLowSensitivityData, "keep-low-sensitivity-data", false, "retain action logs and status information when sanitizing")
 }
 
 // Init implements Command.
 func (c *dumpDBCommand) Init(args []string) error {
+	if c.keepLowSensitivityData && !c.sanitize {
+		return errors.New("--keep-low-sensitivity-data requires --sanitize")
+	}
 	return cmd.CheckEmpty(args)
+}
+
+// These fields mirror scripts/sanitise-db.py. Unlike that script, dump-db
+// contains only the current model's documents, not the global txn collection.
+var dumpDBSensitiveFields = map[string][]string{
+	"users":              {"secretkey", "passwordhash", "passwordsalt"},
+	"units":              {"passwordhash"},
+	"machines":           {"passwordhash"},
+	"applications":       {"metric-credentials", "passwordhash"},
+	"models":             {"passwordhash", "sla"},
+	"controllerNodes":    {"password-hash"},
+	"settings":           {"settings"},
+	"controllers":        {"settings", "cert", "privatekey", "caprivatekey", "sharedsecret", "systemidentity", "key", "local-users-key", "local-users-thirdparty-key", "external-users-thirdparty-key", "offers-thirdparty-key"},
+	"actions":            {"parameters", "message", "results"},
+	"cloudCredentials":   {"attributes"},
+	"dockerResources":    {"password"},
+	"sshrequests":        {"password"},
+	"virtualhostkeys":    {"hostkey"},
+	"autocertCache":      {"data"},
+	"bakeryStorageItems": {"rootkey", "item"},
+	"remoteEntities":     {"token", "macaroon"},
+	"remoteApplications": {"macaroon"},
+	"migrations":         {"target-password", "target-macaroons", "target-token"},
+	"secretRevisions":    {"data"},
+	"secretBackends":     {"config"},
+}
+
+var dumpDBLowSensitivityFields = map[string][]string{
+	"actions":         {"messages"},
+	"statuses":        {"statusinfo", "statusdata"},
+	"statuseshistory": {"statusinfo", "statusdata"},
 }
 
 // DumpDBAPI specifies the used function calls of the ModelManager.
@@ -88,6 +133,51 @@ func (c *dumpDBCommand) Run(ctx *cmd.Context) error {
 	if err != nil {
 		return err
 	}
+	if c.sanitize {
+		if err := sanitizeDBDump(results, !c.keepLowSensitivityData); err != nil {
+			return errors.Trace(err)
+		}
+	}
 
 	return c.out.Write(ctx, results)
+}
+
+// sanitizeDBDump redacts only fields present in each document, preserving the
+// rest of the dump (including document identifiers) for diagnostics.
+func sanitizeDBDump(dump map[string]interface{}, includeLowSensitivity bool) error {
+	for collection, value := range dump {
+		fields := dumpDBSensitiveFields[collection]
+		if includeLowSensitivity {
+			fields = append(append([]string(nil), fields...), dumpDBLowSensitivityFields[collection]...)
+		}
+		if len(fields) == 0 {
+			continue
+		}
+		redact := func(doc map[string]interface{}) {
+			for _, field := range fields {
+				if _, ok := doc[field]; ok {
+					doc[field] = "REDACTED"
+				}
+			}
+		}
+		switch docs := value.(type) {
+		case map[string]interface{}:
+			redact(docs) // models is a single document.
+		case []interface{}:
+			for _, value := range docs {
+				doc, ok := value.(map[string]interface{})
+				if !ok {
+					return fmt.Errorf("unexpected document in %q collection: %T", collection, value)
+				}
+				redact(doc)
+			}
+		case []map[string]interface{}:
+			for _, doc := range docs {
+				redact(doc)
+			}
+		default:
+			return fmt.Errorf("unexpected %q collection: %T", collection, value)
+		}
+	}
+	return nil
 }
