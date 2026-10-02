@@ -416,9 +416,28 @@ func (c *statusCommand) Run(ctx *cmd.Context) error {
 			return errors.Annotate(err, "unable to run Viddy (watcher for status command)")
 		}
 	} else {
-		err := c.runStatus(ctx)
-		if err != nil {
-			return err
+		// HACK: loop calling status over the same API connection until
+		// interrupted. c.statusAPI is cached by newAPIClientForStatus and
+		// only closed by the deferred c.close() above, so the connection
+		// stays open across iterations.
+		interrupted := make(chan os.Signal, 1)
+		ctx.InterruptNotify(interrupted)
+		defer ctx.StopInterruptNotify(interrupted)
+
+		const loopInterval = 2 * time.Second
+		for i := 1; ; i++ {
+			fmt.Fprintf(ctx.Stderr, "--- status iteration %d at %s ---\n", i, time.Now().Format(time.RFC3339))
+			if err := c.runStatus(ctx); err != nil {
+				fmt.Fprintf(ctx.Stderr, "status error: %v\n", err)
+				return err
+			}
+			select {
+			case <-interrupted:
+				return nil
+			case <-ctx.Done():
+				return nil
+			case <-c.clock.After(loopInterval):
+			}
 		}
 	}
 
