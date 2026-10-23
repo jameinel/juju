@@ -1,0 +1,8 @@
+--- 0019-model-last-login-auto.sql
++++ 0019-model-last-login.sql
+@@ -1,4 +1,4 @@
+ SELECT
+-    time AS last_login,
++    MAX(time) AS last_login,
+     user_uuid,
+     MAX(time) AS t

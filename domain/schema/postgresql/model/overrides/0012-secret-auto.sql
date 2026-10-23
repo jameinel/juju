@@ -1,0 +1,422 @@
+-- Model database tables for secrets.
+
+CREATE TABLE secret_rotate_policy (
+    id BIGINT PRIMARY KEY,
+    policy TEXT NOT NULL,
+    CONSTRAINT chk_empty_policy
+    CHECK (policy != '')
+);
+
+CREATE UNIQUE INDEX idx_secret_rotate_policy_policy
+ON secret_rotate_policy (policy);
+
+INSERT INTO secret_rotate_policy VALUES
+(0, 'never'),
+(1, 'hourly'),
+(2, 'daily'),
+(3, 'weekly'),
+(4, 'monthly'),
+(5, 'quarterly'),
+(6, 'yearly');
+
+CREATE TABLE secret (
+    id TEXT NOT NULL PRIMARY KEY
+);
+
+-- secret_reference stores details about
+-- secrets hosted by another model and
+-- is used on the consumer side of cross
+-- model secrets.
+CREATE TABLE secret_reference (
+    secret_id TEXT NOT NULL PRIMARY KEY,
+    latest_revision BIGINT NOT NULL,
+
+    -- owner_application_uuid is the application that owns the secret.
+    -- It is used to determine which remote (offerer) application the secret
+    -- belongs to. It is leveraged when the remote application is deleted from
+    -- the point of view of the local model (consumer), in order to delete the
+    -- secret from the local model.
+    owner_application_uuid TEXT,
+
+    -- updated_at is either the creation time of the reference, or the time it
+    -- was migrated, or the last time it was fetched from a unit, and thus
+    -- when the owner_application_uuid was defined.
+    updated_at TIMESTAMPTZ NOT NULL,
+
+    -- migrated is true if the reference was migrated from the old table.
+    -- In this case, owner_application_uuid may be empty.
+    migrated BOOLEAN NOT NULL DEFAULT FALSE,
+    CONSTRAINT fk_secret_id
+    FOREIGN KEY (secret_id)
+    REFERENCES secret (id),
+    CONSTRAINT fk_secret_reference_application_uuid
+    FOREIGN KEY (owner_application_uuid)
+    REFERENCES application (uuid),
+    CONSTRAINT chk_owned_or_migrated
+    CHECK ((owner_application_uuid IS NOT NULL AND owner_application_uuid != '') OR migrated)
+);
+
+CREATE TABLE secret_metadata (
+    secret_id TEXT NOT NULL PRIMARY KEY,
+    version BIGINT NOT NULL,
+    description TEXT,
+    rotate_policy_id BIGINT NOT NULL,
+    auto_prune BOOLEAN NOT NULL DEFAULT (FALSE),
+    latest_revision_checksum TEXT,
+    create_time TIMESTAMPTZ NOT NULL,
+    update_time TIMESTAMPTZ NOT NULL,
+    CONSTRAINT fk_secret_id
+    FOREIGN KEY (secret_id)
+    REFERENCES secret (id),
+    CONSTRAINT fk_secret_rotate_policy
+    FOREIGN KEY (rotate_policy_id)
+    REFERENCES secret_rotate_policy (id)
+);
+
+CREATE TABLE secret_rotation (
+    secret_id TEXT NOT NULL PRIMARY KEY,
+    next_rotation_time TIMESTAMPTZ NOT NULL,
+    CONSTRAINT fk_secret_rotation_secret_metadata_id
+    FOREIGN KEY (secret_id)
+    REFERENCES secret_metadata (secret_id)
+);
+
+-- 1:1
+CREATE TABLE secret_value_ref (
+    revision_uuid TEXT NOT NULL PRIMARY KEY,
+    -- backend_uuid is the UUID of the backend in the controller database.
+    backend_uuid TEXT NOT NULL,
+    revision_id TEXT NOT NULL,
+    CONSTRAINT fk_secret_value_ref_secret_revision_uuid
+    FOREIGN KEY (revision_uuid)
+    REFERENCES secret_revision (uuid)
+);
+
+CREATE INDEX idx_secret_value_ref_backend_uuid
+ON secret_value_ref (backend_uuid);
+
+-- Deleted revisions for which content is stored externally.
+-- These rows are deleted after the external content has been deleted.
+CREATE TABLE secret_deleted_value_ref (
+    revision_uuid TEXT NOT NULL PRIMARY KEY,
+    backend_uuid TEXT NOT NULL,
+    revision_id TEXT NOT NULL
+);
+
+CREATE INDEX idx_secret_deleted_value_ref_revision_id
+ON secret_deleted_value_ref (revision_id);
+
+-- 1:many
+CREATE TABLE secret_content (
+    revision_uuid TEXT NOT NULL,
+    name TEXT NOT NULL,
+    content TEXT NOT NULL,
+    CONSTRAINT chk_empty_name
+    CHECK (name != ''),
+    PRIMARY KEY (revision_uuid, name),
+    CONSTRAINT fk_secret_content_secret_revision_uuid
+    FOREIGN KEY (revision_uuid)
+    REFERENCES secret_revision (uuid)
+);
+
+CREATE INDEX idx_secret_content_revision_uuid
+ON secret_content (revision_uuid);
+
+CREATE TABLE secret_revision (
+    uuid TEXT NOT NULL PRIMARY KEY,
+    secret_id TEXT NOT NULL,
+    revision BIGINT NOT NULL,
+    create_time TIMESTAMPTZ NOT NULL,
+    -- TODO(gfouillet): update_time should be not null in 4.1, but we can't do it till we release the first 4.1
+    --  version. This is due to the fact we check for non breaking changes between minor versions, and this change
+    --  is breaking the generated  domain/export/types/v4_0_2/model.go : SecretRevision.UpdateTime type  change from
+    --  pointer to non pointer.
+    update_time TIMESTAMPTZ, -- NOT NULL,
+    CONSTRAINT fk_secret_revision_secret_metadata_id
+    FOREIGN KEY (secret_id)
+    REFERENCES secret_metadata (secret_id)
+);
+
+CREATE UNIQUE INDEX idx_secret_revision_secret_id_revision
+ON secret_revision (secret_id, revision);
+
+CREATE TABLE secret_revision_obsolete (
+    revision_uuid TEXT NOT NULL PRIMARY KEY,
+    obsolete BOOLEAN NOT NULL DEFAULT (FALSE),
+    -- pending_delete is true if the revision is to be deleted.
+    -- It will not be drained to a new active backend.
+    pending_delete BOOLEAN NOT NULL DEFAULT (FALSE),
+    CONSTRAINT fk_secret_revision_obsolete_revision_uuid
+    FOREIGN KEY (revision_uuid)
+    REFERENCES secret_revision (uuid)
+);
+
+CREATE INDEX idx_secret_revision_obsolete_status
+ON secret_revision_obsolete (obsolete, pending_delete);
+
+CREATE TABLE secret_revision_expire (
+    revision_uuid TEXT NOT NULL PRIMARY KEY,
+    expire_time TIMESTAMPTZ NOT NULL,
+    CONSTRAINT fk_secret_revision_expire_revision_uuid
+    FOREIGN KEY (revision_uuid)
+    REFERENCES secret_revision (uuid)
+);
+
+CREATE TABLE secret_application_owner (
+    secret_id TEXT NOT NULL,
+    application_uuid TEXT NOT NULL,
+    label TEXT,
+    CONSTRAINT fk_secret_application_owner_secret_metadata_id
+    FOREIGN KEY (secret_id)
+    REFERENCES secret_metadata (secret_id),
+    CONSTRAINT fk_secret_application_owner_application_uuid
+    FOREIGN KEY (application_uuid)
+    REFERENCES application (uuid),
+    PRIMARY KEY (secret_id, application_uuid)
+);
+
+CREATE INDEX idx_secret_application_owner_secret_id
+ON secret_application_owner (secret_id);
+-- We need to ensure the label is unique per the application.
+CREATE UNIQUE INDEX idx_secret_application_owner_label
+ON secret_application_owner (label, application_uuid) WHERE label != '';
+
+CREATE TABLE secret_unit_owner (
+    secret_id TEXT NOT NULL,
+    unit_uuid TEXT NOT NULL,
+    label TEXT,
+    CONSTRAINT fk_secret_unit_owner_secret_metadata_id
+    FOREIGN KEY (secret_id)
+    REFERENCES secret_metadata (secret_id),
+    CONSTRAINT fk_secret_unit_owner_unit_uuid
+    FOREIGN KEY (unit_uuid)
+    REFERENCES unit (uuid),
+    PRIMARY KEY (secret_id, unit_uuid)
+);
+
+CREATE INDEX idx_secret_unit_owner_secret_id
+ON secret_unit_owner (secret_id);
+-- We need to ensure the label is unique per unit.
+CREATE UNIQUE INDEX idx_secret_unit_owner_label
+ON secret_unit_owner (label, unit_uuid) WHERE label != '';
+
+CREATE TABLE secret_model_owner (
+    secret_id TEXT NOT NULL PRIMARY KEY,
+    label TEXT,
+    CONSTRAINT fk_secret_model_owner_secret_metadata_id
+    FOREIGN KEY (secret_id)
+    REFERENCES secret_metadata (secret_id)
+);
+
+CREATE UNIQUE INDEX idx_secret_model_owner_label
+ON secret_model_owner (label) WHERE label != '';
+
+CREATE TABLE secret_unit_consumer (
+    secret_id TEXT NOT NULL,
+    -- source model uuid may be this model or a different model
+    -- possibly on another controller
+    source_model_uuid TEXT NOT NULL,
+    unit_uuid TEXT NOT NULL,
+    label TEXT,
+    current_revision BIGINT NOT NULL,
+    CONSTRAINT fk_secret_unit_consumer_unit_uuid
+    FOREIGN KEY (unit_uuid)
+    REFERENCES unit (uuid),
+    CONSTRAINT fk_secret_unit_consumer_secret_id
+    FOREIGN KEY (secret_id)
+    REFERENCES secret (id)
+);
+
+CREATE UNIQUE INDEX idx_secret_unit_consumer_secret_id_unit_uuid
+ON secret_unit_consumer (secret_id, unit_uuid);
+
+CREATE UNIQUE INDEX idx_secret_unit_consumer_label
+ON secret_unit_consumer (label, unit_uuid) WHERE label != '';
+
+-- This table records the tracked revisions from
+-- units in the consuming model for cross model secrets.
+CREATE TABLE secret_remote_unit_consumer (
+    secret_id TEXT NOT NULL,
+    -- unit_name is the anonymised name of the unit
+    -- from the consuming model.
+    unit_name TEXT NOT NULL,
+    current_revision BIGINT NOT NULL,
+    CONSTRAINT fk_secret_remote_unit_consumer_secret_metadata_id
+    FOREIGN KEY (secret_id)
+    REFERENCES secret_metadata (secret_id)
+);
+
+CREATE UNIQUE INDEX idx_secret_remote_unit_consumer_secret_id_unit_name
+ON secret_remote_unit_consumer (secret_id, unit_name);
+
+CREATE TABLE secret_role (
+    id BIGINT PRIMARY KEY,
+    role TEXT
+);
+
+CREATE UNIQUE INDEX idx_secret_role_role ON secret_role (role);
+
+INSERT INTO secret_role VALUES
+(0, 'none'),
+(1, 'view'),
+(2, 'manage');
+
+CREATE TABLE secret_grant_subject_type (
+    id BIGINT PRIMARY KEY,
+    type TEXT
+);
+
+INSERT INTO secret_grant_subject_type VALUES
+(0, 'unit'),
+(1, 'application'),
+(2, 'model');
+
+CREATE TABLE secret_grant_scope_type (
+    id BIGINT PRIMARY KEY,
+    type TEXT
+);
+
+INSERT INTO secret_grant_scope_type VALUES
+(0, 'unit'),
+(1, 'application'),
+(2, 'model'),
+(3, 'relation');
+
+CREATE TABLE secret_permission (
+    secret_id TEXT NOT NULL,
+    role_id BIGINT NOT NULL,
+    -- subject_uuid is the entity which
+    -- has been granted access to a secret.
+    -- It will be an application, unit, or model uuid.
+    subject_uuid TEXT NOT NULL,
+    subject_type_id BIGINT NOT NULL,
+    -- scope_uuid is the entity which
+    -- defines the scope of the grant.
+    -- It will be an application, unit, relation, or model uuid.
+    scope_uuid TEXT NOT NULL,
+    scope_type_id TEXT NOT NULL,
+    PRIMARY KEY (secret_id, subject_uuid),
+    CONSTRAINT chk_empty_scope_uuid
+    CHECK (scope_uuid != ''),
+    CONSTRAINT chk_empty_subject_uuid
+    CHECK (subject_uuid != ''),
+    CONSTRAINT fk_secret_permission_secret_id
+    FOREIGN KEY (secret_id)
+    REFERENCES secret_metadata (secret_id),
+    CONSTRAINT fk_secret_permission_secret_role_id
+    FOREIGN KEY (role_id)
+    REFERENCES secret_role (id),
+    CONSTRAINT fk_secret_permission_secret_grant_subject_type_id
+    FOREIGN KEY (subject_type_id)
+    REFERENCES secret_grant_subject_type (id),
+    CONSTRAINT fk_secret_permission_secret_grant_scope_type_id
+    FOREIGN KEY (scope_type_id)
+    REFERENCES secret_grant_scope_type (id)
+);
+
+CREATE INDEX idx_secret_permission_secret_id
+ON secret_permission (secret_id);
+
+CREATE INDEX idx_secret_permission_subject_uuid_subject_type_id
+ON secret_permission (subject_uuid, subject_type_id);
+
+-- v_secret_permission is used to query secrets which can
+-- be accessed by a subject of application, unit, or model.
+CREATE VIEW v_secret_permission AS
+SELECT
+    sp.secret_id,
+    sp.role_id,
+    sp.subject_type_id,
+    sp.subject_uuid,
+    sp.scope_type_id,
+    sp.scope_uuid,
+    -- subject_id is the natural id of the subject entity (uuid for model)
+    (CASE
+        WHEN sp.subject_type_id = 0 THEN suu.name
+        WHEN sp.subject_type_id = 1 THEN sua.name
+        WHEN sp.subject_type_id = 2 THEN m.uuid
+    END) AS subject_id,
+    -- scope_id is the natural id of the scope entity (uuid for model)
+    -- relations are not processed here - their scope_id is the relation key
+    -- which needs to be composed in code.
+    (CASE
+        WHEN sp.scope_type_id = 0 THEN scu.name
+        WHEN sp.scope_type_id = 1 THEN sca.name
+        WHEN sp.scope_type_id = 2 THEN m.uuid
+    END) AS scope_id
+FROM secret_permission AS sp
+LEFT JOIN unit AS suu ON sp.subject_uuid = suu.uuid
+LEFT JOIN application AS sua ON sp.subject_uuid = sua.uuid
+LEFT JOIN unit AS scu ON sp.scope_uuid = scu.uuid
+LEFT JOIN application AS sca ON sp.scope_uuid = sca.uuid
+JOIN model AS m;
+
+CREATE VIEW v_secret_owner AS
+SELECT
+    'model' AS owner_kind,
+    m.uuid AS owner_uuid,
+    m.name AS owner_name,
+    so.label,
+    so.secret_id
+FROM secret_model_owner AS so
+JOIN model AS m -- this is a singleton
+UNION ALL
+SELECT
+    'application' AS owner_kind,
+    so.application_uuid AS owner_uuid,
+    a.name AS owner_name,
+    so.label,
+    so.secret_id
+FROM secret_application_owner AS so
+JOIN application AS a ON so.application_uuid = a.uuid
+UNION ALL
+SELECT
+    'unit' AS owner_kind,
+    so.unit_uuid AS owner_uuid,
+    u.name AS owner_name,
+    so.label,
+    so.secret_id
+FROM secret_unit_owner AS so
+JOIN unit AS u ON so.unit_uuid = u.uuid;
+
+CREATE VIEW v_secret_metadata AS
+SELECT
+    sm.secret_id,
+    sm.version,
+    sm.description,
+    sm.auto_prune,
+    sm.latest_revision_checksum,
+    sm.create_time,
+    sm.update_time,
+    rp.policy,
+    sro.next_rotation_time,
+    sre.expire_time,
+    sr.revision,
+    so.owner_kind,
+    so.owner_uuid,
+    so.owner_name,
+    so.label
+FROM secret_metadata AS sm
+JOIN secret_rotate_policy AS rp ON sm.rotate_policy_id = rp.id
+JOIN secret_revision AS sr ON sm.secret_id = sr.secret_id
+LEFT JOIN secret_revision_expire AS sre ON sr.uuid = sre.revision_uuid
+LEFT JOIN secret_rotation AS sro ON sm.secret_id = sro.secret_id
+LEFT JOIN v_secret_owner AS so ON sm.secret_id = so.secret_id;
+
+-- secret_reservation tracks secret IDs that have been minted by
+-- CreateSecretURIs but not yet persisted as charm secrets. Each
+-- reservation is keyed to the unit that requested it so that
+-- backend write authority can be granted only for IDs the
+-- requesting unit actually reserved. Rows are consumed (deleted)
+-- when the secret is created during the unit-state commit hook.
+CREATE TABLE secret_reservation (
+    secret_id TEXT NOT NULL PRIMARY KEY,
+    unit_uuid TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT fk_secret_reservation_unit_uuid
+    FOREIGN KEY (unit_uuid)
+    REFERENCES unit (uuid)
+);
+
+CREATE INDEX idx_secret_reservation_unit_uuid
+ON secret_reservation (unit_uuid);
