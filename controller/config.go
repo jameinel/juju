@@ -235,6 +235,18 @@ const (
 	// same database.
 	DqliteBusyTimeout = "dqlite-busy-timeout"
 
+	// DBBackend selects the database backend used for the controller and
+	// model databases. It is fixed at bootstrap.
+	DBBackend = "db-backend"
+
+	// DBURL is the connection URL for the external database. It is
+	// required if, and only if, DBBackend is "postgresql".
+	DBURL = "db-url"
+
+	// DBCACert is the PEM encoded CA certificate used to verify the
+	// external database server certificate. It is public, not a secret.
+	DBCACert = "db-ca-cert"
+
 	// SystemSSHKeys returns the set of ssh keys that should be trusted by
 	// agents of this controller regardless of the model.
 	SystemSSHKeys = "system-ssh-keys"
@@ -389,6 +401,15 @@ const (
 	// others to finish writing on the same database.
 	DefaultDqliteBusyTimeout = 1 * time.Second
 
+	// DBBackendDqlite is the default, embedded, database backend.
+	DBBackendDqlite = "dqlite"
+
+	// DBBackendPostgreSQL selects an external PostgreSQL database.
+	DBBackendPostgreSQL = "postgresql"
+
+	// DefaultDBBackend is the default database backend.
+	DefaultDBBackend = DBBackendDqlite
+
 	// DefaultAuditLogExcludeMethods is the default list of methods to
 	// exclude from the audit log.
 	// This special value means we exclude any methods in the set
@@ -464,6 +485,9 @@ var (
 		QueryTracingEnabled,
 		QueryTracingThreshold,
 		DqliteBusyTimeout,
+		DBBackend,
+		DBURL,
+		DBCACert,
 
 		SystemSSHKeys,
 		JujudControllerSnapSource,
@@ -976,6 +1000,27 @@ func (c Config) DqliteBusyTimeout() time.Duration {
 	return c.durationOrDefault(DqliteBusyTimeout, DefaultDqliteBusyTimeout)
 }
 
+// DBBackend returns the database backend, "dqlite" or "postgresql".
+func (c Config) DBBackend() string {
+	if v, ok := c[DBBackend].(string); ok && v != "" {
+		return v
+	}
+	return DefaultDBBackend
+}
+
+// DBURL returns the connection URL of the external database.
+func (c Config) DBURL() string {
+	v, _ := c[DBURL].(string)
+	return v
+}
+
+// DBCACert returns the PEM CA certificate used to verify the external
+// database server.
+func (c Config) DBCACert() string {
+	v, _ := c[DBCACert].(string)
+	return v
+}
+
 func (c Config) SSHServerPort() int {
 	return c.intOrDefault(SSHServerPort, DefaultSSHServerPort)
 }
@@ -1214,6 +1259,10 @@ func Validate(c Config) error {
 		}
 	}
 
+	if err := c.validateDBBackend(); err != nil {
+		return errors.Trace(err)
+	}
+
 	if v, ok := c[JujudControllerSnapSource].(string); ok {
 		switch v {
 		case "legacy": // TODO(jujud-controller-snap): remove once jujud-controller snap is fully implemented.
@@ -1309,4 +1358,24 @@ func parseDuration(c Config, name string) (time.Duration, error) {
 	default:
 		return 0, errors.Errorf("unexpected type %T", c[name])
 	}
+}
+
+func (c Config) validateDBBackend() error {
+	backend, _ := c[DBBackend].(string)
+	switch backend {
+	case "", DBBackendDqlite:
+		if c.DBURL() != "" {
+			return errors.Errorf("%s must not be set unless %s is %q",
+				DBURL, DBBackend, DBBackendPostgreSQL)
+		}
+	case DBBackendPostgreSQL:
+		if c.DBURL() == "" {
+			return errors.Errorf("%s is required when %s is %q",
+				DBURL, DBBackend, DBBackendPostgreSQL)
+		}
+	default:
+		return errors.Errorf("%s value %q must be %q or %q",
+			DBBackend, backend, DBBackendDqlite, DBBackendPostgreSQL)
+	}
+	return nil
 }

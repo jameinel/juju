@@ -54,6 +54,9 @@ var configChecker = schema.FieldMap(schema.Fields{
 	QueryTracingEnabled:              schema.Bool(),
 	QueryTracingThreshold:            schema.TimeDurationString(),
 	DqliteBusyTimeout:                schema.TimeDurationString(),
+	DBBackend:                        schema.String(),
+	DBURL:                            schema.String(),
+	DBCACert:                         schema.String(),
 	SystemSSHKeys:                    schema.String(),
 	JujudControllerSnapSource:        schema.String(),
 	SSHServerPort:                    schema.ForceInt(),
@@ -101,6 +104,9 @@ var configChecker = schema.FieldMap(schema.Fields{
 	QueryTracingEnabled:              DefaultQueryTracingEnabled,
 	QueryTracingThreshold:            DefaultQueryTracingThreshold,
 	DqliteBusyTimeout:                DefaultDqliteBusyTimeout,
+	DBBackend:                        DefaultDBBackend,
+	DBURL:                            schema.Omit,
+	DBCACert:                         schema.Omit,
 	SystemSSHKeys:                    schema.Omit,
 	JujudControllerSnapSource:        DefaultJujudControllerSnapSource,
 	SSHServerPort:                    DefaultSSHServerPort,
@@ -294,6 +300,24 @@ The timeout for how long a database operation will wait for a lock
 to be released before returning an error, that is the amount of
 time a writer will wait for others to finish writing on the
 same database.`[1:],
+	},
+	DBBackend: {
+		Type: configschema.Tstring,
+		Description: `
+The database backend, either "dqlite" (the default) or "postgresql".
+It can only be set at bootstrap.`[1:],
+	},
+	DBURL: {
+		Type: configschema.Tstring,
+		Description: `
+The connection URL of the external PostgreSQL database. It is required
+if db-backend is "postgresql". It can only be set at bootstrap.`[1:],
+	},
+	DBCACert: {
+		Type: configschema.Tstring,
+		Description: `
+The PEM encoded CA certificate used to verify the external PostgreSQL
+server when db-url uses TLS.`[1:],
 	},
 
 	SystemSSHKeys: {
