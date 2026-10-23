@@ -93,7 +93,7 @@ func CreateTestModel(
 
 	err = runner.StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO user (uuid, name, display_name, external, removed, created_by_uuid, created_at)
+			INSERT INTO "user" (uuid, name, display_name, external, removed, created_by_uuid, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, userUUID.String(), userName.Name(), userName.Name(), false, false, userUUID, time.Now())
 		if err != nil {
@@ -220,7 +220,7 @@ func CreateTestModelWithoutActivation(
 
 	err = runner.StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO user (uuid, name, display_name, external, removed, created_by_uuid, created_at)
+			INSERT INTO "user" (uuid, name, display_name, external, removed, created_by_uuid, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, userUUID.String(), userName.Name(), userName.Name(), false, false, userUUID, time.Now())
 		if err != nil {

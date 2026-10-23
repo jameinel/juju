@@ -63,6 +63,8 @@ func (s *stateSuite) TestClaimLeaseSuccessAndLeaseQueries(c *tc.C) {
 	c.Assert(leases, tc.HasLen, 2)
 	c.Check(leases[pgKey].Holder, tc.Equals, "postgresql/0")
 	c.Check(leases[pgKey].Expiry.After(time.Now().UTC()), tc.IsTrue)
+	// The expiry is a minute after the claim, to whole-second precision.
+	c.Check(leases[pgKey].Expiry.Before(time.Now().UTC().Add(time.Minute+time.Second)), tc.IsTrue)
 	c.Check(leases[mmKey].Holder, tc.Equals, "mattermost/0")
 	c.Check(leases[mmKey].Expiry.After(time.Now().UTC()), tc.IsTrue)
 

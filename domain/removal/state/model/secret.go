@@ -449,10 +449,11 @@ AND    ($deleteFlags.has_revisions = 0 OR r.revision IN ($revisions[:]))
 		`DELETE FROM secret_revision_expire WHERE revision_uuid IN ($uuids[:])`,
 		`DELETE FROM secret_content WHERE revision_uuid IN ($uuids[:])`,
 		`
-INSERT OR IGNORE INTO secret_deleted_value_ref (revision_uuid,backend_uuid,revision_id)
+INSERT INTO secret_deleted_value_ref (revision_uuid,backend_uuid,revision_id)
 SELECT revision_uuid,backend_uuid,revision_id 
 FROM secret_value_ref 
-WHERE revision_uuid IN ($uuids[:])`,
+WHERE revision_uuid IN ($uuids[:])
+ON CONFLICT DO NOTHING`,
 		`DELETE FROM secret_value_ref WHERE revision_uuid IN ($uuids[:])`,
 		`DELETE FROM secret_revision_obsolete WHERE revision_uuid IN ($uuids[:])`,
 		`DELETE FROM secret_revision WHERE uuid IN ($uuids[:])`,

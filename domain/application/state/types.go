@@ -1416,7 +1416,7 @@ type unitK8sPodInfoWithName struct {
 	UnitName   string               `db:"name"`
 	ProviderID sql.Null[network.Id] `db:"provider_id"`
 	Address    sql.Null[string]     `db:"address"`
-	Ports      string               `db:"ports"`
+	Port       sql.Null[string]     `db:"port"`
 }
 
 type charmModifiedVersion struct {

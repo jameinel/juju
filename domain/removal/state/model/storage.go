@@ -951,7 +951,7 @@ WHERE  uuid = $entityUUID.uuid
 UPDATE storage_volume_status
 SET    status_id=$entityStatus.status_id,
        message='',
-       updated_at=DATETIME('now')
+       updated_at=CURRENT_TIMESTAMP
 WHERE  volume_uuid = $entityUUID.uuid
 `, inputUUID, inputStatus)
 	if err != nil {
@@ -1186,7 +1186,7 @@ WHERE  uuid = $entityUUID.uuid
 UPDATE storage_filesystem_status
 SET    status_id=$entityStatus.status_id,
        message='',
-       updated_at=DATETIME('now')
+       updated_at=CURRENT_TIMESTAMP
 WHERE  filesystem_uuid = $entityUUID.uuid
 `, inputUUID, inputStatus)
 	if err != nil {

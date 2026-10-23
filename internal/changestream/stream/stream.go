@@ -550,7 +550,7 @@ const (
 INSERT INTO change_log_witness
 	(controller_id, lower_bound, upper_bound, updated_at)
 VALUES
-	(?, -1, -1, DATETIME('now', 'utc'))
+	(?, -1, -1, CURRENT_TIMESTAMP)
 ON CONFLICT (controller_id) DO NOTHING;
 `
 )
@@ -581,7 +581,7 @@ UPDATE change_log_witness
 SET
 	lower_bound = ?,
 	upper_bound = ?,
-	updated_at = DATETIME('now', 'utc')
+	updated_at = CURRENT_TIMESTAMP
 WHERE controller_id = ?;
 `
 )
@@ -759,7 +759,7 @@ func (s *Stream) latestChangeLogID() (int64, error) {
 
 	var id int64
 	err := s.db.StdTxn(ctx, func(ctx context.Context, tx *sql.Tx) error {
-		row := tx.QueryRowContext(ctx, "SELECT IFNULL(MAX(id), -1) FROM change_log")
+		row := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(id), -1) FROM change_log")
 		if err := row.Scan(&id); err != nil {
 			return errors.Annotate(err, "getting latest change log ID")
 		}

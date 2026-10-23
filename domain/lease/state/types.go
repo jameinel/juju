@@ -4,8 +4,6 @@
 package state
 
 import (
-	"database/sql/driver"
-	"fmt"
 	"math"
 	"time"
 )
@@ -24,20 +22,30 @@ type Lease struct {
 	Holder string `db:"holder"`
 	// Start is the lease start time.
 	Start time.Time `db:"start"`
-	// Duration is the duration of the lease. It is used only when inserting an
-	// expiry time, the actual time is calculated from the duration by the
-	// database.
-	Duration LeaseDuration `db:"duration"`
 	// Expiry is the lease expiry time. Expiry is only used to read expiry
-	// times, Duration is used for writing.
+	// times, ExpiryAt is used for writing.
 	Expiry time.Time `db:"expiry"`
+	// StartAt is the lease start time to write, as a database timestamp.
+	StartAt string `db:"start_at"`
+	// ExpiryAt is the lease expiry time to write, as a database timestamp.
+	ExpiryAt string `db:"expiry_at"`
 }
 
-type LeaseDuration time.Duration
+// timestampLayout is the layout of timestamps written to the database. It
+// matches the text produced by SQLite's `datetime('now')` and is accepted
+// by PostgreSQL timestamp columns.
+const timestampLayout = "2006-01-02 15:04:05"
 
-// Value implements the Valuer interface for scanning
-func (d LeaseDuration) Value() (driver.Value, error) {
-	return fmt.Sprintf("+%d seconds", int64(math.Ceil(time.Duration(d).Seconds()))), nil
+// formatTimestamp returns t as a database timestamp in UTC.
+func formatTimestamp(t time.Time) string {
+	return t.UTC().Format(timestampLayout)
+}
+
+// expiryFrom returns the expiry time for a lease starting at now and held for
+// the duration, rounded up to whole seconds.
+func expiryFrom(now time.Time, duration time.Duration) time.Time {
+	seconds := int64(math.Ceil(duration.Seconds()))
+	return now.Truncate(time.Second).Add(time.Duration(seconds) * time.Second)
 }
 
 // LeasePin represents a lease pin to be serialised to the database.

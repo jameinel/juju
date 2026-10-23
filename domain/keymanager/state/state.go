@@ -398,7 +398,7 @@ func (s *State) GetAllUsersPublicKeys(
 	stmt, err := s.Prepare(`
 SELECT (u.name, mak.public_key) AS (&userPublicKey.*)
 FROM v_model_authorized_keys AS mak
-JOIN user AS u ON u.uuid = mak.user_uuid
+JOIN "user" AS u ON u.uuid = mak.user_uuid
 WHERE mak.model_uuid = $modelUUIDValue.model_uuid
 `, modelUUIDVal, userPublicKey{})
 

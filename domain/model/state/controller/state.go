@@ -841,7 +841,7 @@ func createModel(
 		creatorUUID := dbUserUUID{UUID: u.String()}
 		userStmt, err := preparer.Prepare(`
 SELECT &dbUserUUID.uuid
-FROM user
+FROM "user"
 WHERE uuid = $dbUserUUID.uuid
 AND removed = false
 	`, creatorUUID)
@@ -2126,7 +2126,7 @@ SELECT cc.uuid AS &dbUpdateCredentialResult.cloud_credential_uuid,
 FROM cloud_credential cc
 INNER JOIN cloud c
 ON c.uuid = cc.cloud_uuid
-INNER JOIN user u
+INNER JOIN "user" u
 ON cc.owner_uuid = u.uuid
 WHERE c.name = $dbCredKey.cloud_name
 AND u.name = $dbCredKey.owner_name

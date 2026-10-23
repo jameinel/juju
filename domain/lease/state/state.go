@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/canonical/sqlair"
+	"github.com/juju/clock"
 	"github.com/juju/collections/set"
 
 	coredatabase "github.com/juju/juju/core/database"
@@ -21,12 +22,14 @@ import (
 // State describes retrieval and persistence methods for storage.
 type State struct {
 	*domain.StateBase
+	clock clock.Clock
 }
 
 // NewState returns a new state reference.
 func NewState(factory coredatabase.TxnRunnerFactory) *State {
 	return &State{
 		StateBase: domain.NewStateBase(factory),
+		clock:     clock.WallClock,
 	}
 }
 
@@ -113,18 +116,20 @@ func (s *State) ClaimLease(ctx context.Context, uuid uuid.UUID, key corelease.Ke
 		return errors.Capture(err)
 	}
 
+	now := s.clock.Now()
 	lease := Lease{
 		UUID:      uuid.String(),
 		ModelUUID: key.ModelUUID,
 		Type:      key.Namespace,
 		Name:      key.Lease,
 		Holder:    req.Holder,
-		Duration:  LeaseDuration(req.Duration),
+		StartAt:   formatTimestamp(now),
+		ExpiryAt:  formatTimestamp(expiryFrom(now, req.Duration)),
 	}
 
 	stmt, err := s.Prepare(`
 INSERT INTO lease (uuid, lease_type_id, model_uuid, name, holder, start, expiry)
-SELECT $Lease.uuid, id, $Lease.model_uuid, $Lease.name, $Lease.holder, datetime('now'), datetime('now', $Lease.duration) 
+SELECT $Lease.uuid, id, $Lease.model_uuid, $Lease.name, $Lease.holder, $Lease.start_at, $Lease.expiry_at
 FROM   lease_type
 WHERE  type = $Lease.type;`, lease)
 	if err != nil {
@@ -154,7 +159,7 @@ func (s *State) ExtendLease(ctx context.Context, key corelease.Key, req coreleas
 	}
 
 	lease := Lease{
-		Duration:  LeaseDuration(req.Duration),
+		ExpiryAt:  formatTimestamp(expiryFrom(s.clock.Now(), req.Duration)),
 		ModelUUID: key.ModelUUID,
 		Type:      key.Namespace,
 		Name:      key.Lease,
@@ -163,7 +168,7 @@ func (s *State) ExtendLease(ctx context.Context, key corelease.Key, req coreleas
 
 	stmt, err := s.Prepare(`
 UPDATE lease
-SET    expiry = datetime('now', $Lease.duration)
+SET    expiry = $Lease.expiry_at
 WHERE  uuid = (
     SELECT l.uuid
     FROM   lease l JOIN lease_type t ON l.lease_type_id = t.id
