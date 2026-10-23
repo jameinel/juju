@@ -14,7 +14,7 @@ import (
 // transient and the interaction can be safely retried.
 // See: https://github.com/canonical/go-dqlite/issues/220
 func IsErrRetryable(err error) bool {
-	if IsErrLocked(err) {
+	if IsErrLocked(err) || isPGRetryable(err) {
 		return true
 	}
 
@@ -47,7 +47,8 @@ func IsConstraintError(err error) bool {
 	if err == nil || IsErrLocked(err) {
 		return false
 	}
-	return IsExtendedErrorCode(err, sqlite3.ErrConstraintCheck) ||
+	return isPGConstraintError(err) ||
+		IsExtendedErrorCode(err, sqlite3.ErrConstraintCheck) ||
 		IsExtendedErrorCode(err, sqlite3.ErrConstraintForeignKey) ||
 		IsExtendedErrorCode(err, sqlite3.ErrConstraintNotNull) ||
 		IsExtendedErrorCode(err, sqlite3.ErrConstraintPrimaryKey) ||

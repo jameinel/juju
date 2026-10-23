@@ -55,6 +55,7 @@ require (
 	github.com/hashicorp/vault/api v1.23.0
 	github.com/hpcloud/tail v1.0.0
 	github.com/im7mortal/kmutex v1.0.2
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/juju/ansiterm v1.0.0
 	github.com/juju/clock v1.1.1
 	github.com/juju/collections v1.0.4
@@ -215,6 +216,9 @@ require (
 	github.com/hashicorp/go-sockaddr v1.0.7 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-7 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/juju/go4 v0.0.0-20160222163258-40d72ab9641a // indirect
 	github.com/juju/gojsonpointer v0.0.0-20150204194629-afe8b77aa08f // indirect
