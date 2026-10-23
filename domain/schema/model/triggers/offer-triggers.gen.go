@@ -8,7 +8,6 @@ import (
 	"github.com/juju/juju/core/database/schema"
 )
 
-
 // ChangeLogTriggersForOffer generates the triggers for the
 // offer table.
 func ChangeLogTriggersForOffer(columnName string, namespaceID int) func() schema.Patch {
@@ -45,4 +44,3 @@ BEGIN
 END;`, columnName, namespaceID))
 	}
 }
-

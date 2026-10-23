@@ -8,7 +8,6 @@ import (
 	"github.com/juju/juju/core/database/schema"
 )
 
-
 // ChangeLogTriggersForOperationTaskLog generates the triggers for the
 // operation_task_log table.
 func ChangeLogTriggersForOperationTaskLog(columnName string, namespaceID int) func() schema.Patch {
@@ -45,4 +44,3 @@ BEGIN
 END;`, columnName, namespaceID))
 	}
 }
-

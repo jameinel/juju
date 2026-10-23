@@ -8,7 +8,6 @@ import (
 	"github.com/juju/juju/core/database/schema"
 )
 
-
 // ChangeLogTriggersForFqdnAddress generates the triggers for the
 // fqdn_address table.
 func ChangeLogTriggersForFqdnAddress(columnName string, namespaceID int) func() schema.Patch {
@@ -202,4 +201,3 @@ BEGIN
 END;`, columnName, namespaceID))
 	}
 }
-

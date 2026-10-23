@@ -8,7 +8,6 @@ import (
 	"github.com/juju/juju/core/database/schema"
 )
 
-
 // ChangeLogTriggersForControllerAgentAddress generates the triggers for the
 // controller_agent_address table.
 func ChangeLogTriggersForControllerAgentAddress(columnName string, namespaceID int) func() schema.Patch {
@@ -274,4 +273,3 @@ BEGIN
 END;`, columnName, namespaceID))
 	}
 }
-

@@ -8,7 +8,6 @@ import (
 	"github.com/juju/juju/core/database/schema"
 )
 
-
 // ChangeLogTriggersForApplicationRemoteConsumer generates the triggers for the
 // application_remote_consumer table.
 func ChangeLogTriggersForApplicationRemoteConsumer(columnName string, namespaceID int) func() schema.Patch {
@@ -161,4 +160,3 @@ BEGIN
 END;`, columnName, namespaceID))
 	}
 }
-
