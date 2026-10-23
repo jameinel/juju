@@ -637,6 +637,34 @@ func (*suite) TestSetDqliteBusyTimeout(c *tc.C) {
 	c.Assert(dqliteBusyTimeout, tc.Equals, time.Second*10, tc.Commentf("dqlite busy timeout not updated"))
 }
 
+func (*suite) TestSetDBConfig(c *tc.C) {
+	conf, err := agent.NewAgentConfig(attributeParams)
+	c.Assert(err, tc.ErrorIsNil)
+
+	c.Check(conf.DBBackend(), tc.Equals, "")
+	conf.SetDBConfig("postgresql", "postgres://u:p@h/juju", "CA")
+	c.Check(conf.DBBackend(), tc.Equals, "postgresql")
+	c.Check(conf.DBURL(), tc.Equals, "postgres://u:p@h/juju")
+	c.Check(conf.DBCACert(), tc.Equals, "CA")
+}
+
+func (*suite) TestDBConfigRoundTrip(c *tc.C) {
+	params := attributeParams
+	params.DBBackend = "postgresql"
+	params.DBURL = "postgres://u:p@h/juju"
+	params.DBCACert = "-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----\n"
+	params.Paths = agent.Paths{DataDir: c.MkDir()}
+	conf, err := agent.NewAgentConfig(params)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Assert(conf.Write(), tc.ErrorIsNil)
+
+	read, err := agent.ReadConfig(agent.ConfigPath(params.Paths.DataDir, params.Tag))
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(read.DBBackend(), tc.Equals, params.DBBackend)
+	c.Check(read.DBURL(), tc.Equals, params.DBURL)
+	c.Check(read.DBCACert(), tc.Equals, params.DBCACert)
+}
+
 func (*suite) TestSetOpenTelemetryEnabled(c *tc.C) {
 	conf, err := agent.NewAgentConfig(attributeParams)
 	c.Assert(err, tc.ErrorIsNil)

@@ -67,6 +67,9 @@ type format_2_0Serialization struct {
 	QueryTracingEnabled   bool          `yaml:"querytracingenabled,omitempty"`
 	QueryTracingThreshold time.Duration `yaml:"querytracingthreshold,omitempty"`
 	DqliteBusyTimeout     time.Duration `yaml:"dqlitebusytimeout,omitempty"`
+	DBBackend             string        `yaml:"dbbackend,omitempty"`
+	DBURL                 string        `yaml:"dburl,omitempty"`
+	DBCACert              string        `yaml:"dbcacert,omitempty"`
 
 	OpenTelemetryEnabled               bool          `yaml:"opentelemetryenabled,omitempty"`
 	OpenTelemetryHTTPEndpoint          string        `yaml:"opentelemetryhttpendpoint,omitempty"`
@@ -143,6 +146,9 @@ func (formatter_2_0) unmarshal(data []byte) (*configInternal, error) {
 		queryTracingEnabled:   format.QueryTracingEnabled,
 		queryTracingThreshold: format.QueryTracingThreshold,
 		dqliteBusyTimeout:     format.DqliteBusyTimeout,
+		dbBackend:             format.DBBackend,
+		dbURL:                 format.DBURL,
+		dbCACert:              format.DBCACert,
 
 		openTelemetryEnabled:               format.OpenTelemetryEnabled,
 		openTelemetryHTTPEndpoint:          format.OpenTelemetryHTTPEndpoint,
@@ -226,6 +232,9 @@ func (formatter_2_0) marshal(config *configInternal) ([]byte, error) {
 		QueryTracingEnabled:   config.queryTracingEnabled,
 		QueryTracingThreshold: config.queryTracingThreshold,
 		DqliteBusyTimeout:     config.dqliteBusyTimeout,
+		DBBackend:             config.dbBackend,
+		DBURL:                 config.dbURL,
+		DBCACert:              config.dbCACert,
 
 		OpenTelemetryEnabled:               config.openTelemetryEnabled,
 		OpenTelemetryHTTPEndpoint:          config.openTelemetryHTTPEndpoint,

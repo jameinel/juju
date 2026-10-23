@@ -324,6 +324,18 @@ type Config interface {
 	// operations.
 	DqliteBusyTimeout() time.Duration
 
+	// DBBackend returns the database backend, "dqlite" or "postgresql". An
+	// empty value means dqlite.
+	DBBackend() string
+
+	// DBURL returns the connection URL of the external database. It is
+	// empty unless the backend is "postgresql".
+	DBURL() string
+
+	// DBCACert returns the PEM CA certificate used to verify the external
+	// database server, if any.
+	DBCACert() string
+
 	// OpenTelemetryEnabled returns whether the open telemetry is enabled.
 	OpenTelemetryEnabled() bool
 
@@ -408,6 +420,10 @@ type configSetterOnly interface {
 	// SetDqliteBusyTimeout sets the busy timeout for dqlite database
 	// operations.
 	SetDqliteBusyTimeout(time.Duration)
+
+	// SetDBConfig sets the database backend, the external database URL and
+	// the PEM CA certificate for the external database.
+	SetDBConfig(backend, url, caCert string)
 
 	// SetOpenTelemetryEnabled sets whether open telemetry is enabled.
 	SetOpenTelemetryEnabled(bool)
@@ -519,6 +535,9 @@ type configInternal struct {
 	queryTracingEnabled                bool
 	queryTracingThreshold              time.Duration
 	dqliteBusyTimeout                  time.Duration
+	dbBackend                          string
+	dbURL                              string
+	dbCACert                           string
 	openTelemetryEnabled               bool
 	openTelemetryHTTPEndpoint          string
 	openTelemetryGRPCEndpoint          string
@@ -549,6 +568,9 @@ type AgentConfigParams struct {
 	QueryTracingEnabled                bool
 	QueryTracingThreshold              time.Duration
 	DqliteBusyTimeout                  time.Duration
+	DBBackend                          string
+	DBURL                              string
+	DBCACert                           string
 	OpenTelemetryEnabled               bool
 	OpenTelemetryHTTPEndpoint          string
 	OpenTelemetryGRPCEndpoint          string
@@ -635,6 +657,9 @@ func NewAgentConfig(configParams AgentConfigParams) (ConfigSetterWriter, error) 
 		queryTracingEnabled:                configParams.QueryTracingEnabled,
 		queryTracingThreshold:              configParams.QueryTracingThreshold,
 		dqliteBusyTimeout:                  configParams.DqliteBusyTimeout,
+		dbBackend:                          configParams.DBBackend,
+		dbURL:                              configParams.DBURL,
+		dbCACert:                           configParams.DBCACert,
 		openTelemetryEnabled:               configParams.OpenTelemetryEnabled,
 		openTelemetryHTTPEndpoint:          configParams.OpenTelemetryHTTPEndpoint,
 		openTelemetryGRPCEndpoint:          configParams.OpenTelemetryGRPCEndpoint,
@@ -1013,6 +1038,28 @@ func (c *configInternal) SetDqliteBusyTimeout(v time.Duration) {
 		v = 0
 	}
 	c.dqliteBusyTimeout = v
+}
+
+// DBBackend implements Config.
+func (c *configInternal) DBBackend() string {
+	return c.dbBackend
+}
+
+// DBURL implements Config.
+func (c *configInternal) DBURL() string {
+	return c.dbURL
+}
+
+// DBCACert implements Config.
+func (c *configInternal) DBCACert() string {
+	return c.dbCACert
+}
+
+// SetDBConfig implements configSetterOnly.
+func (c *configInternal) SetDBConfig(backend, url, caCert string) {
+	c.dbBackend = backend
+	c.dbURL = url
+	c.dbCACert = caCert
 }
 
 // OpenTelemetryEnabled implements Config.
