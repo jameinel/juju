@@ -8,7 +8,6 @@ import (
 	"github.com/juju/juju/core/database/schema"
 )
 
-
 // ChangeLogTriggersForControllerSshServerPort generates the triggers for the
 // controller_ssh_server_port table.
 func ChangeLogTriggersForControllerSshServerPort(columnName string, namespaceID int) func() schema.Patch {
@@ -43,4 +42,3 @@ BEGIN
 END;`, columnName, namespaceID))
 	}
 }
-

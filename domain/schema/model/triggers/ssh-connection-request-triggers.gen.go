@@ -8,7 +8,6 @@ import (
 	"github.com/juju/juju/core/database/schema"
 )
 
-
 // ChangeLogTriggersForSshConnectionRequest generates the triggers for the
 // ssh_connection_request table.
 func ChangeLogTriggersForSshConnectionRequest(columnName string, namespaceID int) func() schema.Patch {
@@ -48,4 +47,3 @@ BEGIN
 END;`, columnName, namespaceID))
 	}
 }
-

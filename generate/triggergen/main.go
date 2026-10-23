@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"go/format"
 	"io"
 	"log"
 	"os"
@@ -108,7 +109,7 @@ func main() {
 		_, _ = file.Seek(0, io.SeekStart)
 	}
 
-	fmt.Fprintln(file, result)
+	fmt.Fprint(file, result)
 
 	os.Exit(0)
 }
@@ -264,7 +265,11 @@ func renderTemplates(tableColumns map[string][]columnInfo, destPackage string) (
 	}); err != nil {
 		return "", errors.Annotatef(err, "cannot render template")
 	}
-	return builder.String(), nil
+	formatted, err := format.Source([]byte(builder.String()))
+	if err != nil {
+		return "", errors.Annotatef(err, "cannot format rendered template")
+	}
+	return string(formatted), nil
 }
 
 func updateConditions(table string, columnInfos []columnInfo) []string {

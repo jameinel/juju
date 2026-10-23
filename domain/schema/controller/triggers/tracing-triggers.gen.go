@@ -8,7 +8,6 @@ import (
 	"github.com/juju/juju/core/database/schema"
 )
 
-
 // ChangeLogTriggersForWorkloadTracingConfig generates the triggers for the
 // workload_tracing_config table.
 func ChangeLogTriggersForWorkloadTracingConfig(columnName string, namespaceID int) func() schema.Patch {
@@ -44,4 +43,3 @@ BEGIN
 END;`, columnName, namespaceID))
 	}
 }
-

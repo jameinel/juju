@@ -8,7 +8,6 @@ import (
 	"github.com/juju/juju/core/database/schema"
 )
 
-
 // ChangeLogTriggersForLinkLayerDevice generates the triggers for the
 // link_layer_device table.
 func ChangeLogTriggersForLinkLayerDevice(columnName string, namespaceID int) func() schema.Patch {
@@ -90,4 +89,3 @@ BEGIN
 END;`, columnName, namespaceID))
 	}
 }
-
