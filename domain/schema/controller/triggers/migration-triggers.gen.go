@@ -8,7 +8,6 @@ import (
 	"github.com/juju/juju/core/database/schema"
 )
 
-
 // ChangeLogTriggersForModelMigrationExport generates the triggers for the
 // model_migration_export table.
 func ChangeLogTriggersForModelMigrationExport(columnName string, namespaceID int) func() schema.Patch {
@@ -170,4 +169,3 @@ BEGIN
 END;`, columnName, namespaceID))
 	}
 }
-

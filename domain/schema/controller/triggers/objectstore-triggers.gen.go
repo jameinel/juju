@@ -8,7 +8,6 @@ import (
 	"github.com/juju/juju/core/database/schema"
 )
 
-
 // ChangeLogTriggersForObjectStoreBackend generates the triggers for the
 // object_store_backend table.
 func ChangeLogTriggersForObjectStoreBackend(columnName string, namespaceID int) func() schema.Patch {
@@ -120,4 +119,3 @@ BEGIN
 END;`, columnName, namespaceID))
 	}
 }
-
