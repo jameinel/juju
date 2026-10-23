@@ -64,7 +64,7 @@ func IsError(err error) bool {
 	// TODO (stickupkid): This is a compatibility layer for sqlite3, we should
 	// remove this once we are only using dqlite.
 	var sqliteErr sqlite3.Error
-	return errors.As(err, &sqliteErr)
+	return errors.As(err, &sqliteErr) || IsPGError(err)
 }
 
 // IsErrorTarget reports if the any type passed to it is a database driver
@@ -86,7 +86,7 @@ func IsErrorTarget(target any) bool {
 		return true
 	}
 
-	return false
+	return isPGErrorTarget(target)
 }
 
 // Re-export dqlite.Error as drivererrors.Error for ease of use.
