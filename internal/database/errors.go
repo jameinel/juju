@@ -23,7 +23,8 @@ func IsErrConstraintCheck(err error) bool {
 	if err == nil || drivererrors.IsErrLocked(err) {
 		return false
 	}
-	return drivererrors.IsExtendedErrorCode(err, sqlite3.ErrConstraintCheck)
+	return drivererrors.IsPGConstraintCheck(err) ||
+		drivererrors.IsExtendedErrorCode(err, sqlite3.ErrConstraintCheck)
 }
 
 // IsErrConstraintForeignKey returns true if the input error was
@@ -32,7 +33,8 @@ func IsErrConstraintForeignKey(err error) bool {
 	if err == nil || drivererrors.IsErrLocked(err) {
 		return false
 	}
-	return drivererrors.IsExtendedErrorCode(err, sqlite3.ErrConstraintForeignKey)
+	return drivererrors.IsPGConstraintForeignKey(err) ||
+		drivererrors.IsExtendedErrorCode(err, sqlite3.ErrConstraintForeignKey)
 }
 
 // IsErrConstraintNotNull returns true if the input error was
@@ -41,7 +43,8 @@ func IsErrConstraintNotNull(err error) bool {
 	if err == nil || drivererrors.IsErrLocked(err) {
 		return false
 	}
-	return drivererrors.IsExtendedErrorCode(err, sqlite3.ErrConstraintNotNull)
+	return drivererrors.IsPGConstraintNotNull(err) ||
+		drivererrors.IsExtendedErrorCode(err, sqlite3.ErrConstraintNotNull)
 }
 
 // IsErrConstraintPrimaryKey returns true if the input error was
@@ -50,7 +53,8 @@ func IsErrConstraintPrimaryKey(err error) bool {
 	if err == nil || drivererrors.IsErrLocked(err) {
 		return false
 	}
-	return drivererrors.IsExtendedErrorCode(err, sqlite3.ErrConstraintPrimaryKey)
+	return drivererrors.IsPGConstraintPrimaryKey(err) ||
+		drivererrors.IsExtendedErrorCode(err, sqlite3.ErrConstraintPrimaryKey)
 }
 
 // IsErrConstraintTrigger returns true if the input error was
@@ -59,7 +63,8 @@ func IsErrConstraintTrigger(err error) bool {
 	if err == nil || drivererrors.IsErrLocked(err) {
 		return false
 	}
-	return drivererrors.IsExtendedErrorCode(err, sqlite3.ErrConstraintTrigger)
+	return drivererrors.IsPGConstraintTrigger(err) ||
+		drivererrors.IsExtendedErrorCode(err, sqlite3.ErrConstraintTrigger)
 }
 
 // IsErrConstraintUnique returns true if the input error was
@@ -68,7 +73,8 @@ func IsErrConstraintUnique(err error) bool {
 	if err == nil || drivererrors.IsErrLocked(err) {
 		return false
 	}
-	return drivererrors.IsExtendedErrorCode(err, sqlite3.ErrConstraintUnique)
+	return drivererrors.IsPGConstraintUnique(err) ||
+		drivererrors.IsExtendedErrorCode(err, sqlite3.ErrConstraintUnique)
 }
 
 // IsErrConstraintRowID returns true if the input error was
