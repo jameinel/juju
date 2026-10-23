@@ -160,7 +160,7 @@ func (st *State) MatchesPublicKeyInModelForUser(ctx context.Context, modelUUID, 
 	keyStmt, err := st.Prepare(`
 SELECT upsk.fingerprint AS &matchedPublicKeyFingerprint.fingerprint
 FROM user_public_ssh_key AS upsk
-JOIN user AS u ON upsk.user_uuid = u.uuid
+JOIN "user" AS u ON upsk.user_uuid = u.uuid
 JOIN model_authorized_keys AS mak
   ON mak.user_public_ssh_key_id = upsk.id
 JOIN model AS m ON mak.model_uuid = m.uuid

@@ -7,7 +7,6 @@ import (
 	"context"
 	"database/sql"
 	"slices"
-	"strings"
 
 	"github.com/canonical/sqlair"
 	"github.com/juju/collections/transform"
@@ -2098,10 +2097,7 @@ SELECT
 	u.name AS &unitK8sPodInfoWithName.name,
 	k.provider_id AS &unitK8sPodInfoWithName.provider_id,
 	ip.address_value AS &unitK8sPodInfoWithName.address,
-	COALESCE(
-		GROUP_CONCAT(kpp.port, ','),
-		''
-	) AS &unitK8sPodInfoWithName.ports
+	kpp.port AS &unitK8sPodInfoWithName.port
 FROM
 	unit AS u
 LEFT JOIN k8s_pod AS k ON u.uuid = k.unit_uuid
@@ -2110,8 +2106,8 @@ LEFT JOIN ip_address ip ON ip.device_uuid = lld.uuid
 LEFT JOIN k8s_pod_port kpp ON kpp.unit_uuid = u.uuid
 WHERE
 	u.life_id != $entityLife.life_id
-GROUP BY
-	u.name
+ORDER BY
+	u.name, kpp.port
 `
 	stmt, err := st.Prepare(infoQuery, unitK8sPodInfoWithName{}, deadLife)
 	if err != nil {
@@ -2130,19 +2126,29 @@ GROUP BY
 		return nil, errors.Capture(err)
 	}
 
-	result := make(map[coreunit.Name]application.K8sPodInfo)
+	// The join yields a row per address and port for each unit, so collapse
+	// the rows into one entry per unit here instead of aggregating in SQL.
+	podInfos := make(map[string]unitK8sPodInfo)
+	podPorts := make(map[string][]k8sPodPort)
 	for _, info := range infos {
-		ports := make([]k8sPodPort, 0)
-		for p := range strings.SplitSeq(info.Ports, ",") {
-			ports = append(ports, k8sPodPort{Port: p})
+		podInfo, ok := podInfos[info.UnitName]
+		if !ok {
+			podInfo.ProviderID = info.ProviderID
 		}
-		result[coreunit.Name(info.UnitName)] = encodeK8sPodInfo(
-			unitK8sPodInfo{
-				ProviderID: info.ProviderID,
-				Address:    info.Address,
-			},
-			ports,
-		)
+		if !podInfo.Address.Valid {
+			podInfo.Address = info.Address
+		}
+		podInfos[info.UnitName] = podInfo
+
+		ports := podPorts[info.UnitName]
+		if info.Port.Valid && !slices.Contains(ports, k8sPodPort{Port: info.Port.V}) {
+			podPorts[info.UnitName] = append(ports, k8sPodPort{Port: info.Port.V})
+		}
+	}
+
+	result := make(map[coreunit.Name]application.K8sPodInfo, len(podInfos))
+	for name, podInfo := range podInfos {
+		result[coreunit.Name(name)] = encodeK8sPodInfo(podInfo, podPorts[name])
 	}
 	return result, nil
 }

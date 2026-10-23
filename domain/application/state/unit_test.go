@@ -2129,6 +2129,34 @@ func (s *unitStateSuite) TestGetUnitsK8sPodInfo(c *tc.C) {
 	})
 }
 
+func (s *unitStateSuite) TestGetUnitsK8sPodInfoNoPorts(c *tc.C) {
+	appUUID := s.createCAASApplication(c, "foo", life.Alive, application.AddCAASUnitArg{
+		AddUnitArg: application.AddUnitArg{
+			UnitUUID:    tc.Must(c, coreunit.NewUUID),
+			NetNodeUUID: tc.Must(c, domainnetwork.NewNetNodeUUID),
+		},
+		K8sPod: &application.K8sPod{
+			ProviderID: "foo-id",
+			Address: new(application.K8sPodAddress{
+				Value: "10.6.6.6/24",
+			}),
+		},
+	})
+	unitUUIDs := s.getApplicationUnits(c, appUUID)
+	unitName, err := s.state.GetUnitNameForUUID(c.Context(), unitUUIDs[0])
+	c.Assert(err, tc.ErrorIsNil)
+
+	infos, err := s.state.GetUnitsK8sPodInfo(c.Context())
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(infos, tc.DeepEquals, map[coreunit.Name]application.K8sPodInfo{
+		unitName: {
+			ProviderID: "foo-id",
+			Address:    "10.6.6.6/24",
+			Ports:      []string{},
+		},
+	})
+}
+
 func (s *unitStateSuite) TestGetUnitK8sPodInfo(c *tc.C) {
 	// Arrange:
 	appUUID := s.createCAASApplication(c, "foo", life.Alive, application.AddCAASUnitArg{

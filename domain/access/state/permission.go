@@ -238,7 +238,7 @@ SELECT  (u.uuid, u.name, u.display_name, u.external, u.created_at, u.disabled) A
         creator.name AS &dbPermissionUser.created_by_name,
         (p.*) AS (&dbPermission.*)
 FROM    v_user_auth u
-        JOIN user AS creator ON u.created_by_uuid = creator.uuid
+        JOIN "user" AS creator ON u.created_by_uuid = creator.uuid
         LEFT JOIN v_permission p ON u.uuid = p.grant_to AND p.grant_on = $dbPermission.grant_on 
 WHERE   u.name = $dbPermissionUser.name
 AND     u.disabled = false
@@ -408,7 +408,7 @@ SELECT (u.uuid, u.name, u.display_name, u.external, u.created_at, u.disabled) AS
        pat.type AS &dbPermission.access_type,
        pot.type AS &dbPermission.object_type
 FROM   v_user_auth u
-       JOIN user AS creator ON u.created_by_uuid = creator.uuid
+       JOIN "user" AS creator ON u.created_by_uuid = creator.uuid
        LEFT JOIN permission p ON u.uuid = p.grant_to
        LEFT JOIN permission_access_type pat ON p.access_type_id = pat.id
        LEFT JOIN permission_object_type pot ON p.object_type_id = pot.id
@@ -477,7 +477,7 @@ SELECT  (u.uuid, u.name, u.display_name, u.external, u.created_at, u.disabled) A
         (p.*) AS (&dbPermission.*),
         (ee.*) AS (&dbEveryoneExternal.*)
 FROM    v_user_auth u
-        JOIN user AS creator ON u.created_by_uuid = creator.uuid
+        JOIN "user" AS creator ON u.created_by_uuid = creator.uuid
         LEFT JOIN v_permission p ON u.uuid = p.grant_to AND p.grant_on = $dbPermission.grant_on 
         LEFT JOIN v_everyone_external ee ON ee.grant_on = $dbPermission.grant_on
 WHERE   u.disabled = false
@@ -560,7 +560,7 @@ SELECT (p.*) AS (&dbPermission.*),
        (u.uuid, u.name, u.display_name, u.external, u.created_at, u.disabled) AS (&dbPermissionUser.*),
        creator.name AS &dbPermissionUser.created_by_name
 FROM   v_user_auth u
-       JOIN user AS creator ON u.created_by_uuid = creator.uuid
+       JOIN "user" AS creator ON u.created_by_uuid = creator.uuid
        LEFT JOIN %s p ON u.uuid = p.grant_to
 WHERE  u.name = $userName.name
 AND    u.disabled = false
@@ -637,10 +637,10 @@ SELECT DISTINCT cc.name AS &ownerModelAccess.cred_name,
 FROM   model AS m
        JOIN cloud_credential AS cc  ON m.cloud_credential_uuid = cc.uuid
        JOIN cloud             AS c  ON cc.cloud_uuid = c.uuid
-       JOIN user              AS co ON cc.owner_uuid = co.uuid
+       JOIN "user"            AS co ON cc.owner_uuid = co.uuid
        JOIN permission        AS p  ON m.uuid = p.grant_on
        JOIN permission_access_type AS pat ON p.access_type_id = pat.id
-       JOIN user              AS u  ON p.grant_to = u.uuid
+       JOIN "user"            AS u  ON p.grant_to = u.uuid
 WHERE  co.name = $input.owner_name
 AND    m.activated = TRUE
 AND    u.name    = $input.owner_name
@@ -757,7 +757,7 @@ func (st *PermissionState) findUserByName(ctx context.Context, tx *sqlair.TX, na
 SELECT (u.uuid, u.name, u.display_name, u.external, u.created_at, u.disabled) AS (&dbPermissionUser.*),
        creator.name AS &dbPermissionUser.created_by_name
 FROM   v_user_auth u
-       JOIN user AS creator ON u.created_by_uuid = creator.uuid
+       JOIN "user" AS creator ON u.created_by_uuid = creator.uuid
 WHERE  u.removed = false
        AND u.name = $userName.name`
 
@@ -982,7 +982,7 @@ DELETE FROM permission
 WHERE  grant_on = $permInOut.grant_on
 AND    grant_to IN (
        SELECT uuid
-       FROM   user
+       FROM   "user"
        WHERE  name = $permInOut.name
 )
 `

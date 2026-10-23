@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/juju/clock"
 	"github.com/juju/errors"
 
 	"github.com/juju/juju/core/logger"
@@ -28,10 +29,16 @@ type noRetryRunner interface {
 type expiryStore struct {
 	db     noRetryRunner
 	logger logger.Logger
+	clock  clock.Clock
 }
+
+// expiryTimestampLayout is the layout of lease expiry timestamps in the
+// database, as written by the lease state.
+const expiryTimestampLayout = "2006-01-02 15:04:05"
 
 // ExpireLeases deletes all unpinned leases that have expired.
 func (s *expiryStore) ExpireLeases(ctx context.Context) error {
+	now := s.clock.Now().UTC().Format(expiryTimestampLayout)
 	err := s.db.StdTxnNoRetry(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		// This is split into two queries to avoid a write transaction preventing
 		// other writers from writing to the database when there is no work.
@@ -41,7 +48,7 @@ SELECT COUNT(*) AS count
 FROM lease AS l
 LEFT JOIN lease_pin AS p ON l.uuid = p.lease_uuid
 WHERE p.uuid IS NULL
-AND l.expiry < datetime('now')`).Scan(&count)
+AND l.expiry < ?`, now).Scan(&count)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -56,8 +63,8 @@ WHERE uuid IN (
     FROM lease AS l
     LEFT JOIN lease_pin AS p ON l.uuid = p.lease_uuid
     WHERE p.uuid IS NULL
-    AND l.expiry < datetime('now')
-)`)
+    AND l.expiry < ?
+)`, now)
 		if err != nil {
 			return errors.Trace(err)
 		}

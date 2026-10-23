@@ -559,10 +559,10 @@ SELECT cc.* AS &Credential.*,
 FROM   cloud_credential cc
        JOIN auth_type ON cc.auth_type_id = auth_type.id
        JOIN cloud ON cc.cloud_uuid = cloud.uuid
-	   JOIN user on cc.owner_uuid = user.uuid
+	   JOIN "user" ON cc.owner_uuid = "user".uuid
        LEFT JOIN cloud_credential_attribute cc_attr ON cc_attr.cloud_credential_uuid = cc.uuid
-WHERE  user.removed = false
-AND    user.name = $ownerAndCloudName.owner_name
+WHERE  "user".removed = false
+AND    "user".name = $ownerAndCloudName.owner_name
 AND    cloud.name = $ownerAndCloudName.cloud_name
 `
 		names := ownerAndCloudName{
@@ -621,11 +621,11 @@ SELECT cc.* AS &Credential.*,
 FROM   cloud_credential cc
        JOIN auth_type ON cc.auth_type_id = auth_type.id
        JOIN cloud ON cc.cloud_uuid = cloud.uuid
-	   JOIN user on cc.owner_uuid = user.uuid
+	   JOIN "user" ON cc.owner_uuid = "user".uuid
        LEFT JOIN cloud_credential_attribute cc_attr ON cc_attr.cloud_credential_uuid = cc.uuid
-WHERE  user.removed = false
+WHERE  "user".removed = false
 AND    cloud.name = $credentialKey.cloud_name
-AND    user.name = $credentialKey.owner_name
+AND    "user".name = $credentialKey.owner_name
 AND    cc.name = $credentialKey.name
 `
 		credKey := credentialKey{
@@ -761,10 +761,10 @@ SELECT cc.* AS &Credential.*,
 FROM   cloud_credential cc
        JOIN auth_type ON cc.auth_type_id = auth_type.id
        JOIN cloud ON cc.cloud_uuid = cloud.uuid
-	   JOIN user on cc.owner_uuid = user.uuid
+	   JOIN "user" ON cc.owner_uuid = "user".uuid
        LEFT JOIN cloud_credential_attribute cc_attr ON cc_attr.cloud_credential_uuid = cc.uuid
-WHERE  user.removed = false
-AND    user.name = $ownerName.name
+WHERE  "user".removed = false
+AND    "user".name = $ownerName.name
 `
 		ownerName := ownerName{
 			Name: owner.Name(),

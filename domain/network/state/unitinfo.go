@@ -115,7 +115,7 @@ WITH endpoint_binding AS (
 ),
 endpoint_space AS (
     SELECT eb.name AS endpoint_name,
-           IFNULL(eb.space_uuid, a.space_uuid) AS space_uuid
+           COALESCE(eb.space_uuid, a.space_uuid) AS space_uuid
     FROM   endpoint_binding AS eb
     JOIN   unit AS u ON eb.application_uuid = u.application_uuid
     JOIN   application AS a ON u.application_uuid = a.uuid
