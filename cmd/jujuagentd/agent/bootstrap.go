@@ -295,6 +295,11 @@ func (c *BootstrapCommand) initialiseFreshController(ctx *cmd.Context, args inst
 		agentConfig.SetQueryTracingEnabled(args.ControllerConfig.QueryTracingEnabled())
 		agentConfig.SetQueryTracingThreshold(args.ControllerConfig.QueryTracingThreshold())
 		agentConfig.SetDqliteBusyTimeout(args.ControllerConfig.DqliteBusyTimeout())
+		agentConfig.SetDBConfig(
+			args.ControllerConfig.DBBackend(),
+			args.ControllerConfig.DBURL(),
+			args.ControllerConfig.DBCACert(),
+		)
 		agentConfig.SetOpenTelemetryEnabled(agent.DefaultOpenTelemetryEnabled)
 		agentConfig.SetOpenTelemetryHTTPEndpoint("")
 		agentConfig.SetOpenTelemetryGRPCEndpoint("")

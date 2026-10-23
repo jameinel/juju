@@ -102,6 +102,9 @@ type MockConfigMockRecorder struct {
 	cACertExpects                             []*gomock.Call0_1[string]
 	controllerExpects                         []*gomock.Call0_1[names.ControllerTag]
 	controllerAgentInfoExpects                []*gomock.Call0_2[controller.ControllerAgentInfo, bool]
+	dBBackendExpects                          []*gomock.Call0_1[string]
+	dBCACertExpects                           []*gomock.Call0_1[string]
+	dBURLExpects                              []*gomock.Call0_1[string]
 	dataDirExpects                            []*gomock.Call0_1[string]
 	dirExpects                                []*gomock.Call0_1[string]
 	dqliteBusyTimeoutExpects                  []*gomock.Call0_1[time.Duration]
@@ -272,6 +275,60 @@ func (mr *MockConfigMockRecorder) ControllerAgentInfo() *MockConfigControllerAge
 
 // MockConfigControllerAgentInfoCall is the typed call wrapper for ControllerAgentInfo.
 type MockConfigControllerAgentInfoCall = gomock.Call0_2[controller.ControllerAgentInfo, bool]
+
+// DBBackend mocks base method.
+func (m *MockConfig) DBBackend() string {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch0_1(&m.recorder.dBBackendExpects, m.ctrl, m, "DBBackend")
+}
+
+// DBBackend indicates an expected call of DBBackend.
+func (mr *MockConfigMockRecorder) DBBackend() *MockConfigDBBackendCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall0_1[string](mr.mock.ctrl.T, mr.mock, "DBBackend")
+	mr.dBBackendExpects = append(mr.dBBackendExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockConfigDBBackendCall is the typed call wrapper for DBBackend.
+type MockConfigDBBackendCall = gomock.Call0_1[string]
+
+// DBCACert mocks base method.
+func (m *MockConfig) DBCACert() string {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch0_1(&m.recorder.dBCACertExpects, m.ctrl, m, "DBCACert")
+}
+
+// DBCACert indicates an expected call of DBCACert.
+func (mr *MockConfigMockRecorder) DBCACert() *MockConfigDBCACertCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall0_1[string](mr.mock.ctrl.T, mr.mock, "DBCACert")
+	mr.dBCACertExpects = append(mr.dBCACertExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockConfigDBCACertCall is the typed call wrapper for DBCACert.
+type MockConfigDBCACertCall = gomock.Call0_1[string]
+
+// DBURL mocks base method.
+func (m *MockConfig) DBURL() string {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch0_1(&m.recorder.dBURLExpects, m.ctrl, m, "DBURL")
+}
+
+// DBURL indicates an expected call of DBURL.
+func (mr *MockConfigMockRecorder) DBURL() *MockConfigDBURLCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall0_1[string](mr.mock.ctrl.T, mr.mock, "DBURL")
+	mr.dBURLExpects = append(mr.dBURLExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockConfigDBURLCall is the typed call wrapper for DBURL.
+type MockConfigDBURLCall = gomock.Call0_1[string]
 
 // DataDir mocks base method.
 func (m *MockConfig) DataDir() string {
@@ -849,6 +906,9 @@ type MockConfigSetterMockRecorder struct {
 	cloneExpects                                 []*gomock.Call0_1[agent.Config]
 	controllerExpects                            []*gomock.Call0_1[names.ControllerTag]
 	controllerAgentInfoExpects                   []*gomock.Call0_2[controller.ControllerAgentInfo, bool]
+	dBBackendExpects                             []*gomock.Call0_1[string]
+	dBCACertExpects                              []*gomock.Call0_1[string]
+	dBURLExpects                                 []*gomock.Call0_1[string]
 	dataDirExpects                               []*gomock.Call0_1[string]
 	dirExpects                                   []*gomock.Call0_1[string]
 	dqliteBusyTimeoutExpects                     []*gomock.Call0_1[time.Duration]
@@ -877,6 +937,7 @@ type MockConfigSetterMockRecorder struct {
 	setAPIHostPortsExpects                       []*gomock.Call1_1[[]network.HostPorts, error]
 	setCACertExpects                             []*gomock.Call1_0[string]
 	setControllerAgentInfoExpects                []*gomock.Call1_0[controller.ControllerAgentInfo]
+	setDBConfigExpects                           []*gomock.Call3_0[string, string, string]
 	setDqliteBusyTimeoutExpects                  []*gomock.Call1_0[time.Duration]
 	setLoggingConfigExpects                      []*gomock.Call1_0[string]
 	setLokiConfigExpects                         []*gomock.Call4_0[string, *string, *bool, string]
@@ -1057,6 +1118,60 @@ func (mr *MockConfigSetterMockRecorder) ControllerAgentInfo() *MockConfigSetterC
 
 // MockConfigSetterControllerAgentInfoCall is the typed call wrapper for ControllerAgentInfo.
 type MockConfigSetterControllerAgentInfoCall = gomock.Call0_2[controller.ControllerAgentInfo, bool]
+
+// DBBackend mocks base method.
+func (m *MockConfigSetter) DBBackend() string {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch0_1(&m.recorder.dBBackendExpects, m.ctrl, m, "DBBackend")
+}
+
+// DBBackend indicates an expected call of DBBackend.
+func (mr *MockConfigSetterMockRecorder) DBBackend() *MockConfigSetterDBBackendCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall0_1[string](mr.mock.ctrl.T, mr.mock, "DBBackend")
+	mr.dBBackendExpects = append(mr.dBBackendExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockConfigSetterDBBackendCall is the typed call wrapper for DBBackend.
+type MockConfigSetterDBBackendCall = gomock.Call0_1[string]
+
+// DBCACert mocks base method.
+func (m *MockConfigSetter) DBCACert() string {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch0_1(&m.recorder.dBCACertExpects, m.ctrl, m, "DBCACert")
+}
+
+// DBCACert indicates an expected call of DBCACert.
+func (mr *MockConfigSetterMockRecorder) DBCACert() *MockConfigSetterDBCACertCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall0_1[string](mr.mock.ctrl.T, mr.mock, "DBCACert")
+	mr.dBCACertExpects = append(mr.dBCACertExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockConfigSetterDBCACertCall is the typed call wrapper for DBCACert.
+type MockConfigSetterDBCACertCall = gomock.Call0_1[string]
+
+// DBURL mocks base method.
+func (m *MockConfigSetter) DBURL() string {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch0_1(&m.recorder.dBURLExpects, m.ctrl, m, "DBURL")
+}
+
+// DBURL indicates an expected call of DBURL.
+func (mr *MockConfigSetterMockRecorder) DBURL() *MockConfigSetterDBURLCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall0_1[string](mr.mock.ctrl.T, mr.mock, "DBURL")
+	mr.dBURLExpects = append(mr.dBURLExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockConfigSetterDBURLCall is the typed call wrapper for DBURL.
+type MockConfigSetterDBURLCall = gomock.Call0_1[string]
 
 // DataDir mocks base method.
 func (m *MockConfigSetter) DataDir() string {
@@ -1561,6 +1676,24 @@ func (mr *MockConfigSetterMockRecorder) SetControllerAgentInfo(info any) *MockCo
 
 // MockConfigSetterSetControllerAgentInfoCall is the typed call wrapper for SetControllerAgentInfo.
 type MockConfigSetterSetControllerAgentInfoCall = gomock.Call1_0[controller.ControllerAgentInfo]
+
+// SetDBConfig mocks base method.
+func (m *MockConfigSetter) SetDBConfig(backend, url, caCert string) {
+	m.ctrl.T.Helper()
+	gomock.Dispatch3_0(&m.recorder.setDBConfigExpects, m.ctrl, m, "SetDBConfig", backend, url, caCert)
+}
+
+// SetDBConfig indicates an expected call of SetDBConfig.
+func (mr *MockConfigSetterMockRecorder) SetDBConfig(backend, url, caCert any) *MockConfigSetterSetDBConfigCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall3_0[string, string, string](mr.mock.ctrl.T, mr.mock, "SetDBConfig", gomock.EnsureMatcher(backend), gomock.EnsureMatcher(url), gomock.EnsureMatcher(caCert))
+	mr.setDBConfigExpects = append(mr.setDBConfigExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockConfigSetterSetDBConfigCall is the typed call wrapper for SetDBConfig.
+type MockConfigSetterSetDBConfigCall = gomock.Call3_0[string, string, string]
 
 // SetDqliteBusyTimeout mocks base method.
 func (m *MockConfigSetter) SetDqliteBusyTimeout(arg0 time.Duration) {

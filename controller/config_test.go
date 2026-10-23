@@ -354,6 +354,31 @@ var newConfigTests = []struct {
 	},
 	expectError: `query-tracing-threshold value "-1s" must be a positive duration`,
 }, {
+	about: "postgresql backend with url",
+	config: controller.Config{
+		controller.DBBackend: "postgresql",
+		controller.DBURL:     "postgres://u:p@h/juju",
+	},
+}, {
+	about: "postgresql backend without url",
+	config: controller.Config{
+		controller.DBBackend: "postgresql",
+	},
+	expectError: `db-url is required when db-backend is "postgresql"`,
+}, {
+	about: "dqlite backend with url",
+	config: controller.Config{
+		controller.DBBackend: "dqlite",
+		controller.DBURL:     "postgres://u:p@h/juju",
+	},
+	expectError: `db-url must not be set unless db-backend is "postgresql"`,
+}, {
+	about: "unknown backend",
+	config: controller.Config{
+		controller.DBBackend: "mysql",
+	},
+	expectError: `db-backend value "mysql" must be "dqlite" or "postgresql"`,
+}, {
 	about: "invalid dqlite busy timeout value",
 	config: controller.Config{
 		controller.DqliteBusyTimeout: "invalid",
