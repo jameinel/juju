@@ -25,7 +25,7 @@ func TestQuerySuite(t *testing.T) {
 
 func (s *querySuite) TestCreateSchemaTable(c *tc.C) {
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		return createSchemaTable(ctx, tx)
+		return createSchemaTable(ctx, tx, SQLite)
 	})
 	c.Assert(err, tc.ErrorIsNil)
 
@@ -36,7 +36,7 @@ func (s *querySuite) TestCreateSchemaTable(c *tc.C) {
 func (s *querySuite) TestCreateSchemaTableIdempotent(c *tc.C) {
 	for range 2 {
 		err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-			return createSchemaTable(ctx, tx)
+			return createSchemaTable(ctx, tx, SQLite)
 		})
 		c.Assert(err, tc.ErrorIsNil)
 	}
@@ -92,12 +92,12 @@ func (s *querySuite) TestCheckSchemaHashesMatch(c *tc.C) {
 }
 
 func (s *querySuite) TestEnsurePatchesAreAppliedWithHigherCurrent(c *tc.C) {
-	err := ensurePatchesAreApplied(c.Context(), nil, 10, []Patch{}, nil)
+	err := ensurePatchesAreApplied(c.Context(), nil, SQLite, 10, []Patch{}, nil)
 	c.Assert(err, tc.ErrorMatches, `schema version '10' is more recent than expected '0'`)
 }
 
 func (s *querySuite) TestEnsurePatchesNoPatches(c *tc.C) {
-	err := ensurePatchesAreApplied(c.Context(), nil, 0, []Patch{}, nil)
+	err := ensurePatchesAreApplied(c.Context(), nil, SQLite, 0, []Patch{}, nil)
 	c.Assert(err, tc.ErrorIsNil)
 }
 
@@ -111,14 +111,14 @@ func (s *querySuite) TestEnsurePatches(c *tc.C) {
 	computed := computeHashes(patches)
 
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		return ensurePatchesAreApplied(c.Context(), tx, 0, patches, computed)
+		return ensurePatchesAreApplied(c.Context(), tx, SQLite, 0, patches, computed)
 	})
 	c.Assert(err, tc.ErrorIsNil)
 }
 
 func (s *querySuite) createSchemaTable(c *tc.C) {
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		return createSchemaTable(ctx, tx)
+		return createSchemaTable(ctx, tx, SQLite)
 	})
 	c.Assert(err, tc.ErrorIsNil)
 }
@@ -136,7 +136,7 @@ func (s *querySuite) expectCurrentVersion(c *tc.C, expected int, hashes []string
 
 func (s *querySuite) insertSchemaVersion(c *tc.C, version int, hash string) {
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		return insertSchemaVersion(ctx, tx, versionHash{
+		return insertSchemaVersion(ctx, tx, SQLite, versionHash{
 			version: version,
 			hash:    hash,
 		})
