@@ -24,3 +24,33 @@ These rules apply to `domain/schema/` and its sub-packages and supplement the
   including preservation or intentional transformation of existing data. Use
   the schema suites in [controller_schema_test.go](controller_schema_test.go)
   and [model_schema_test.go](model_schema_test.go).
+
+## PostgreSQL Generation
+
+- `dqlite/` is the source schema. `go generate ./domain/schema/...` runs
+  `generate/pgschemagen` after the dqlite triggers are generated. It translates
+  the complete patch list, including Go-built triggers, into checked-in files
+  under `postgresql/{controller,model}/sql/`.
+- Do not edit generated PostgreSQL SQL files. Improve the translator for
+  general dialect rules; use an override for a patch-specific translation.
+  PostgreSQL overrides do not change dqlite patches or their hashes.
+- An override is `postgresql/<namespace>/overrides/NNNN-<slug>.diff`, a unified
+  diff from the raw translation to the desired SQL. To start an override,
+  create an empty `.diff` and rerun the generator. It writes the corresponding
+  `NNNN-<slug>-auto.sql`; copy that file outside the generated tree, edit the
+  copy, and produce a unified diff from `-auto.sql` to the edited copy. Commit
+  both the `.diff` and `-auto.sql`, then regenerate.
+- Override diffs apply before foreign-key and view ordering. Exact hunk context
+  must match, although line offsets may change. Stale diffs and unsupported
+  `.PATCH.sql` files fail generation. When a dqlite fix makes an override
+  obsolete, remove its `.diff` and regenerate; stale generated files are removed.
+- `ControllerDDL()` and `ModelDDL()` remain dqlite. Backend-aware callers use
+  `ControllerDDLForBackend` and `ModelDDLForBackend`; unknown backends return an
+  error. Runtime caller wiring is separate from schema generation.
+- Run `go test ./generate/pgschemagen ./core/database/schema ./domain/schema/...`.
+  The generator suite checks every generated file for freshness. Set
+  `JUJU_POSTGRESQL_TEST_URL` to opt into the PostgreSQL schema suite. It creates
+  and drops unique throwaway schemas, never `public` or `login_hook`.
+- PostgreSQL constraint tag, space and zone tables have explicit identity
+  `rowid` columns to preserve the insertion order used by the application
+  constraint view. Include column lists in inserts into these tables.

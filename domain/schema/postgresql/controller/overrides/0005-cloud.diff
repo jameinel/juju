@@ -1,0 +1,8 @@
+--- 0005-cloud-auto.sql
++++ 0005-cloud.sql
+@@ -1,4 +1,4 @@
+ CREATE TABLE cloud_credential (
+     uuid TEXT NOT NULL PRIMARY KEY,
+     cloud_uuid TEXT NOT NULL,
+-    auth_type_id TEXT NOT NULL,
++    auth_type_id BIGINT NOT NULL,
