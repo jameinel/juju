@@ -1,0 +1,9 @@
+--- 0015-charm-auto.sql
++++ 0015-charm.sql
+@@ -1,5 +1,5 @@
+ CREATE TABLE charm_config (
+     charm_uuid TEXT NOT NULL,
+     "key" TEXT NOT NULL,
+-    type_id TEXT,
++    type_id BIGINT,
+     default_value TEXT,

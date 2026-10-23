@@ -1,0 +1,7 @@
+--- 0034-cross-model-relation-auto.sql
++++ 0034-cross-model-relation.sql
+@@ -1,3 +1,3 @@
+-    CONSTRAINT fk_offer_connection_uuid
++    CONSTRAINT fk_offer_connection_application_uuid
+     FOREIGN KEY (offer_connection_uuid)
+     REFERENCES application (uuid),
