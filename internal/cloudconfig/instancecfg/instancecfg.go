@@ -569,6 +569,9 @@ func (cfg *InstanceConfig) AgentConfig(
 		configParams.QueryTracingEnabled = cfg.ControllerConfig.QueryTracingEnabled()
 		configParams.QueryTracingThreshold = cfg.ControllerConfig.QueryTracingThreshold()
 		configParams.DqliteBusyTimeout = cfg.ControllerConfig.DqliteBusyTimeout()
+		configParams.DBBackend = cfg.ControllerConfig.DBBackend()
+		configParams.DBURL = cfg.ControllerConfig.DBURL()
+		configParams.DBCACert = cfg.ControllerConfig.DBCACert()
 	}
 	// Resolve the workload tracing config from the raw fields injected
 	// during provisioning. When no endpoint is configured the agent

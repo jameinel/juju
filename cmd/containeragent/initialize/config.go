@@ -155,6 +155,18 @@ func (c *configFromEnv) DqliteBusyTimeout() time.Duration {
 	panic("not implemented")
 }
 
+func (c *configFromEnv) DBBackend() string {
+	panic("not implemented")
+}
+
+func (c *configFromEnv) DBURL() string {
+	panic("not implemented")
+}
+
+func (c *configFromEnv) DBCACert() string {
+	panic("not implemented")
+}
+
 func (c *configFromEnv) OpenTelemetryHTTPEndpoint() string {
 	panic("not implemented")
 }
