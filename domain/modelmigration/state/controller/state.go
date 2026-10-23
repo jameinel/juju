@@ -1214,7 +1214,7 @@ JOIN   cloud AS c ON c.uuid = m.cloud_uuid
 JOIN   life AS l ON l.id = m.life_id
 LEFT JOIN cloud_region AS cr ON cr.uuid = m.cloud_region_uuid
 LEFT JOIN cloud_credential AS cc ON cc.uuid = m.cloud_credential_uuid
-LEFT JOIN user AS cco ON cco.uuid = cc.owner_uuid
+LEFT JOIN "user" AS cco ON cco.uuid = cc.owner_uuid
 WHERE  m.uuid = $modelUUIDArg.model_uuid
 `, mUUID, modelIdentityRow{})
 	if err != nil {
@@ -1263,7 +1263,7 @@ SELECT pot.type AS &permissionRow.object_type,
 FROM   permission AS p
 JOIN   permission_object_type AS pot ON pot.id = p.object_type_id
 JOIN   permission_access_type AS pat ON pat.id = p.access_type_id
-JOIN   user AS u ON u.uuid = p.grant_to
+JOIN   "user" AS u ON u.uuid = p.grant_to
 WHERE  (pot.type = 'model' AND p.grant_on = $modelUUIDArg.model_uuid)
 OR     (pot.type = 'offer' AND p.grant_on IN ($grantOnList[:]))
 `, mUUID, permissionRow{}, grantOnList{})
@@ -1277,7 +1277,7 @@ SELECT pot.type AS &permissionRow.object_type,
 FROM   permission AS p
 JOIN   permission_object_type AS pot ON pot.id = p.object_type_id
 JOIN   permission_access_type AS pat ON pat.id = p.access_type_id
-JOIN   user AS u ON u.uuid = p.grant_to
+JOIN   "user" AS u ON u.uuid = p.grant_to
 WHERE  pot.type = 'model' AND p.grant_on = $modelUUIDArg.model_uuid
 `, mUUID, permissionRow{})
 		args = []any{mUUID}
@@ -1368,7 +1368,7 @@ func (s *State) getAuthorizedKeys(
 SELECT u.name AS &authorizedKeyRow.username,
        vak.public_key AS &authorizedKeyRow.public_key
 FROM   v_model_authorized_keys AS vak
-JOIN   user AS u ON u.uuid = vak.user_uuid
+JOIN   "user" AS u ON u.uuid = vak.user_uuid
 WHERE  vak.model_uuid = $modelUUIDArg.model_uuid
 `, mUUID, authorizedKeyRow{})
 	if err != nil {
@@ -1410,8 +1410,8 @@ SELECT u.name AS &userRow.name,
        u.removed AS &userRow.removed,
        u.external AS &userRow.external,
        mll.time AS &userRow.last_login
-FROM   user AS u
-LEFT JOIN user AS cb ON cb.uuid = u.created_by_uuid
+FROM   "user" AS u
+LEFT JOIN "user" AS cb ON cb.uuid = u.created_by_uuid
 LEFT JOIN model_last_login AS mll
        ON mll.user_uuid = u.uuid AND mll.model_uuid = $modelUUIDArg.model_uuid
 WHERE  u.name IN ($nameList[:])

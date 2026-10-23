@@ -226,7 +226,7 @@ func (st *State) getUnitsInRelation(ctx context.Context, relUUID string) ([]rela
 	q := `
 SELECT u.uuid as &relationUnit.unit_uuid,
 	   re.uuid as &relationUnit.relation_endpoint_uuid,
-       IFNULL(ru.uuid, '') as &relationUnit.uuid
+       COALESCE(ru.uuid, '') as &relationUnit.uuid
 FROM   relation_endpoint re
        JOIN application_endpoint ae ON re.endpoint_uuid = ae.uuid
        JOIN unit u ON ae.application_uuid = u.application_uuid
