@@ -128,36 +128,33 @@ func (s *freshControllerSuite) assertFreshController(c *tc.C, isK8s bool, databa
 
 	command := NewBootstrapCommand()
 	command.AgentConf = agentconf.NewAgentConf(dataDir)
-	const bindAddress = "192.168.1.10"
-	command.DqliteBindAddressResolver = func(
-		_ context.Context, gotAddresses network.ProviderAddresses,
-	) (string, error) {
-		c.Check(gotAddresses, tc.DeepEquals, addresses)
-		return bindAddress, nil
-	}
 	command.BootstrapAgent = func(args agentbootstrap.AgentBootstrapArgs) (*agentbootstrap.AgentBootstrap, error) {
 		c.Check(args.StateInitialisationParams.SSHServerHostKey, tc.Not(tc.Equals), "")
-		c.Check(args.BootstrapMachineAddresses, tc.DeepEquals, addresses)
 		return agentbootstrap.NewAgentBootstrap(args)
 	}
 	databaseCalled := false
-	command.DqliteInitialiser = func(_ context.Context, _ database.BootstrapNodeManager, gotBindAddress string, gotModelUUID coremodel.UUID, _ corelogger.Logger, _ ...database.BootstrapOpt) error {
-		databaseCalled = true
-		c.Check(gotBindAddress, tc.Equals, bindAddress)
-		c.Check(gotModelUUID, tc.Equals, modelUUID)
-		// Identity is persisted before database work; the new password is not.
-		identity, err := os.ReadFile(cfg.SystemIdentityPath())
-		c.Assert(err, tc.ErrorIsNil)
-		c.Check(string(identity), tc.Equals, expectedIdentity)
-		stored, err := agent.ReadConfig(agent.ConfigPath(dataDir, tag))
-		c.Assert(err, tc.ErrorIsNil)
-		info, ok := stored.ControllerAgentInfo()
-		c.Assert(ok, tc.IsTrue)
-		c.Check(info.SystemIdentity, tc.Equals, expectedIdentity)
-		apiInfo, ok := stored.APIInfo()
-		c.Assert(ok, tc.IsTrue)
-		c.Check(apiInfo.Password, tc.Equals, "agent-before")
-		return databaseErr
+	command.NewDatabaseInitialiser = func(
+		_ context.Context, gotCfg agent.Config, gotAddresses network.ProviderAddresses, _ corelogger.Logger,
+	) (agentbootstrap.DatabaseInitialiser, error) {
+		c.Check(gotAddresses, tc.DeepEquals, addresses)
+		c.Check(gotCfg.DataDir(), tc.Equals, dataDir)
+		return databaseInitialiserFunc(func(_ context.Context, gotModelUUID coremodel.UUID, _ ...database.BootstrapOpt) error {
+			databaseCalled = true
+			c.Check(gotModelUUID, tc.Equals, modelUUID)
+			// Identity is persisted before database work; the new password is not.
+			identity, err := os.ReadFile(cfg.SystemIdentityPath())
+			c.Assert(err, tc.ErrorIsNil)
+			c.Check(string(identity), tc.Equals, expectedIdentity)
+			stored, err := agent.ReadConfig(agent.ConfigPath(dataDir, tag))
+			c.Assert(err, tc.ErrorIsNil)
+			info, ok := stored.ControllerAgentInfo()
+			c.Assert(ok, tc.IsTrue)
+			c.Check(info.SystemIdentity, tc.Equals, expectedIdentity)
+			apiInfo, ok := stored.APIInfo()
+			c.Assert(ok, tc.IsTrue)
+			c.Check(apiInfo.Password, tc.Equals, "agent-before")
+			return databaseErr
+		}), nil
 	}
 
 	err = command.Run(cmdtesting.Context(c))
@@ -183,6 +180,14 @@ type freshBootstrapEnviron struct {
 	environs.Environ
 	cfg       *config.Config
 	addresses network.ProviderAddresses
+}
+
+type databaseInitialiserFunc func(context.Context, coremodel.UUID, ...database.BootstrapOpt) error
+
+func (f databaseInitialiserFunc) Initialise(
+	ctx context.Context, controllerModelUUID coremodel.UUID, opts ...database.BootstrapOpt,
+) error {
+	return f(ctx, controllerModelUUID, opts...)
 }
 
 func (e *freshBootstrapEnviron) Config() *config.Config { return e.cfg }

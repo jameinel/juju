@@ -17,6 +17,7 @@ import (
 
 	"github.com/juju/juju/core/database"
 	coremodel "github.com/juju/juju/core/model"
+	"github.com/juju/juju/core/network"
 	"github.com/juju/juju/internal/database/app"
 	"github.com/juju/juju/internal/database/client"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
@@ -30,6 +31,49 @@ type bootstrapSuite struct {
 
 func TestBootstrapSuite(t *testing.T) {
 	tc.Run(t, &bootstrapSuite{})
+}
+
+func (s *bootstrapSuite) TestDqliteInitialiserResolvesBindAddress(c *tc.C) {
+	addresses := network.NewMachineAddresses([]string{"10.0.0.1"}).AsProviderAddresses()
+	const bindAddress = "192.168.1.10"
+	mgr := &testNodeManager{c: c}
+	initialiser := NewDqliteInitialiser(
+		mgr, addresses,
+		func(_ context.Context, got network.ProviderAddresses) (string, error) {
+			c.Check(got, tc.DeepEquals, addresses)
+			return bindAddress, nil
+		},
+		loggertesting.WrapCheckLog(c),
+	)
+	err := initialiser.Initialise(c.Context(), tc.Must0(c, coremodel.NewUUID),
+		func(ctx context.Context, controller, _ database.TxnRunner) error {
+			return controller.StdTxn(ctx, func(ctx context.Context, tx *sql.Tx) error {
+				var got string
+				err := tx.QueryRowContext(ctx, "SELECT dqlite_bind_address FROM controller_node").Scan(&got)
+				c.Assert(err, tc.ErrorIsNil)
+				c.Check(got, tc.Equals, bindAddress)
+				return nil
+			})
+		},
+	)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(mgr.addressOption, tc.Equals, bindAddress)
+}
+
+func (s *bootstrapSuite) TestDqliteInitialiserResolverFailure(c *tc.C) {
+	expected := errors.New("resolution failed")
+	mgr := &testNodeManager{c: c}
+	initialiser := NewDqliteInitialiser(
+		mgr, nil,
+		func(context.Context, network.ProviderAddresses) (string, error) {
+			return "", expected
+		},
+		loggertesting.WrapCheckLog(c),
+	)
+	err := initialiser.Initialise(c.Context(), tc.Must0(c, coremodel.NewUUID))
+	c.Check(err, tc.ErrorIs, expected)
+	c.Check(err, tc.ErrorMatches, "determining Dqlite bind address: resolution failed")
+	c.Check(mgr.dataDir, tc.Equals, "")
 }
 
 func (s *bootstrapSuite) TestBootstrapSuccess(c *tc.C) {

@@ -19,10 +19,8 @@ import (
 	coreagent "github.com/juju/juju/core/agent"
 	coreagentbinary "github.com/juju/juju/core/agentbinary"
 	"github.com/juju/juju/core/credential"
-	coredatabase "github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/logger"
 	coremodel "github.com/juju/juju/core/model"
-	corenetwork "github.com/juju/juju/core/network"
 	"github.com/juju/juju/core/permission"
 	"github.com/juju/juju/core/semversion"
 	"github.com/juju/juju/core/user"
@@ -49,16 +47,17 @@ import (
 	"github.com/juju/juju/internal/uuid"
 )
 
-// DqliteInitialiserFunc initialises the controller's Dqlite database using the
-// supplied local bind identity.
-type DqliteInitialiserFunc func(
-	ctx context.Context,
-	mgr database.BootstrapNodeManager,
-	bindAddress string,
-	modelUUID coremodel.UUID,
-	logger logger.Logger,
-	options ...database.BootstrapOpt,
-) error
+// DatabaseInitialiser creates the databases for a fresh controller and runs
+// the bootstrap operations that seed them.
+type DatabaseInitialiser interface {
+	// Initialise creates the controller and controller model databases, then
+	// runs the operations against them.
+	Initialise(
+		ctx context.Context,
+		controllerModelUUID coremodel.UUID,
+		options ...database.BootstrapOpt,
+	) error
+}
 
 // CheckJWKSReachable checks if the given JWKS URL is reachable.
 func CheckJWKSReachable(url string) error {
@@ -73,11 +72,9 @@ func CheckJWKSReachable(url string) error {
 
 // AgentBootstrap is used to initialise the state for a new controller.
 type AgentBootstrap struct {
-	adminUser                 names.UserTag
-	agentConfig               agent.ConfigSetter
-	bootstrapDqlite           DqliteInitialiserFunc
-	bootstrapMachineAddresses corenetwork.ProviderAddresses
-	dqliteBindAddressResolver DqliteBindAddressResolverFunc
+	adminUser           names.UserTag
+	agentConfig         agent.ConfigSetter
+	databaseInitialiser DatabaseInitialiser
 
 	stateInitialisationParams instancecfg.StateInitializationParams
 
@@ -93,10 +90,8 @@ type AgentBootstrapArgs struct {
 	AdminUser                 names.UserTag
 	AgentConfig               agent.ConfigSetter
 	BootstrapEnviron          environs.BootstrapEnviron
-	BootstrapMachineAddresses corenetwork.ProviderAddresses
 	StateInitialisationParams instancecfg.StateInitializationParams
-	BootstrapDqlite           DqliteInitialiserFunc
-	DqliteBindAddressResolver DqliteBindAddressResolverFunc
+	DatabaseInitialiser       DatabaseInitialiser
 	Logger                    logger.Logger
 }
 
@@ -111,11 +106,8 @@ func (a *AgentBootstrapArgs) validate() error {
 		return jujuerrors.NotValidf("agent config")
 	}
 
-	if a.BootstrapDqlite == nil {
-		return jujuerrors.NotValidf("bootstrap dqlite")
-	}
-	if a.DqliteBindAddressResolver == nil {
-		return jujuerrors.NotValidf("Dqlite bind address resolver")
+	if a.DatabaseInitialiser == nil {
+		return jujuerrors.NotValidf("database initialiser")
 	}
 	if a.Logger == nil {
 		return jujuerrors.NotValidf("logger")
@@ -133,9 +125,7 @@ func NewAgentBootstrap(args AgentBootstrapArgs) (*AgentBootstrap, error) {
 	return &AgentBootstrap{
 		adminUser:                 args.AdminUser,
 		agentConfig:               args.AgentConfig,
-		bootstrapDqlite:           args.BootstrapDqlite,
-		bootstrapMachineAddresses: args.BootstrapMachineAddresses,
-		dqliteBindAddressResolver: args.DqliteBindAddressResolver,
+		databaseInitialiser:       args.DatabaseInitialiser,
 		clock:                     clock.WallClock,
 		logger:                    args.Logger,
 		stateInitialisationParams: args.StateInitialisationParams,
@@ -160,7 +150,7 @@ func (b *AgentBootstrap) Initialise(ctx context.Context) error {
 		return errors.Capture(err)
 	}
 
-	if err := b.initialiseDqlite(
+	if err := b.databaseInitialiser.Initialise(
 		ctx, controllerModelUUID, seedOperations...,
 	); err != nil {
 		return errors.Capture(err)
@@ -290,37 +280,6 @@ func (b *AgentBootstrap) prepareFreshState(
 	}
 
 	return controllerModelUUID, databaseBootstrapOptions, nil
-}
-
-func (b *AgentBootstrap) initialiseDqlite(
-	ctx context.Context, controllerModelUUID coremodel.UUID,
-	options ...database.BootstrapOpt,
-) error {
-	bindAddress, err := b.dqliteBindAddressResolver(
-		ctx, b.bootstrapMachineAddresses,
-	)
-	if err != nil {
-		return errors.Errorf("determining Dqlite bind address: %w", err)
-	}
-	b.logger.Infof(ctx, "using Dqlite bootstrap bind address %q", bindAddress)
-
-	agentInfo, _ := b.agentConfig.ControllerAgentInfo()
-	nodeManagerCfg := database.NodeManagerConfig{
-		DataDir:              b.agentConfig.DataDir(),
-		CACert:               b.agentConfig.CACert(),
-		ControllerCert:       agentInfo.Cert,
-		ControllerPrivateKey: agentInfo.PrivateKey,
-	}
-	return b.bootstrapDqlite(
-		ctx,
-		database.NewNodeManager(
-			nodeManagerCfg, b.logger, coredatabase.NoopSlowQueryLogger{},
-		),
-		bindAddress,
-		controllerModelUUID,
-		b.logger,
-		options...,
-	)
 }
 
 func (b *AgentBootstrap) getCloudCredential() (cloud.Credential, names.CloudCredentialTag, error) {

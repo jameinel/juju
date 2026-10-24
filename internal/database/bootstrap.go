@@ -13,6 +13,7 @@ import (
 	coredatabase "github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/logger"
 	"github.com/juju/juju/core/model"
+	"github.com/juju/juju/core/network"
 	"github.com/juju/juju/domain/schema"
 	"github.com/juju/juju/internal/database/app"
 	"github.com/juju/juju/internal/errors"
@@ -55,19 +56,23 @@ type BootstrapOpt func(
 type DqliteInitialiser struct {
 	mgr                BootstrapNodeManager
 	bootstrapAddresses network.ProviderAddresses
+	resolveBindAddress func(context.Context, network.ProviderAddresses) (string, error)
 	logger             logger.Logger
 }
 
 // NewDqliteInitialiser returns a DqliteInitialiser that starts Dqlite with
-// the node manager, binding to an address chosen from bootstrapAddresses.
+// the node manager, binding to an address chosen by resolveBindAddress from
+// bootstrapAddresses. The resolver must not be nil.
 func NewDqliteInitialiser(
 	mgr BootstrapNodeManager,
 	bootstrapAddresses network.ProviderAddresses,
+	resolveBindAddress func(context.Context, network.ProviderAddresses) (string, error),
 	logger logger.Logger,
 ) *DqliteInitialiser {
 	return &DqliteInitialiser{
 		mgr:                mgr,
 		bootstrapAddresses: bootstrapAddresses,
+		resolveBindAddress: resolveBindAddress,
 		logger:             logger,
 	}
 }
@@ -77,7 +82,12 @@ func NewDqliteInitialiser(
 func (i *DqliteInitialiser) Initialise(
 	ctx context.Context, controllerModelUUID model.UUID, opts ...BootstrapOpt,
 ) error {
-	return BootstrapDqlite(ctx, i.mgr, i.bootstrapAddresses, controllerModelUUID, i.logger, opts...)
+	bindAddress, err := i.resolveBindAddress(ctx, i.bootstrapAddresses)
+	if err != nil {
+		return errors.Errorf("determining Dqlite bind address: %w", err)
+	}
+	i.logger.Infof(ctx, "using Dqlite bootstrap bind address %q", bindAddress)
+	return BootstrapDqlite(ctx, i.mgr, bindAddress, controllerModelUUID, i.logger, opts...)
 }
 
 // BootstrapDqlite opens a new database for the controller, and runs the
