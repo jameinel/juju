@@ -19,6 +19,12 @@ func TestRewriteSuite(t *testing.T) {
 	tc.Run(t, &rewriteSuite{})
 }
 
+func (s *rewriteSuite) TestTimeZoneOption(c *tc.C) {
+	cfg, err := parseConfig("postgres://user:password@localhost/database", WithTimeZoneUTC())
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(cfg.RuntimeParams["timezone"], tc.Equals, "UTC")
+}
+
 func (s *rewriteSuite) TestRewrite(c *tc.C) {
 	named := func(n string) param { return param{name: n} }
 	pos := func(i int) param { return param{position: i} }

@@ -47,7 +47,11 @@ func (s *driverSuite) SetUpTest(c *tc.C) {
 	pgtesting.CreateSchema(c, admin, s.schema)
 
 	var err error
-	s.db, err = postgresql.Open(s.url, postgresql.WithSearchPath(s.schema))
+	s.db, err = postgresql.Open(
+		s.url,
+		postgresql.WithSearchPath(s.schema),
+		postgresql.WithTimeZoneUTC(),
+	)
 	c.Assert(err, tc.ErrorIsNil)
 	c.Cleanup(func() { _ = s.db.Close() })
 
@@ -62,7 +66,7 @@ CREATE TABLE child (
 }
 
 func (s *driverSuite) TestSearchPathAndSettings(c *tc.C) {
-	var schema, iso string
+	var schema, iso, timeZone string
 	err := s.db.QueryRowContext(c.Context(), `SELECT current_schema()`).Scan(&schema)
 	c.Assert(err, tc.ErrorIsNil)
 	c.Check(schema, tc.Equals, s.schema)
@@ -70,6 +74,10 @@ func (s *driverSuite) TestSearchPathAndSettings(c *tc.C) {
 	err = s.db.QueryRowContext(c.Context(), `SHOW default_transaction_isolation`).Scan(&iso)
 	c.Assert(err, tc.ErrorIsNil)
 	c.Check(iso, tc.Equals, "serializable")
+
+	err = s.db.QueryRowContext(c.Context(), `SHOW timezone`).Scan(&timeZone)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(timeZone, tc.Equals, "UTC")
 }
 
 func (s *driverSuite) TestSessionRoleSurvivesPoolReuse(c *tc.C) {

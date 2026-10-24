@@ -21,8 +21,10 @@ type ControllerModelSuite struct {
 // provided model uuid.
 func (s *ControllerModelSuite) ModelTxnRunner(c *tc.C, modelUUID string) coredatabase.TxnRunner {
 	txnRunner, _ := s.OpenDBForNamespace(c, modelUUID, true)
+	ddl, err := schema.ModelDDLForBackend(BackendForTest())
+	c.Assert(err, tc.ErrorIsNil)
 	s.DqliteSuite.ApplyDDLForRunner(c, &SchemaApplier{
-		Schema:  schema.ModelDDL(),
+		Schema:  ddl,
 		Verbose: s.Verbose,
 	}, txnRunner)
 	return txnRunner

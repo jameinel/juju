@@ -22,7 +22,7 @@ func TestMigrationSuite(t *stdtesting.T) {
 }
 
 func (s *migrationSuite) TestMigrationSuccess(c *tc.C) {
-	patches := schema.New()
+	patches := schema.NewForDialect(s.SchemaDialect())
 	patches.Add(
 		schema.MakePatch("CREATE TABLE band(name TEXT NOT NULL PRIMARY KEY);"),
 		schema.MakePatch("INSERT INTO band VALUES (?);", "Blood Incantation"),

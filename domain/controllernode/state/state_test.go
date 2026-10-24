@@ -34,8 +34,10 @@ func TestStateSuite(t *stdtesting.T) {
 
 func (s *stateSuite) SetUpTest(c *tc.C) {
 	s.DqliteSuite.SetUpTest(c)
+	ddl, err := schema.ControllerDDLForBackend(schematesting.BackendForTest())
+	c.Assert(err, tc.ErrorIsNil)
 	s.DqliteSuite.ApplyDDL(c, &schematesting.SchemaApplier{
-		Schema:  schema.ControllerDDL(),
+		Schema:  ddl,
 		Verbose: s.Verbose,
 	})
 	s.state = NewState(s.TxnRunnerFactory())

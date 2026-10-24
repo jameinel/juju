@@ -35,7 +35,7 @@ func TestNamespaceSuite(t *stdtesting.T) {
 
 func (s *namespaceSuite) SetUpTest(c *tc.C) {
 	s.DqliteSuite.SetUpTest(c)
-	s.ApplyDDL(c, schemaDDLApplier{})
+	s.ApplyDDL(c, schemaDDLApplier{dialect: s.SchemaDialect()})
 }
 
 func (s *namespaceSuite) TestInitialStateSent(c *tc.C) {
@@ -431,10 +431,12 @@ func (s *namespaceSuite) TestNilPredicate(c *tc.C) {
 	c.Assert(err, tc.Not(tc.ErrorIsNil))
 }
 
-type schemaDDLApplier struct{}
+type schemaDDLApplier struct {
+	dialect schema.Dialect
+}
 
-func (schemaDDLApplier) Apply(c *tc.C, ctx context.Context, runner database.TxnRunner) {
-	schema := schema.New(
+func (a schemaDDLApplier) Apply(c *tc.C, ctx context.Context, runner database.TxnRunner) {
+	schema := schema.NewForDialect(a.dialect,
 		schema.MakePatch(`
 CREATE TABLE external_controller (
 	uuid            TEXT NOT NULL PRIMARY KEY,

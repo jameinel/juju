@@ -46,6 +46,7 @@ func (s *integrationSuite) SetUpSuite(c *tc.C) {
 	if !dqlite.Enabled {
 		c.Skip("This requires a dqlite server to be running")
 	}
+	databasetesting.SkipOnPostgreSQL(c, "the dbaccessor worker manages dqlite databases")
 
 	// This suite needs Dqlite setup on a tcp port.
 	s.UseTCP = true

@@ -27,6 +27,12 @@ type schemaBaseSuite struct {
 	seq int64
 }
 
+func (s *schemaBaseSuite) SetUpTest(c *tc.C) {
+	databasetesting.SkipOnPostgreSQL(c,
+		"these tests exercise the dqlite DDL; postgresql_test.go covers the PostgreSQL DDL")
+	s.DqliteSuite.SetUpTest(c)
+}
+
 // NewCleanDB returns a new sql.DB reference.
 func (s *schemaBaseSuite) NewCleanDB(c *tc.C) *sql.DB {
 	dir := c.MkDir()

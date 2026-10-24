@@ -44,6 +44,14 @@ func WithSearchPath(schemas ...string) Option {
 	}
 }
 
+// WithTimeZoneUTC configures connections to interpret zone-less timestamps as
+// UTC.
+func WithTimeZoneUTC() Option {
+	return func(cfg *pgx.ConnConfig) {
+		cfg.RuntimeParams["timezone"] = "UTC"
+	}
+}
+
 // NewConnector returns a driver.Connector for the PostgreSQL URL (or key/value
 // DSN) that rewrites sqlair and "?" placeholders and runs with
 // default_transaction_isolation=serializable.
