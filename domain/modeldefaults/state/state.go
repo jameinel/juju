@@ -507,8 +507,8 @@ INSERT INTO cloud_defaults (cloud_uuid, key, value)
 VALUES ($cloudDefaultValue.*)
 ON CONFLICT(cloud_uuid, key) DO UPDATE
     SET value = excluded.value
-    WHERE cloud_uuid = excluded.cloud_uuid
-    AND key = excluded.key;
+    WHERE cloud_defaults.cloud_uuid = excluded.cloud_uuid
+    AND cloud_defaults.key = excluded.key;
 `, cloudDefaultValue{})
 	if err != nil {
 		return errors.Capture(err)
@@ -596,8 +596,8 @@ INSERT INTO cloud_region_defaults (region_uuid, key, value)
 VALUES ($cloudRegionDefaultValue.*)
 ON CONFLICT(region_uuid, key) DO UPDATE
     SET value = excluded.value
-    WHERE region_uuid = excluded.region_uuid
-    AND key = excluded.key;
+    WHERE cloud_region_defaults.region_uuid = excluded.region_uuid
+    AND cloud_region_defaults.key = excluded.key;
 `, cloudRegionDefaultValue{})
 	if err != nil {
 		return errors.Capture(err)

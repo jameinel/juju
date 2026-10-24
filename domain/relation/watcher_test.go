@@ -1235,7 +1235,7 @@ func (s *watcherSuite) setCharmSubordinate(c *tc.C, charmUUID corecharm.ID, subo
 	s.arrange(c, `
 INSERT INTO charm_metadata (charm_uuid, name, subordinate)
 VALUES (?,?,true)
-ON CONFLICT DO UPDATE SET subordinate = ?
+ON CONFLICT (charm_uuid) DO UPDATE SET subordinate = ?
 `, charmUUID, charmUUID, subordinate)
 }
 
