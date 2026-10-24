@@ -409,7 +409,11 @@ func (s *State) SetLastLogTransferTime(ctx context.Context, lastTime time.Time) 
 INSERT INTO log_transfer_progress (uuid, last_time)
 VALUES ($logTransferTime.*)
 ON CONFLICT (uuid) DO UPDATE SET
-last_time = MAX(last_time, excluded.last_time)
+last_time = CASE
+    WHEN excluded.last_time > log_transfer_progress.last_time
+    THEN excluded.last_time
+    ELSE log_transfer_progress.last_time
+END
 `, input)
 	if err != nil {
 		return errors.Errorf("preparing set last log transfer time statement: %w", err)

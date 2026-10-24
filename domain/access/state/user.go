@@ -1058,7 +1058,7 @@ INSERT INTO user_authentication (user_uuid, disabled)
     WHERE  name = $userNameAndDisabled.name AND removed = false
 ON CONFLICT(user_uuid) DO
 UPDATE SET user_uuid = excluded.user_uuid
-WHERE      disabled = false`
+WHERE      user_authentication.disabled = false`
 
 	insertDefineUserAuthenticationStmt, err := sqlair.Prepare(defineUserAuthenticationQuery, userNameAndDisabled{})
 	if err != nil {

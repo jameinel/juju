@@ -178,7 +178,7 @@ ON CONFLICT(relation_uuid) DO UPDATE SET
     relation_status_type_id = excluded.relation_status_type_id,
     message = excluded.message,
     updated_at = excluded.updated_at
-WHERE relation_uuid = $relationStatus.relation_uuid
+WHERE relation_status.relation_uuid = $relationStatus.relation_uuid
 `, relationStatus{})
 	if err != nil {
 		return errors.Capture(err)
@@ -527,7 +527,7 @@ ON CONFLICT(relation_uuid) DO UPDATE SET
     relation_status_type_id = excluded.relation_status_type_id,
     message = excluded.message,
     updated_at = excluded.updated_at
-WHERE relation_uuid = $relationStatus.relation_uuid
+WHERE relation_status.relation_uuid = $relationStatus.relation_uuid
 `, statusInfo)
 	if err != nil {
 		return errors.Capture(err)
