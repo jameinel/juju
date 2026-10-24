@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/canonical/sqlair"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -131,6 +132,21 @@ func (s *driverSuite) TestPreparedStatement(c *tc.C) {
 func (s *driverSuite) TestWrongArgumentCount(c *tc.C) {
 	_, err := s.db.ExecContext(c.Context(), `INSERT INTO parent (id, name) VALUES (?, ?)`, 1)
 	c.Check(err, tc.NotNil)
+}
+
+func (s *driverSuite) TestTimestamptzScannedInUTC(c *tc.C) {
+	conn, err := s.db.Conn(c.Context())
+	c.Assert(err, tc.ErrorIsNil)
+	defer conn.Close()
+	_, err = conn.ExecContext(c.Context(), `SET TIME ZONE 'America/New_York'`)
+	c.Assert(err, tc.ErrorIsNil)
+
+	in := time.Date(2026, 1, 2, 3, 4, 5, 0, time.FixedZone("x", 3*60*60))
+	var out time.Time
+	err = conn.QueryRowContext(c.Context(), `SELECT ?::timestamptz`, in).Scan(&out)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(out.Location(), tc.Equals, time.UTC)
+	c.Check(out.Equal(in), tc.IsTrue)
 }
 
 func (s *driverSuite) TestMultiStatementWithoutArgs(c *tc.C) {
