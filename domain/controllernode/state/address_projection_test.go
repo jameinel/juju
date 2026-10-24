@@ -11,6 +11,7 @@ import (
 	"github.com/juju/juju/core/network"
 	"github.com/juju/juju/domain/controllernode"
 	controllernodeerrors "github.com/juju/juju/domain/controllernode/errors"
+	schematesting "github.com/juju/juju/domain/schema/testing"
 	"github.com/juju/juju/internal/uuid"
 )
 
@@ -236,11 +237,14 @@ func (s *stateSuite) TestSetAPIAddressesSharedNoOpMakesNoChanges(c *tc.C) {
 
 func (s *stateSuite) TestSetAPIAddressesRollsBackWhenPeerWriteFails(c *tc.C) {
 	c.Assert(s.state.AddDqliteNodeID(c.Context(), "0"), tc.ErrorIsNil)
-	_, err := s.DB().ExecContext(c.Context(), `
-CREATE TRIGGER fail_peer_address BEFORE INSERT ON controller_peer_address
-BEGIN
-    SELECT RAISE(ABORT, 'peer write failed');
-END`)
+	_, err := s.DB().ExecContext(c.Context(), schematesting.FailingTriggerSQL(
+		schematesting.FailingTrigger{
+			Name:    "fail_peer_address",
+			Event:   "BEFORE INSERT",
+			Table:   "controller_peer_address",
+			Message: "peer write failed",
+		},
+	))
 	c.Assert(err, tc.ErrorIsNil)
 
 	err = s.setAPIAddresses(c, controllernode.APIAddressProjections{"0": {
@@ -258,7 +262,7 @@ func (s *stateSuite) TestSetAPIAddressesSharedPeerRollsBack(c *tc.C) {
 		Agents:  controllernode.APIAddresses{{Address: "agent.example.com:17070"}},
 		Peers:   controllernode.APIAddresses{{Address: "peer.example.com:17070"}},
 	}})
-	c.Assert(err, tc.ErrorMatches, `.*NOT NULL constraint failed: controller_peer_address.controller_id.*`)
+	c.Assert(err, tc.ErrorMatches, `writing controller_peer_address: .*controller_id.*`)
 	s.checkAddressProjections(c, nil)
 }
 
@@ -271,12 +275,15 @@ func (s *stateSuite) TestSetAPIAddressesFailedReplacementRestoresPreviousSnapsho
 	}}
 	c.Assert(s.setAPIAddresses(c, original), tc.ErrorIsNil)
 
-	_, err := s.DB().ExecContext(c.Context(), `
-CREATE TRIGGER fail_peer_address BEFORE INSERT ON controller_peer_address
-WHEN NEW.address = 'new-peer.example.com:17070'
-BEGIN
-    SELECT RAISE(ABORT, 'peer write failed');
-END`)
+	_, err := s.DB().ExecContext(c.Context(), schematesting.FailingTriggerSQL(
+		schematesting.FailingTrigger{
+			Name:    "fail_peer_address",
+			Event:   "BEFORE INSERT",
+			Table:   "controller_peer_address",
+			When:    "NEW.address = 'new-peer.example.com:17070'",
+			Message: "peer write failed",
+		},
+	))
 	c.Assert(err, tc.ErrorIsNil)
 
 	err = s.setAPIAddresses(c, controllernode.APIAddressProjections{"0": {
