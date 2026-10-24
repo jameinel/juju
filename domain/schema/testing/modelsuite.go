@@ -26,8 +26,10 @@ func (s *ModelSuite) SetUpTest(c *tc.C) {
 	s.modelUUID = uuid.MustNewUUID().String()
 
 	s.DqliteSuite.SetUpTest(c)
+	ddl, err := schema.ModelDDLForBackend(BackendForTest())
+	c.Assert(err, tc.ErrorIsNil)
 	s.ApplyDDL(c, &SchemaApplier{
-		Schema:  schema.ModelDDL(),
+		Schema:  ddl,
 		Verbose: s.Verbose,
 	})
 }

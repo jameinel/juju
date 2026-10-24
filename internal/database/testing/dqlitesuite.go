@@ -21,13 +21,20 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	coredatabase "github.com/juju/juju/core/database"
+	"github.com/juju/juju/core/database/schema"
 	"github.com/juju/juju/internal/database/app"
 	"github.com/juju/juju/internal/database/client"
 	"github.com/juju/juju/internal/database/dqlite"
+	"github.com/juju/juju/internal/database/postgresql"
+	pgtesting "github.com/juju/juju/internal/database/postgresql/testing"
 	"github.com/juju/juju/internal/database/pragma"
 	"github.com/juju/juju/internal/testhelpers"
 	"github.com/juju/juju/internal/uuid"
 )
+
+// postgresqlMaxConns matches the per-database pool limit that the dbaccessor
+// worker applies in production.
+const postgresqlMaxConns = 3
 
 // SchemaApplier is an interface that can be used to apply a schema to a
 // database.
@@ -56,12 +63,22 @@ type DqliteSuite struct {
 	dqlite    *app.App
 	db        *sql.DB
 	trackedDB *txnRunner
+
+	postgresqlURL     string
+	postgresqlAdmin   *sql.DB
+	postgresqlDBs     map[string]*sql.DB
+	postgresqlRunners map[string]*txnRunner
 }
 
 // SetUpTest creates a new sql.DB reference and ensures that the
 // controller schema is applied successfully.
 func (s *DqliteSuite) SetUpTest(c *tc.C) {
 	s.IsolationSuite.SetUpTest(c)
+
+	if url := pgtesting.URL(); url != "" {
+		s.setUpPostgreSQL(c, url)
+		return
+	}
 
 	s.rootPath = c.MkDir()
 
@@ -160,6 +177,24 @@ func (s *DqliteSuite) DBPath() string {
 	return s.dbPath
 }
 
+// SchemaDialect returns the SQL dialect of the suite's databases, for tests
+// that build their own schema.
+func (s *DqliteSuite) SchemaDialect() schema.Dialect {
+	if s.postgresqlURL != "" {
+		return schema.PostgreSQL
+	}
+	return schema.SQLite
+}
+
+// SkipOnPostgreSQL skips a test that needs dqlite itself, rather than a
+// database, when tests use PostgreSQL. Call it before SetUpTest so that no
+// database is created.
+func SkipOnPostgreSQL(c *tc.C, reason string) {
+	if pgtesting.URL() != "" {
+		c.Skip("dqlite only: " + reason)
+	}
+}
+
 // ApplyDDL is a helper manager for the test suites to apply a set of DDL string
 // on top of a pre-established database.
 func (s *DqliteSuite) ApplyDDL(c *tc.C, schema SchemaApplier) {
@@ -193,6 +228,12 @@ func (s *DqliteSuite) openDBForNamespace(c *tc.C, domain string, foreignKey bool
 	// check for empty string here to go bang in a more understandable way.
 	c.Assert(domain, tc.Not(tc.Equals), "", tc.Commentf("cannot open a database for a empty domain"))
 
+	if s.postgresqlURL != "" {
+		c.Assert(foreignKey, tc.IsTrue,
+			tc.Commentf("PostgreSQL always enforces foreign keys"))
+		return s.openPostgreSQLDBForNamespace(c, domain)
+	}
+
 	db, err := s.dqlite.Open(c.Context(), domain)
 	c.Assert(err, tc.ErrorIsNil)
 
@@ -208,6 +249,51 @@ func (s *DqliteSuite) openDBForNamespace(c *tc.C, domain string, foreignKey bool
 	trackedDB := &txnRunner{
 		db: sqlair.NewDB(db),
 	}
+	return trackedDB, trackedDB.db.PlainDB()
+}
+
+func (s *DqliteSuite) setUpPostgreSQL(c *tc.C, url string) {
+	c.Cleanup(func() {
+		s.postgresqlURL = ""
+		s.postgresqlAdmin = nil
+		s.postgresqlDBs = nil
+		s.postgresqlRunners = nil
+	})
+	s.postgresqlURL = url
+	s.postgresqlAdmin = pgtesting.OpenAdmin(c)
+	s.postgresqlDBs = make(map[string]*sql.DB)
+	s.postgresqlRunners = make(map[string]*txnRunner)
+	s.Verbose = isVerbose(c) && includeSQLOutput(c)
+
+	uniqueID := atomic.AddInt64(&s.uniqueID, 1)
+	s.trackedDB, s.db = s.openPostgreSQLDBForNamespace(c, strconv.FormatInt(uniqueID, 10))
+}
+
+func (s *DqliteSuite) openPostgreSQLDBForNamespace(c *tc.C, domain string) (*txnRunner, *sql.DB) {
+	if runner, ok := s.postgresqlRunners[domain]; ok {
+		return runner, s.postgresqlDBs[domain]
+	}
+
+	schemaName := pgtesting.NewSchemaName(c, "")
+	pgtesting.CreateSchema(c, s.postgresqlAdmin, schemaName)
+
+	db, err := postgresql.Open(
+		s.postgresqlURL,
+		postgresql.WithSearchPath(schemaName),
+		postgresql.WithTimeZoneUTC(),
+	)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Cleanup(func() {
+		c.Check(db.Close(), tc.ErrorIsNil)
+	})
+	// Mirror the dbaccessor per-database limits. An unbounded pool lets
+	// concurrent tests exhaust the server's connection slots.
+	db.SetMaxIdleConns(postgresqlMaxConns)
+	db.SetMaxOpenConns(postgresqlMaxConns)
+
+	trackedDB := &txnRunner{db: sqlair.NewDB(db)}
+	s.postgresqlDBs[domain] = trackedDB.db.PlainDB()
+	s.postgresqlRunners[domain] = trackedDB
 	return trackedDB, trackedDB.db.PlainDB()
 }
 
