@@ -562,6 +562,34 @@ func (s *stateSuite) TestNullCloudType(c *tc.C) {
 	c.Assert(jujudb.IsErrConstraintNotNull(err), tc.IsTrue)
 }
 
+// TestAllowCloudTypeIdempotent asserts that allowing an existing cloud type
+// again succeeds and leaves a single row for the type.
+func (s *stateSuite) TestAllowCloudTypeIdempotent(c *tc.C) {
+	err := AllowCloudType(c.Context(), s.TxnRunner(), 99, "dummy")
+	c.Assert(err, tc.ErrorIsNil)
+	err = AllowCloudType(c.Context(), s.TxnRunner(), 98, "dummy")
+	c.Assert(err, tc.ErrorIsNil)
+
+	var ids []int
+	err = s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, "SELECT id FROM cloud_type WHERE type = ?", "dummy")
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id int
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			ids = append(ids, id)
+		}
+		return rows.Err()
+	})
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(ids, tc.DeepEquals, []int{99})
+}
+
 func (s *stateSuite) ensureUser(c *tc.C, userUUID, name, createdByUUID string) {
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
