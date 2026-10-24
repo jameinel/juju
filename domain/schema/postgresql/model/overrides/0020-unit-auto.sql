@@ -5,7 +5,7 @@ CREATE TABLE unit (
     application_uuid TEXT NOT NULL,
     net_node_uuid TEXT NOT NULL,
     charm_uuid TEXT NOT NULL,
-    password_hash_algorithm_id TEXT,
+    password_hash_algorithm_id BIGINT,
     password_hash TEXT,
     CONSTRAINT fk_unit_life
     FOREIGN KEY (life_id)
