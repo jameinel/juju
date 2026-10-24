@@ -9,8 +9,10 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -55,8 +57,19 @@ func NewConnector(url string, opts ...Option) (driver.Connector, error) {
 		return nil, err
 	}
 	return &connector{
-		inner: stdlib.GetConnector(*cfg),
+		inner: stdlib.GetConnector(*cfg, stdlib.OptionAfterConnect(scanTimesInUTC)),
 	}, nil
+}
+
+// scanTimesInUTC makes the connection return timestamptz values in UTC rather
+// than in time.Local, as the dqlite driver does.
+func scanTimesInUTC(_ context.Context, c *pgx.Conn) error {
+	c.TypeMap().RegisterType(&pgtype.Type{
+		Name:  "timestamptz",
+		OID:   pgtype.TimestamptzOID,
+		Codec: &pgtype.TimestamptzCodec{ScanLocation: time.UTC},
+	})
+	return nil
 }
 
 // Open returns a *sql.DB that uses the driver for the given PostgreSQL URL.
