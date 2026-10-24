@@ -11,10 +11,7 @@ import (
 	"github.com/juju/tc"
 
 	"github.com/juju/juju/agent"
-	"github.com/juju/juju/controller"
-	corelogger "github.com/juju/juju/core/logger"
-	"github.com/juju/juju/core/model"
-	"github.com/juju/juju/core/network"
+	coremodel "github.com/juju/juju/core/model"
 	"github.com/juju/juju/environs"
 	"github.com/juju/juju/internal/database"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
@@ -26,53 +23,28 @@ func TestBootstrapInternalSuite(t *testing.T) {
 	tc.Run(t, &bootstrapInternalSuite{})
 }
 
-func (*bootstrapInternalSuite) TestBootstrapMachineAddressesReachDqlite(c *tc.C) {
-	addresses := network.NewMachineAddresses([]string{"10.0.0.1"}).AsProviderAddresses()
-	var gotAddresses network.ProviderAddresses
-	bootstrap, err := NewAgentBootstrap(AgentBootstrapArgs{
-		AdminUser:                 names.NewLocalUserTag("admin"),
-		AgentConfig:               stubAgentConfig{dataDir: c.MkDir()},
-		BootstrapEnviron:          stubBootstrapEnviron{},
-		BootstrapMachineAddresses: addresses,
-		BootstrapDqlite: func(
-			_ context.Context, manager database.BootstrapNodeManager,
-			bootstrapAddresses network.ProviderAddresses, _ model.UUID,
-			_ corelogger.Logger,
-			_ ...database.BootstrapOpt,
-		) error {
-			c.Check(manager, tc.NotNil)
-			gotAddresses = bootstrapAddresses
-			return nil
-		},
-		Logger: loggertesting.WrapCheckLog(c),
+func (*bootstrapInternalSuite) TestNewAgentBootstrapRequiresDatabaseInitialiser(c *tc.C) {
+	_, err := NewAgentBootstrap(AgentBootstrapArgs{
+		AdminUser:        names.NewLocalUserTag("admin"),
+		AgentConfig:      stubAgentConfig{},
+		BootstrapEnviron: stubBootstrapEnviron{},
+		Logger:           loggertesting.WrapCheckLog(c),
 	})
-	c.Assert(err, tc.ErrorIsNil)
-
-	err = bootstrap.initialiseDqlite(c.Context(), tc.Must0(c, model.NewUUID))
-	c.Assert(err, tc.ErrorIsNil)
-	c.Check(gotAddresses, tc.DeepEquals, addresses)
+	c.Check(err, tc.ErrorMatches, "database initialiser not valid")
 }
 
 type stubAgentConfig struct {
 	agent.ConfigSetter
-	dataDir string
-}
-
-func (s stubAgentConfig) DataDir() string {
-	return s.dataDir
-}
-
-func (stubAgentConfig) CACert() string {
-	return "ca-cert"
-}
-
-func (stubAgentConfig) ControllerAgentInfo() (controller.ControllerAgentInfo, bool) {
-	return controller.ControllerAgentInfo{
-		Cert:       "controller-cert",
-		PrivateKey: "controller-key",
-	}, true
 }
 
 type stubBootstrapEnviron struct {
 	environs.BootstrapEnviron
+}
+
+type databaseInitialiserFunc func(context.Context, coremodel.UUID, ...database.BootstrapOpt) error
+
+func (f databaseInitialiserFunc) Initialise(
+	ctx context.Context, controllerModelUUID coremodel.UUID, opts ...database.BootstrapOpt,
+) error {
+	return f(ctx, controllerModelUUID, opts...)
 }
