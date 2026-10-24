@@ -288,7 +288,7 @@ func (st *State) UpdateModelConfig(
 INSERT INTO model_config (*) VALUES ($dbKeyValue.*)
 ON CONFLICT(key) DO UPDATE
 SET value = excluded.value
-WHERE key = excluded.key
+WHERE model_config.key = excluded.key
 `[1:], dbKeyValue{})
 	if err != nil {
 		return errors.Capture(err)
