@@ -474,7 +474,7 @@ type machineStatusDetails struct {
 	ConstraintInstanceRole     sql.Null[string]          `db:"constraint_instance_role"`
 	ConstraintInstanceType     sql.Null[string]          `db:"constraint_instance_type"`
 	ConstraintContainerType    sql.Null[string]          `db:"constraint_container_type"`
-	ConstraintAllocatePublicIP sql.Null[int]             `db:"constraint_allocate_public_ip"`
+	ConstraintAllocatePublicIP sql.Null[bool]            `db:"constraint_allocate_public_ip"`
 	ConstraintImageID          sql.Null[string]          `db:"constraint_image_id"`
 	AgentVersion               sql.Null[string]          `db:"agent_version"`
 }
@@ -571,7 +571,7 @@ func decodeConstraints(
 	instanceRole sql.Null[string],
 	instanceType sql.Null[string],
 	containerType sql.Null[string],
-	allocatePublicIP sql.Null[int],
+	allocatePublicIP sql.Null[bool],
 	imageID sql.Null[string],
 ) constraints.Constraints {
 	var cons constraints.Constraints
@@ -606,7 +606,7 @@ func decodeConstraints(
 		cons.Container = new(instance.ContainerType(containerType.V))
 	}
 	if allocatePublicIP.Valid {
-		cons.AllocatePublicIP = new(allocatePublicIP.V == 1)
+		cons.AllocatePublicIP = new(allocatePublicIP.V)
 	}
 	if imageID.Valid {
 		cons.ImageID = new(imageID.V)

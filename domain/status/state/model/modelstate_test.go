@@ -30,6 +30,7 @@ import (
 	"github.com/juju/juju/domain/application/architecture"
 	"github.com/juju/juju/domain/application/charm"
 	applicationerrors "github.com/juju/juju/domain/application/errors"
+	"github.com/juju/juju/domain/constraints"
 	"github.com/juju/juju/domain/deployment"
 	"github.com/juju/juju/domain/life"
 	domainmachine "github.com/juju/juju/domain/machine"
@@ -2645,6 +2646,33 @@ func (s *modelStateSuite) TestGetMachineFullStatusesEmptyModel(c *tc.C) {
 	statuses, err := s.state.GetMachineFullStatuses(c.Context())
 	c.Assert(err, tc.ErrorIsNil)
 	c.Check(statuses, tc.HasLen, 0)
+}
+
+// TestGetMachineFullStatusesAllocatePublicIP asserts that the nullable
+// allocate public IP constraint is read back as unset, true and false.
+func (s *modelStateSuite) TestGetMachineFullStatusesAllocatePublicIP(c *tc.C) {
+	machineState := machinestate.NewState(s.TxnRunnerFactory(), clock.WallClock, loggertesting.WrapCheckLog(c))
+
+	expected := map[coremachine.Name]*bool{}
+	for _, allocate := range []*bool{nil, new(true), new(false)} {
+		_, names, err := machineState.AddMachine(c.Context(), domainmachine.AddMachineArgs{
+			Platform: deployment.Platform{
+				OSType:       deployment.Ubuntu,
+				Architecture: architecture.AMD64,
+			},
+			Constraints: constraints.Constraints{AllocatePublicIP: allocate},
+		})
+		c.Assert(err, tc.ErrorIsNil)
+		expected[names[0]] = allocate
+	}
+
+	statuses, err := s.state.GetMachineFullStatuses(c.Context())
+	c.Assert(err, tc.ErrorIsNil)
+	c.Assert(statuses, tc.HasLen, len(expected))
+	for name, allocate := range expected {
+		c.Check(statuses[name].Constraints.AllocatePublicIP, tc.DeepEquals, allocate,
+			tc.Commentf("machine %q", name))
+	}
 }
 
 func (s *modelStateSuite) TestGetAllMachineStatuses(c *tc.C) {
