@@ -15,6 +15,14 @@ absolute path. Otherwise the URL uses sslmode=disable. Once TLS is enabled the
 server rejects unencrypted connections, so compare plain and TLS using
 separate models.
 
+Test suites create and drop many schemas, so postgresql is configured to keep
+disk use down: pgaudit, connection logging and disconnection logging are off,
+and wal_keep_size is 128 MB, Patroni's default (the charm keeps 4 GB of WAL by
+default). The charm hard-codes log_statement=ddl, so DDL is still logged. All
+charm storage is on the root filesystem, sized by --root-disk and placed in the
+LXD storage pool --root-disk-source. Re-running applies the configuration to an
+existing postgresql, but cannot change its constraints or storage.
+
 Status messages go to stderr. The URL goes to stdout, or to --output (mode
 0600). See docs/implementation-plans/postgresql/PLAN.md (Stage 1).
 
@@ -33,6 +41,23 @@ from urllib.parse import quote
 
 PG_APP = "postgresql"
 PG_CHANNEL = "16/stable"
+PG_SETTINGS = {
+    "plugin-audit-enable": "false",
+    "logging-log-connections": "false",
+    "logging-log-disconnections": "false",
+    # MB. Nothing reads the kept WAL without a replica. Patroni's default is
+    # 128 and its minimum 16; the charm's default is 4096.
+    "durability-wal-keep-size": "128",
+}
+# Rev 1218 builds some PostgreSQL parameters from both spellings of an option,
+# and the deprecated underscored option's default wins, so set both.
+PG_CONFIG = {
+    name: value
+    for option, value in PG_SETTINGS.items()
+    for name in (option, option.replace("-", "_"))
+}
+PG_STORAGE = {name: "rootfs" for name in ("archive", "data", "logs", "temp")}
+DEFAULT_ROOT_DISK = "20G"
 DI_APP = "data-integrator"
 DI_CHANNEL = "latest/stable"
 TLS_APP = "self-signed-certificates"
@@ -53,8 +78,11 @@ def main(argv=None):
     args = parse_args(argv)
     ca_file = Path(args.tls_ca_file).resolve() if args.tls_ca_file else None
     juju = Juju(args.juju, args.controller, args.model)
+    constraints = f"root-disk={args.root_disk}"
+    if args.root_disk_source:
+        constraints += f" root-disk-source={args.root_disk_source}"
     try:
-        deploy(juju, tls=ca_file is not None)
+        deploy(juju, tls=ca_file is not None, constraints=constraints)
         wait_settled(juju, args.timeout)
         if ca_file:
             creds = wait_tls_credentials(juju, args.timeout)
@@ -87,6 +115,16 @@ def parse_args(argv):
         help="enable TLS and write the PostgreSQL CA certificate to this file",
     )
     parser.add_argument(
+        "--root-disk",
+        default=DEFAULT_ROOT_DISK,
+        help="root disk size of the postgresql machine (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--root-disk-source",
+        help="LXD storage pool for the postgresql root disk "
+        "(default: the pool of the LXD default profile)",
+    )
+    parser.add_argument(
         "--juju", default="juju", help="Juju client to use (default: %(default)s)"
     )
     parser.add_argument(
@@ -116,10 +154,14 @@ class Juju:
     def status(self):
         return json.loads(self._run("status", "-m", self.target, "--format=json"))
 
-    def deploy(self, app, channel, config=None):
+    def deploy(self, app, channel, config=None, constraints=None, storage=None):
         args = ["deploy", "-m", self.target, app, "--channel", channel]
         for key, value in (config or {}).items():
             args += ["--config", f"{key}={value}"]
+        if constraints:
+            args += ["--constraints", constraints]
+        for name, directive in (storage or {}).items():
+            args += ["--storage", f"{name}={directive}"]
         self._run(*args)
 
     def integrate(self, endpoint, remote):
@@ -127,6 +169,10 @@ class Juju:
 
     def config_get(self, app, key):
         return self._run("config", "-m", self.target, app, key).strip()
+
+    def config_set(self, app, config):
+        pairs = [f"{key}={value}" for key, value in config.items()]
+        self._run("config", "-m", self.target, app, *pairs)
 
     def run_action(self, unit, action):
         out = self._run("run", "-m", self.target, unit, action, "--format=json")
@@ -151,7 +197,7 @@ class Juju:
         )
 
 
-def deploy(juju, tls):
+def deploy(juju, tls, constraints):
     if juju.model_exists():
         log(f"Using existing model {juju.target}")
     else:
@@ -159,7 +205,12 @@ def deploy(juju, tls):
         juju.add_model()
 
     status = juju.status()
-    ensure_app(juju, status, PG_APP, PG_CHANNEL)
+    if has_app(status, PG_APP):
+        log(f"Using existing application {PG_APP}; applying its configuration")
+        juju.config_set(PG_APP, PG_CONFIG)
+    else:
+        log(f"Deploying {PG_APP} ({PG_CHANNEL})")
+        juju.deploy(PG_APP, PG_CHANNEL, PG_CONFIG, constraints, PG_STORAGE)
     if has_app(status, DI_APP):
         configured = juju.config_get(DI_APP, "database-name")
         if configured != DATABASE:
