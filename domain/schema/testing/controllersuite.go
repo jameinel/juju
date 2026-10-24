@@ -31,11 +31,13 @@ type ControllerSuite struct {
 // with the controller schema.
 func (s *ControllerSuite) SetUpTest(c *tc.C) {
 	s.DqliteSuite.SetUpTest(c)
+	ddl, err := schema.ControllerDDLForBackend(BackendForTest())
+	c.Assert(err, tc.ErrorIsNil)
 	s.ApplyDDL(c, &SchemaApplier{
-		Schema:  schema.ControllerDDL(),
+		Schema:  ddl,
 		Verbose: s.Verbose,
 	})
-	err := database.InsertControllerNodeID(
+	err = database.InsertControllerNodeID(
 		c.Context(), s.TxnRunner(), DqliteNodeID, "127.0.0.1",
 	)
 	c.Assert(err, tc.ErrorIsNil)
@@ -44,11 +46,13 @@ func (s *ControllerSuite) SetUpTest(c *tc.C) {
 // ApplyDDLForRunner is responsible for applying the controller schema to the
 // given database.
 func (s *ControllerSuite) ApplyDDLForRunner(c *tc.C, runner coredatabase.TxnRunner) {
+	ddl, err := schema.ControllerDDLForBackend(BackendForTest())
+	c.Assert(err, tc.ErrorIsNil)
 	s.DqliteSuite.ApplyDDLForRunner(c, &SchemaApplier{
-		Schema:  schema.ControllerDDL(),
+		Schema:  ddl,
 		Verbose: s.Verbose,
 	}, runner)
-	err := database.InsertControllerNodeID(c.Context(), runner, DqliteNodeID, "127.0.0.1")
+	err = database.InsertControllerNodeID(c.Context(), runner, DqliteNodeID, "127.0.0.1")
 	c.Assert(err, tc.ErrorIsNil)
 }
 
