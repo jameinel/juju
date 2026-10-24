@@ -63,11 +63,20 @@ func (st *UserState) EnsureExternalUser(ctx context.Context, subject user.Name) 
 			return errors.Capture(err)
 		}
 
+		// Check for the user first rather than relying on the unique
+		// constraint alone. A failed insert aborts the transaction on
+		// PostgreSQL, so it cannot be ignored and committed.
+		if _, err := GetUserUUIDByName(ctx, tx, subject); err == nil {
+			return nil
+		} else if !errors.Is(err, accesserrors.UserNotFound) {
+			return errors.Capture(err)
+		}
+
 		err = AddUser(ctx, tx, userUUID, subject, subject.Name(), true, creatorUUID, st.clock.Now().UTC())
 		if errors.Is(err, accesserrors.UserAlreadyExists) {
-			// User already exists — this is the expected path for
-			// returning users and also handles the race condition
-			// of two concurrent logins for the same new user.
+			// A concurrent login for the same new user added it first. On
+			// PostgreSQL the check above makes this a serialization
+			// failure, which is retried, instead.
 			return nil
 		}
 		return err

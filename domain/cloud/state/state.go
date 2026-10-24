@@ -804,25 +804,24 @@ WHERE  grant_on = $dbCloudName.name
 }
 
 // AllowCloudType is responsible for applying the cloud type to
-// the given database. If the unique constraint applies the error is masked and
-// returned as NIL.
+// the given database. If a cloud type with the same name already exists, the
+// insert is skipped and nil is returned.
 func AllowCloudType(ctx context.Context, db coredatabase.TxnRunner, version int, name string) error {
 	dbCloudType := cloudType{
 		ID:   version,
 		Type: name,
 	}
+	// A conflict is ignored in SQL rather than by catching the error, as a
+	// failed statement aborts the transaction on PostgreSQL.
 	stmt, err := sqlair.Prepare(`
 INSERT INTO cloud_type (*) 
-VALUES      ($cloudType.*)`, dbCloudType)
+VALUES      ($cloudType.*)
+ON CONFLICT (type) DO NOTHING`, dbCloudType)
 	if err != nil {
 		return errors.Errorf("preparing insert cloud type statement: %w", err)
 	}
 	return errors.Capture(db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
-		err := tx.Query(ctx, stmt, dbCloudType).Run()
-		if database.IsErrConstraintUnique(err) {
-			return nil
-		}
-		return err
+		return tx.Query(ctx, stmt, dbCloudType).Run()
 	}))
 
 }

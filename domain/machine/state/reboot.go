@@ -10,7 +10,6 @@ import (
 
 	"github.com/juju/juju/core/machine"
 	machineerrors "github.com/juju/juju/domain/machine/errors"
-	"github.com/juju/juju/internal/database"
 	"github.com/juju/juju/internal/errors"
 )
 
@@ -26,20 +25,17 @@ func (st *State) RequireMachineReboot(ctx context.Context, uuid machine.UUID) er
 		return errors.Capture(err)
 	}
 	machineUUIDParam := entityUUID{uuid.String()}
-	setRebootFlag := `INSERT INTO machine_requires_reboot (machine_uuid) VALUES ($entityUUID.uuid)`
+	// A conflict is ignored in SQL rather than by catching the error, as a
+	// failed statement aborts the transaction on PostgreSQL.
+	setRebootFlag := `
+INSERT INTO machine_requires_reboot (machine_uuid) VALUES ($entityUUID.uuid)
+ON CONFLICT (machine_uuid) DO NOTHING`
 	setRebootFlagStmt, err := st.Prepare(setRebootFlag, machineUUIDParam)
 	if err != nil {
 		return errors.Capture(err)
 	}
 	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
-		err := tx.Query(ctx, setRebootFlagStmt, machineUUIDParam).Run()
-		if database.IsErrConstraintPrimaryKey(err) {
-			// if the same uuid is added twice, do nothing (idempotency)
-			return nil
-		} else if err != nil {
-			return errors.Capture(err)
-		}
-		return nil
+		return tx.Query(ctx, setRebootFlagStmt, machineUUIDParam).Run()
 	})
 	if err != nil {
 		return errors.Errorf("requiring reboot of machine %q: %w", uuid, err)
