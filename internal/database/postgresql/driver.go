@@ -5,8 +5,11 @@ package postgresql
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -29,26 +32,70 @@ func init() {
 	sql.Register(DriverName, &pgDriver{})
 }
 
-// Option customises the connection configuration.
-type Option func(*pgx.ConnConfig)
+// Option customises the connection configuration. Options are applied after
+// the URL is parsed.
+type Option func(*pgx.ConnConfig) error
 
 // WithSearchPath sets the schemas in the connection's search_path, in order.
 // Each name is quoted, so names such as UUIDs with hyphens are safe.
 func WithSearchPath(schemas ...string) Option {
-	return func(cfg *pgx.ConnConfig) {
+	return func(cfg *pgx.ConnConfig) error {
 		quoted := make([]string, len(schemas))
 		for i, s := range schemas {
-			quoted[i] = quoteIdentifier(s)
+			quoted[i] = QuoteIdentifier(s)
 		}
 		cfg.RuntimeParams["search_path"] = strings.Join(quoted, ", ")
+		return nil
 	}
 }
 
 // WithTimeZoneUTC configures connections to interpret zone-less timestamps as
 // UTC.
 func WithTimeZoneUTC() Option {
-	return func(cfg *pgx.ConnConfig) {
+	return func(cfg *pgx.ConnConfig) error {
 		cfg.RuntimeParams["timezone"] = "UTC"
+		return nil
+	}
+}
+
+// WithRootCAs verifies the server certificate against the PEM CA
+// certificates, held in memory rather than in an sslrootcert file. An empty
+// PEM is a no-op. The URL must use sslmode=verify-ca or sslmode=verify-full:
+// the other modes either skip verification or allow plaintext, so a CA would
+// silently be ignored.
+func WithRootCAs(caCertPEM string) Option {
+	return func(cfg *pgx.ConnConfig) error {
+		if caCertPEM == "" {
+			return nil
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM([]byte(caCertPEM)) {
+			return errors.New("parsing database CA certificate: no PEM certificates found")
+		}
+
+		tlsConfigs := []*tls.Config{cfg.TLSConfig}
+		for _, fallback := range cfg.Fallbacks {
+			tlsConfigs = append(tlsConfigs, fallback.TLSConfig)
+		}
+		for _, tlsConfig := range tlsConfigs {
+			// A nil config is a plaintext attempt. A config that skips
+			// verification without a verify callback does not verify.
+			if tlsConfig == nil ||
+				(tlsConfig.InsecureSkipVerify && tlsConfig.VerifyPeerCertificate == nil) {
+				return errors.New("a database CA certificate requires sslmode=verify-ca or sslmode=verify-full")
+			}
+		}
+		for _, tlsConfig := range tlsConfigs {
+			// Update in place: pgx's verify-ca callback reads RootCAs from
+			// this config when the connection is made.
+			roots := pool
+			if tlsConfig.RootCAs != nil {
+				roots = tlsConfig.RootCAs.Clone()
+				roots.AppendCertsFromPEM([]byte(caCertPEM))
+			}
+			tlsConfig.RootCAs = roots
+		}
+		return nil
 	}
 }
 
@@ -100,13 +147,15 @@ func parseConfig(url string, opts ...Option) (*pgx.ConnConfig, error) {
 	}
 	cfg.RuntimeParams["default_transaction_isolation"] = IsolationLevel
 	for _, opt := range opts {
-		opt(cfg)
+		if err := opt(cfg); err != nil {
+			return nil, fmt.Errorf("configuring postgresql connection: %w", err)
+		}
 	}
 	return cfg, nil
 }
 
-// quoteIdentifier quotes a PostgreSQL identifier.
-func quoteIdentifier(s string) string {
+// QuoteIdentifier quotes a PostgreSQL identifier.
+func QuoteIdentifier(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }
 
