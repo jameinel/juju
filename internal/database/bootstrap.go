@@ -51,6 +51,36 @@ type BootstrapOpt func(
 	controller, model coredatabase.TxnRunner,
 ) error
 
+// DqliteInitialiser bootstraps a controller's databases in a new Dqlite
+// cluster on the bootstrap machine.
+type DqliteInitialiser struct {
+	mgr                BootstrapNodeManager
+	bootstrapAddresses network.ProviderAddresses
+	logger             logger.Logger
+}
+
+// NewDqliteInitialiser returns a DqliteInitialiser that starts Dqlite with
+// the node manager, binding to an address chosen from bootstrapAddresses.
+func NewDqliteInitialiser(
+	mgr BootstrapNodeManager,
+	bootstrapAddresses network.ProviderAddresses,
+	logger logger.Logger,
+) *DqliteInitialiser {
+	return &DqliteInitialiser{
+		mgr:                mgr,
+		bootstrapAddresses: bootstrapAddresses,
+		logger:             logger,
+	}
+}
+
+// Initialise creates the controller and controller model databases, then
+// runs the bootstrap operations against them.
+func (i *DqliteInitialiser) Initialise(
+	ctx context.Context, controllerModelUUID model.UUID, opts ...BootstrapOpt,
+) error {
+	return BootstrapDqlite(ctx, i.mgr, i.bootstrapAddresses, controllerModelUUID, i.logger, opts...)
+}
+
 // BootstrapDqlite opens a new database for the controller, and runs the
 // DDL to create its schema.
 //
