@@ -4,7 +4,7 @@ CREATE TABLE machine (
     net_node_uuid TEXT NOT NULL,
     life_id BIGINT NOT NULL,
     nonce TEXT,
-    password_hash_algorithm_id TEXT,
+    password_hash_algorithm_id BIGINT,
     password_hash TEXT,
     force_destroyed BOOLEAN DEFAULT FALSE,
     agent_started_at TIMESTAMPTZ,
@@ -39,7 +39,7 @@ CREATE TABLE machine_manual (
 
 CREATE TABLE machine_platform (
     machine_uuid TEXT NOT NULL,
-    os_id TEXT NOT NULL,
+    os_id BIGINT NOT NULL,
     channel TEXT,
     architecture_id BIGINT NOT NULL,
     CONSTRAINT fk_machine_platform_machine
