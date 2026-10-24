@@ -3116,7 +3116,7 @@ SELECT u.name AS &name.name
 FROM   unit AS u 
 JOIN   application AS a ON u.application_uuid = a.uuid
 WHERE  a.uuid = $relationAndApplicationUUID.application_uuid
-AND    u.uuid NOT IN in_scope_units
+AND    u.uuid NOT IN (SELECT uuid FROM in_scope_units)
 `, relationAndApplicationUUID{}, name{})
 	if err != nil {
 		return nil, errors.Capture(err)
