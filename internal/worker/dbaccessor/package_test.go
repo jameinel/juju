@@ -15,6 +15,7 @@ import (
 	"github.com/juju/juju/core/logger"
 	domaintesting "github.com/juju/juju/domain/schema/testing"
 	"github.com/juju/juju/internal/database/app"
+	databasetesting "github.com/juju/juju/internal/database/testing"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
 	"github.com/juju/juju/internal/testhelpers"
 )
@@ -152,6 +153,7 @@ type dbBaseSuite struct {
 }
 
 func (s *dbBaseSuite) SetUpTest(c *tc.C) {
+	databasetesting.SkipOnPostgreSQL(c, "the dbaccessor worker manages dqlite databases")
 	s.ControllerSuite.SetUpTest(c)
 }
 

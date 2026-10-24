@@ -11,7 +11,17 @@ import (
 
 	"github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/database/schema"
+	domainschema "github.com/juju/juju/domain/schema"
+	pgtesting "github.com/juju/juju/internal/database/postgresql/testing"
 )
+
+// BackendForTest returns the schema backend selected for state tests.
+func BackendForTest() domainschema.Backend {
+	if pgtesting.URL() != "" {
+		return domainschema.BackendPostgreSQL
+	}
+	return domainschema.BackendDqlite
+}
 
 // SchemaApplier is a helper that applies a schema to a database.
 type SchemaApplier struct {
