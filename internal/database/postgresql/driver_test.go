@@ -7,7 +7,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/canonical/sqlair"
@@ -18,15 +17,11 @@ import (
 	"github.com/juju/juju/internal/database"
 	"github.com/juju/juju/internal/database/drivererrors"
 	"github.com/juju/juju/internal/database/postgresql"
+	pgtesting "github.com/juju/juju/internal/database/postgresql/testing"
 	"github.com/juju/juju/internal/database/txn"
 	"github.com/juju/juju/internal/logger"
 	coretesting "github.com/juju/juju/internal/testing"
 )
-
-// testURLEnv names the environment variable holding the URL of a PostgreSQL
-// that the opt-in integration tests may use. The tests create and drop one
-// schema each.
-const testURLEnv = "JUJU_POSTGRESQL_TEST_URL"
 
 type driverSuite struct {
 	coretesting.BaseSuite
@@ -43,24 +38,14 @@ func TestDriverSuite(t *testing.T) {
 func (s *driverSuite) SetUpTest(c *tc.C) {
 	s.BaseSuite.SetUpTest(c)
 
-	s.url = os.Getenv(testURLEnv)
-	if s.url == "" {
-		c.Skip(testURLEnv + " is not set")
-	}
+	admin := pgtesting.OpenAdmin(c)
+	s.url = pgtesting.URL()
 
-	// Schema names with hyphens exercise search_path quoting.
-	s.schema = fmt.Sprintf("test-%d-%s", os.Getpid(), sanitise(c.TestName()))
+	// Test schema names contain hyphens, which exercise search_path quoting.
+	s.schema = pgtesting.NewSchemaName(c, "")
+	pgtesting.CreateSchema(c, admin, s.schema)
 
-	admin, err := postgresql.Open(s.url)
-	c.Assert(err, tc.ErrorIsNil)
-	_, err = admin.ExecContext(c.Context(), fmt.Sprintf(`CREATE SCHEMA %q`, s.schema))
-	c.Assert(err, tc.ErrorIsNil)
-	c.Cleanup(func() {
-		defer admin.Close()
-		_, err := admin.ExecContext(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, s.schema))
-		c.Check(err, tc.ErrorIsNil)
-	})
-
+	var err error
 	s.db, err = postgresql.Open(s.url, postgresql.WithSearchPath(s.schema))
 	c.Assert(err, tc.ErrorIsNil)
 	c.Cleanup(func() { _ = s.db.Close() })
@@ -73,20 +58,6 @@ CREATE TABLE child (
     n INT CHECK (n > 0)
 );`)
 	c.Assert(err, tc.ErrorIsNil)
-}
-
-func sanitise(s string) string {
-	out := []byte{}
-	for _, r := range []byte(s) {
-		if r == '.' || r == '/' {
-			r = '_'
-		}
-		out = append(out, r)
-	}
-	if len(out) > 30 {
-		out = out[len(out)-30:]
-	}
-	return string(out)
 }
 
 func (s *driverSuite) TestSearchPathAndSettings(c *tc.C) {
