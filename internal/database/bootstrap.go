@@ -6,6 +6,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"strconv"
 
 	"github.com/canonical/sqlair"
 
@@ -91,7 +92,8 @@ func BootstrapDqlite(
 }
 
 // InsertControllerNodeID inserts the node ID of the controller node
-// into the controller_node table.
+// into the controller_node table. The node ID column is TEXT, so the ID is
+// bound as its decimal string rather than relying on driver coercion.
 func InsertControllerNodeID(
 	ctx context.Context, runner coredatabase.TxnRunner, nodeID uint64, bindAddress string,
 ) error {
@@ -99,7 +101,9 @@ func InsertControllerNodeID(
 INSERT INTO controller_node (controller_id, dqlite_node_id, dqlite_bind_address)
 VALUES ('0', ?, ?);`
 	return runner.StdTxn(ctx, func(ctx context.Context, tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, q, nodeID, bindAddress)
+		result, err := tx.ExecContext(
+			ctx, q, strconv.FormatUint(nodeID, 10), bindAddress,
+		)
 		if err != nil {
 			return errors.Capture(err)
 		}
