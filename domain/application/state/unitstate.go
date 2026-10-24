@@ -697,16 +697,18 @@ func (st *State) ensureFutureUnitNetNode(
 ) error {
 	netNodeUUID := netNodeUUID{NetNodeUUID: uuid}
 
-	ensureNode := `INSERT INTO net_node (uuid) VALUES ($netNodeUUID.*)`
+	// A conflict is ignored in SQL rather than by catching the error, as a
+	// failed statement aborts the transaction on PostgreSQL.
+	ensureNode := `
+INSERT INTO net_node (uuid) VALUES ($netNodeUUID.*)
+ON CONFLICT (uuid) DO NOTHING`
 	ensureNodeStmt, err := st.Prepare(ensureNode, netNodeUUID)
 	if err != nil {
 		return errors.Capture(err)
 	}
 
 	err = tx.Query(ctx, ensureNodeStmt, netNodeUUID).Run()
-	if internaldatabase.IsErrConstraintPrimaryKey(err) {
-		return nil
-	} else if err != nil {
+	if err != nil {
 		return errors.Errorf("ensuring net node %q for future unit: %w", uuid, err)
 	}
 
