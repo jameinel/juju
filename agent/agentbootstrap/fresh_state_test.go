@@ -14,9 +14,7 @@ import (
 	"github.com/juju/juju/agent"
 	"github.com/juju/juju/cloud"
 	"github.com/juju/juju/controller"
-	corelogger "github.com/juju/juju/core/logger"
 	coremodel "github.com/juju/juju/core/model"
-	"github.com/juju/juju/core/network"
 	jujuversion "github.com/juju/juju/core/version"
 	modelerrors "github.com/juju/juju/domain/model/errors"
 	schematesting "github.com/juju/juju/domain/schema/testing"
@@ -74,7 +72,7 @@ func (s *freshStateSuite) assertFreshState(c *tc.C, cloudType string, modelType 
 	b, cfg := s.newBootstrap(c, cloudType)
 	info, ok := cfg.ControllerAgentInfo()
 	c.Assert(ok, tc.IsTrue)
-	b.bootstrapDqlite = func(ctx context.Context, _ database.BootstrapNodeManager, _ network.ProviderAddresses, modelUUID coremodel.UUID, _ corelogger.Logger, ops ...database.BootstrapOpt) error {
+	b.databaseInitialiser = databaseInitialiserFunc(func(ctx context.Context, modelUUID coremodel.UUID, ops ...database.BootstrapOpt) error {
 		// The local password is changed only once all seed operations succeed.
 		apiInfo, ok := cfg.APIInfo()
 		c.Assert(ok, tc.IsTrue)
@@ -98,7 +96,7 @@ func (s *freshStateSuite) assertFreshState(c *tc.C, cloudType string, modelType 
 		c.Check(gotType, tc.Equals, modelType.String())
 		c.Check(isController, tc.IsTrue)
 		return nil
-	}
+	})
 
 	err := b.Initialise(c.Context())
 	c.Assert(err, tc.ErrorIsNil)
@@ -134,9 +132,9 @@ func (s *freshStateSuite) TestDatabaseFailureDoesNotChangeAgentConfig(c *tc.C) {
 	before, err := cfg.Render()
 	c.Assert(err, tc.ErrorIsNil)
 	expected := errors.New("database failed")
-	b.bootstrapDqlite = func(context.Context, database.BootstrapNodeManager, network.ProviderAddresses, coremodel.UUID, corelogger.Logger, ...database.BootstrapOpt) error {
+	b.databaseInitialiser = databaseInitialiserFunc(func(context.Context, coremodel.UUID, ...database.BootstrapOpt) error {
 		return expected
-	}
+	})
 	err = b.Initialise(c.Context())
 	c.Check(err, tc.ErrorIs, expected)
 	after, err := cfg.Render()
@@ -158,6 +156,17 @@ func (s *freshStateSuite) TestUnsupportedVersionDoesNotOpenDatabases(c *tc.C) {
 }
 
 func (s *freshStateSuite) newBootstrap(c *tc.C, cloudType string) (*AgentBootstrap, agent.ConfigSetterWriter) {
+	return newFreshBootstrap(c, cloudType, databaseInitialiserFunc(
+		func(context.Context, coremodel.UUID, ...database.BootstrapOpt) error {
+			c.Fatal("unexpected database initialisation")
+			return nil
+		},
+	))
+}
+
+func newFreshBootstrap(
+	c *tc.C, cloudType string, initialiser DatabaseInitialiser,
+) (*AgentBootstrap, agent.ConfigSetterWriter) {
 	modelUUID := tc.Must0(c, coremodel.NewUUID)
 	tag := names.Tag(names.NewMachineTag(agent.BootstrapControllerId))
 	if cloudType == cloud.CloudTypeKubernetes {
@@ -192,11 +201,8 @@ func (s *freshStateSuite) newBootstrap(c *tc.C, cloudType string) (*AgentBootstr
 			ControllerCloud:  cloud.Cloud{Name: "test-cloud", Type: cloudType, AuthTypes: cloud.AuthTypes{cloud.EmptyAuthType}},
 			SSHServerHostKey: string(hostKey),
 		},
-		BootstrapDqlite: func(context.Context, database.BootstrapNodeManager, network.ProviderAddresses, coremodel.UUID, corelogger.Logger, ...database.BootstrapOpt) error {
-			c.Fatal("unexpected database initialisation")
-			return nil
-		},
-		Logger: loggertesting.WrapCheckLog(c),
+		DatabaseInitialiser: initialiser,
+		Logger:              loggertesting.WrapCheckLog(c),
 	})
 	c.Assert(err, tc.ErrorIsNil)
 	return b, cfg

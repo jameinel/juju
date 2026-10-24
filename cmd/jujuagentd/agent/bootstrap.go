@@ -28,7 +28,9 @@ import (
 	"github.com/juju/juju/cmd/internal/agent/agentconf"
 	"github.com/juju/juju/controller"
 	"github.com/juju/juju/core/arch"
+	coredatabase "github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/instance"
+	corelogger "github.com/juju/juju/core/logger"
 	"github.com/juju/juju/core/network"
 	coreos "github.com/juju/juju/core/os"
 	coreuser "github.com/juju/juju/core/user"
@@ -41,6 +43,8 @@ import (
 	"github.com/juju/juju/internal/cloudconfig"
 	"github.com/juju/juju/internal/cloudconfig/instancecfg"
 	"github.com/juju/juju/internal/database"
+	"github.com/juju/juju/internal/database/connsource"
+	"github.com/juju/juju/internal/database/postgresql"
 	"github.com/juju/juju/internal/errors"
 	internallogger "github.com/juju/juju/internal/logger"
 	pkissh "github.com/juju/juju/internal/pki/ssh"
@@ -55,13 +59,22 @@ var (
 
 type BootstrapAgentFunc func(agentbootstrap.AgentBootstrapArgs) (*agentbootstrap.AgentBootstrap, error)
 
+// NewDatabaseInitialiserFunc returns the initialiser for the database backend
+// selected in the agent configuration.
+type NewDatabaseInitialiserFunc func(
+	ctx context.Context,
+	cfg agent.Config,
+	bootstrapAddresses network.ProviderAddresses,
+	logger corelogger.Logger,
+) (agentbootstrap.DatabaseInitialiser, error)
+
 // BootstrapCommand represents a jujud bootstrap command.
 type BootstrapCommand struct {
 	cmd.CommandBase
 	agentconf.AgentConf
-	Timeout           time.Duration
-	BootstrapAgent    BootstrapAgentFunc
-	DqliteInitialiser agentbootstrap.DqliteInitialiserFunc
+	Timeout                time.Duration
+	BootstrapAgent         BootstrapAgentFunc
+	NewDatabaseInitialiser NewDatabaseInitialiserFunc
 }
 
 // NewBootstrapCommand returns a new BootstrapCommand that has been initialised.
@@ -69,8 +82,8 @@ func NewBootstrapCommand() *BootstrapCommand {
 	return &BootstrapCommand{
 		AgentConf: agentconf.NewAgentConf(""),
 
-		BootstrapAgent:    agentbootstrap.NewAgentBootstrap,
-		DqliteInitialiser: database.BootstrapDqlite,
+		BootstrapAgent:         agentbootstrap.NewAgentBootstrap,
+		NewDatabaseInitialiser: newDatabaseInitialiser,
 	}
 }
 
@@ -328,15 +341,19 @@ func (c *BootstrapCommand) initialiseFreshController(ctx *cmd.Context, args inst
 
 	// Initialise state, and store any agent config (e.g. password) changes.
 	err = c.ChangeConfig(func(agentConfig agent.ConfigSetter) error {
+		bootstrapLogger := internallogger.GetLogger("juju.agent.bootstrap")
+		databaseInitialiser, err := c.NewDatabaseInitialiser(ctx, agentConfig, addrs, bootstrapLogger)
+		if err != nil {
+			return errors.Errorf("selecting database initialiser: %w", err)
+		}
 		adminTag := names.NewLocalUserTag(coreuser.AdminUserName.Name())
 		bootstrap, err := c.BootstrapAgent(agentbootstrap.AgentBootstrapArgs{
 			AgentConfig:               agentConfig,
 			BootstrapEnviron:          env,
 			AdminUser:                 adminTag,
 			StateInitialisationParams: args,
-			BootstrapMachineAddresses: addrs,
-			BootstrapDqlite:           c.DqliteInitialiser,
-			Logger:                    internallogger.GetLogger("juju.agent.bootstrap"),
+			DatabaseInitialiser:       databaseInitialiser,
+			Logger:                    bootstrapLogger,
 		})
 		if err != nil {
 			return errors.Capture(err)
@@ -358,6 +375,44 @@ func bootstrapControllerAddresses(
 	}
 	addresses, err := addressFinder.BootstrapControllerAddresses(ctx)
 	return addresses, errors.Capture(err)
+}
+
+// newDatabaseInitialiser selects the database initialiser for the backend in
+// the agent configuration. Dqlite starts a node on this machine, bound to one
+// of the bootstrap addresses. PostgreSQL creates the controller's schemas in
+// the configured external database.
+func newDatabaseInitialiser(
+	ctx context.Context,
+	cfg agent.Config,
+	bootstrapAddresses network.ProviderAddresses,
+	logger corelogger.Logger,
+) (agentbootstrap.DatabaseInitialiser, error) {
+	details, err := connsource.NewAgentConfigSource(cfg).Details(ctx)
+	if err != nil {
+		return nil, errors.Errorf("reading database connection details: %w", err)
+	}
+
+	switch details.Backend {
+	case controller.DBBackendDqlite:
+		agentInfo, ok := cfg.ControllerAgentInfo()
+		if !ok {
+			return nil, errors.New("controller agent info not available")
+		}
+		mgr := database.NewNodeManager(database.NodeManagerConfig{
+			DataDir:              cfg.DataDir(),
+			CACert:               cfg.CACert(),
+			ControllerCert:       agentInfo.Cert,
+			ControllerPrivateKey: agentInfo.PrivateKey,
+		}, logger, coredatabase.NoopSlowQueryLogger{})
+		return database.NewDqliteInitialiser(mgr, bootstrapAddresses, logger), nil
+	case controller.DBBackendPostgreSQL:
+		return database.NewPostgresInitialiser(postgresql.Placement{
+			URL:    details.URL,
+			CACert: details.CACert,
+		}, logger), nil
+	default:
+		return nil, errors.Errorf("unknown database backend %q", details.Backend)
+	}
 }
 
 // ensureSSHServerHostKey ensures that either a) a user has provided a host key
