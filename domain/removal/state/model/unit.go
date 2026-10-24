@@ -844,7 +844,7 @@ WITH devices AS (
 	WHERE lld.net_node_uuid = $entityUUID.uuid
 )
 DELETE FROM ip_address
-WHERE device_uuid IN devices
+WHERE device_uuid IN (SELECT uuid FROM devices)
 `, netNodeIDRec)
 	if err != nil {
 		return errors.Capture(err)
@@ -907,7 +907,7 @@ WITH referenced AS (
 )
 DELETE FROM fqdn_address
 WHERE uuid IN ($uuids[:])
-AND uuid NOT IN referenced`, uuids{})
+AND uuid NOT IN (SELECT uuid FROM referenced)`, uuids{})
 	if err != nil {
 		return errors.Capture(err)
 	}
