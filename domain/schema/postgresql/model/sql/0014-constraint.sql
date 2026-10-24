@@ -19,8 +19,8 @@ CREATE TABLE "constraint" (
     container_type_id BIGINT,
     virt_type TEXT,
     -- allocate_public_ip is a bool value. We only use int to get around DQlite
-    -- limitations with NULL bools.
-    allocate_public_ip BIGINT,
+    -- limitations with NULL bools. PostgreSQL uses a nullable BOOLEAN.
+    allocate_public_ip BOOLEAN,
     image_id TEXT,
     ip_family TEXT
 );
