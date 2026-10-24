@@ -177,6 +177,37 @@ func (s *rewriteSuite) TestRewrite(c *tc.C) {
 		name:   "unterminated string",
 		query:  "SELECT 'abc ?",
 		expect: "SELECT 'abc ?",
+	}, {
+		name:   "empty in list",
+		query:  "SELECT a FROM t WHERE a IN ()",
+		expect: "SELECT a FROM t WHERE a = ANY ('{}')",
+	}, {
+		name:   "empty not in list with parameters",
+		query:  "DELETE FROM t WHERE a = @sqlair_0 AND b NOT IN ()",
+		expect: "DELETE FROM t WHERE a = $1 AND b <> ALL ('{}')",
+		params: []param{named("sqlair_0")},
+	}, {
+		name:   "empty in list lower case without space",
+		query:  "SELECT a FROM t WHERE a not\n  in( \n) AND b in()",
+		expect: "SELECT a FROM t WHERE a <> ALL ('{}') AND b = ANY ('{}')",
+	}, {
+		name:   "non empty in list",
+		query:  "SELECT a FROM t WHERE a NOT IN (@sqlair_0, @sqlair_1)",
+		expect: "SELECT a FROM t WHERE a NOT IN ($1, $2)",
+		params: []param{named("sqlair_0"), named("sqlair_1")},
+	}, {
+		name:   "empty parentheses that are not an in list",
+		query:  "SELECT now(), count( ), login(), a_in (), \"in\" () FROM t",
+		expect: "SELECT now(), count( ), login(), a_in (), \"in\" () FROM t",
+	}, {
+		name:   "quoted identifier before in",
+		query:  `SELECT a FROM t WHERE "not" IN ()`,
+		expect: `SELECT a FROM t WHERE "not" = ANY ('{}')`,
+	}, {
+		name:   "empty in list inside literals and comments",
+		query:  "SELECT 'a IN ()', \"IN ()\" -- NOT IN ()\n, ?",
+		expect: "SELECT 'a IN ()', \"IN ()\" -- NOT IN ()\n, $1",
+		params: []param{pos(1)},
 	}}
 
 	for _, test := range tests {

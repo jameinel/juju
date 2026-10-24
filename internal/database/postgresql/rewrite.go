@@ -23,8 +23,15 @@ type param struct {
 // placeholder that is repeated maps to a single "$N". Placeholders inside
 // string literals, quoted identifiers, comments and dollar-quoted strings are
 // left untouched. The returned params slice has one entry per "$N", in order.
-// A query that contains no rewritable placeholders is returned unchanged with
-// no params.
+//
+// sqlair renders an empty slice input as "IN ()", which SQLite accepts and
+// PostgreSQL rejects. "IN ()" is rewritten to "= ANY ('{}')" and "NOT IN ()"
+// to "<> ALL ('{}')", which keep the SQLite results, including for a NULL
+// left operand. The rewrite assumes the IN operand is not itself the right
+// side of a comparison, as in "a = b IN ()", because "=" does not chain.
+//
+// A query that contains nothing to rewrite is returned unchanged with no
+// params.
 func rewrite(query string) (string, []param) {
 	var (
 		sb      strings.Builder
@@ -96,6 +103,18 @@ func rewrite(query string) (string, []param) {
 			sb.WriteString(strconv.Itoa(idx))
 			changed = true
 			i = end
+		case c == '(':
+			if end, ok := skipEmptyParens(query, i); ok {
+				if out, ok := rewriteEmptyIn(sb.String()); ok {
+					sb.Reset()
+					sb.WriteString(out)
+					changed = true
+					i = end
+					continue
+				}
+			}
+			sb.WriteByte(c)
+			i++
 		default:
 			sb.WriteByte(c)
 			i++
@@ -201,6 +220,55 @@ func scanSqlairName(s string, start int) (int, bool) {
 		return 0, false
 	}
 	return i, true
+}
+
+// skipEmptyParens reports whether the "(" at start is followed by only
+// whitespace and a ")". It returns the index just past the ")".
+func skipEmptyParens(s string, start int) (int, bool) {
+	i := start + 1
+	for i < len(s) && isSpace(s[i]) {
+		i++
+	}
+	if i < len(s) && s[i] == ')' {
+		return i + 1, true
+	}
+	return 0, false
+}
+
+// rewriteEmptyIn returns prefix with a trailing "IN" or "NOT IN" keyword
+// replaced by the PostgreSQL form of a comparison with an empty list. It
+// returns false if prefix does not end with the IN keyword.
+func rewriteEmptyIn(prefix string) (string, bool) {
+	inStart, inEnd, ok := lastWord(prefix, len(prefix))
+	if !ok || !strings.EqualFold(prefix[inStart:inEnd], "IN") {
+		return "", false
+	}
+	notStart, notEnd, ok := lastWord(prefix, inStart)
+	if ok && strings.EqualFold(prefix[notStart:notEnd], "NOT") {
+		return prefix[:notStart] + "<> ALL ('{}')", true
+	}
+	return prefix[:inStart] + "= ANY ('{}')", true
+}
+
+// lastWord returns the bounds of the keyword that ends s[:end], ignoring
+// trailing whitespace. It returns false if s[:end] does not end with a word
+// made only of letters, such as when it ends with a quoted identifier.
+func lastWord(s string, end int) (int, int, bool) {
+	for end > 0 && isSpace(s[end-1]) {
+		end--
+	}
+	start := end
+	for start > 0 && isLetter(s[start-1]) {
+		start--
+	}
+	if start == end || (start > 0 && isIdentChar(s[start-1])) {
+		return 0, 0, false
+	}
+	return start, end, true
+}
+
+func isSpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'
 }
 
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }

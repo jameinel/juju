@@ -171,6 +171,37 @@ WHERE id = $Parent.id OR name = $Parent.name`, Parent{})
 	c.Check(err, tc.ErrorIs, sqlair.ErrNoRows)
 }
 
+func (s *driverSuite) TestSqlairEmptySlice(c *tc.C) {
+	type Count struct {
+		N int `db:"n"`
+	}
+	type IDs []int
+	type Names []string
+
+	_, err := s.db.ExecContext(c.Context(), `
+INSERT INTO parent (id, name) VALUES (1, 'a');
+INSERT INTO child (id, parent_id, n) VALUES (1, 1, NULL), (2, 1, 5);`)
+	c.Assert(err, tc.ErrorIsNil)
+
+	sdb := sqlair.NewDB(s.db)
+	count := func(query string, args ...any) int {
+		stmt, err := sqlair.Prepare(query, append([]any{Count{}}, args...)...)
+		c.Assert(err, tc.ErrorIsNil)
+		var got Count
+		err = sdb.Query(c.Context(), stmt, args...).Get(&got)
+		c.Assert(err, tc.ErrorIsNil)
+		return got.N
+	}
+
+	// An empty list matches nothing with IN and everything with NOT IN,
+	// including a NULL operand, as on SQLite.
+	c.Check(count(`SELECT count(*) AS &Count.n FROM child WHERE n IN ($IDs[:])`, IDs{}), tc.Equals, 0)
+	c.Check(count(`SELECT count(*) AS &Count.n FROM child WHERE n NOT IN ($IDs[:])`, IDs{}), tc.Equals, 2)
+	c.Check(count(`SELECT count(*) AS &Count.n FROM parent WHERE name IN ($Names[:])`, Names{}), tc.Equals, 0)
+	c.Check(count(`SELECT count(*) AS &Count.n FROM parent WHERE name NOT IN ($Names[:])`, Names{}), tc.Equals, 1)
+	c.Check(count(`SELECT count(*) AS &Count.n FROM child WHERE n NOT IN ($IDs[:])`, IDs{5}), tc.Equals, 0)
+}
+
 func (s *driverSuite) TestConstraintErrors(c *tc.C) {
 	exec := func(q string, args ...any) error {
 		_, err := s.db.ExecContext(c.Context(), q, args...)
