@@ -14,6 +14,7 @@ import (
 
 	"github.com/juju/juju/core/changestream"
 	"github.com/juju/juju/core/database"
+	"github.com/juju/juju/core/database/dialect"
 	"github.com/juju/juju/core/database/schema"
 	"github.com/juju/juju/core/watcher"
 	"github.com/juju/juju/internal/errors"
@@ -432,7 +433,7 @@ func (s *namespaceSuite) TestNilPredicate(c *tc.C) {
 }
 
 type schemaDDLApplier struct {
-	dialect schema.Dialect
+	dialect dialect.Dialect
 }
 
 func (a schemaDDLApplier) Apply(c *tc.C, ctx context.Context, runner database.TxnRunner) {

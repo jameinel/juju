@@ -14,6 +14,7 @@ import (
 	"github.com/canonical/sqlair"
 	"github.com/juju/tc"
 
+	"github.com/juju/juju/core/database/dialect"
 	coreschema "github.com/juju/juju/core/database/schema"
 	"github.com/juju/juju/internal/database/drivererrors"
 	"github.com/juju/juju/internal/database/postgresql"
@@ -33,12 +34,12 @@ func (s *postgresqlSuite) TestBackendSelectors(c *tc.C) {
 	for _, selectDDL := range []func(Backend) (*coreschema.Schema, error){
 		ControllerDDLForBackend, ModelDDLForBackend,
 	} {
-		for backend, dialect := range map[Backend]coreschema.Dialect{
-			BackendDqlite: coreschema.SQLite, BackendPostgreSQL: coreschema.PostgreSQL,
+		for backend, want := range map[Backend]dialect.Dialect{
+			BackendDqlite: dialect.SQLite, BackendPostgreSQL: dialect.PostgreSQL,
 		} {
 			ddl, err := selectDDL(backend)
 			c.Assert(err, tc.ErrorIsNil)
-			c.Check(ddl.Dialect(), tc.Equals, dialect)
+			c.Check(ddl.Dialect(), tc.Equals, want)
 			c.Check(ddl.Len() > 0, tc.IsTrue)
 		}
 		for _, backend := range []Backend{"", "unknown"} {
@@ -47,8 +48,8 @@ func (s *postgresqlSuite) TestBackendSelectors(c *tc.C) {
 			c.Check(ddl, tc.IsNil)
 		}
 	}
-	c.Check(ControllerDDL().Dialect(), tc.Equals, coreschema.SQLite)
-	c.Check(ModelDDL().Dialect(), tc.Equals, coreschema.SQLite)
+	c.Check(ControllerDDL().Dialect(), tc.Equals, dialect.SQLite)
+	c.Check(ModelDDL().Dialect(), tc.Equals, dialect.SQLite)
 }
 
 func (s *postgresqlSuite) TestController(c *tc.C) {
