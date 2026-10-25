@@ -2054,7 +2054,7 @@ func (s *storageSuite) addAttachedFilesystem(c *tc.C) (string, string) {
 	ctx := c.Context()
 
 	netNodeUUID := "some-net-node-uuid"
-	_, err := s.DB().ExecContext(ctx, "INSERT OR IGNORE INTO net_node (uuid) VALUES (?)",
+	_, err := s.DB().ExecContext(ctx, "INSERT INTO net_node (uuid) VALUES (?) ON CONFLICT DO NOTHING",
 		netNodeUUID)
 	c.Assert(err, tc.ErrorIsNil)
 
@@ -2083,7 +2083,7 @@ func (s *storageSuite) addAttachedVolume(c *tc.C) (string, string) {
 	ctx := c.Context()
 
 	netNodeUUID := "some-net-node-uuid"
-	_, err := s.DB().ExecContext(ctx, "INSERT OR IGNORE INTO net_node (uuid) VALUES (?)",
+	_, err := s.DB().ExecContext(ctx, "INSERT INTO net_node (uuid) VALUES (?) ON CONFLICT DO NOTHING",
 		netNodeUUID)
 	c.Assert(err, tc.ErrorIsNil)
 
@@ -2114,7 +2114,7 @@ func (s *storageSuite) addAttachedVolumeWithPlan(c *tc.C) (string, string, strin
 	ctx := c.Context()
 
 	netNodeUUID := "some-net-node-uuid"
-	_, err := s.DB().ExecContext(ctx, "INSERT OR IGNORE INTO net_node (uuid) VALUES (?)",
+	_, err := s.DB().ExecContext(ctx, "INSERT INTO net_node (uuid) VALUES (?) ON CONFLICT DO NOTHING",
 		netNodeUUID)
 	c.Assert(err, tc.ErrorIsNil)
 
