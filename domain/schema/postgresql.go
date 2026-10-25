@@ -7,6 +7,7 @@ import (
 	"embed"
 	"fmt"
 
+	"github.com/juju/juju/core/database/dialect"
 	"github.com/juju/juju/core/database/schema"
 )
 
@@ -62,7 +63,7 @@ func postgresqlSchema(fs ReadFileDirFS, dir string) (*schema.Schema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading PostgreSQL schema: %w", err)
 	}
-	ddl := schema.NewForDialect(schema.PostgreSQL)
+	ddl := schema.NewForDialect(dialect.PostgreSQL)
 	for _, fn := range patches {
 		ddl.Add(fn())
 	}
