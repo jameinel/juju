@@ -230,6 +230,25 @@ func (s *deltasSuite) TestTextIDsParsedToIntegers(c *tc.C) {
 	c.Assert(err, tc.ErrorIsNil)
 	c.Check(perms[0].ScopeTypeID, tc.Equals, int64(3))
 	c.Check(perms[0].SubjectTypeID, tc.Equals, int64(2))
+
+	since := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	statuses, err := deltas{}.RelationStatus(ctx, []v4_0_12.RelationStatus{
+		{RelationUUID: "r", RelationStatusTypeID: "4", Message: new("msg"), UpdatedAt: &since},
+	}, nil)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(statuses, tc.DeepEquals, []v4_1_0.RelationStatus{
+		{RelationUUID: "r", RelationStatusTypeID: 4, Message: new("msg"), UpdatedAt: &since},
+	})
+
+	statusTypes, err := deltas{}.RelationStatusType(ctx, []v4_0_12.RelationStatusType{
+		{ID: "0", Name: "joining"},
+		{ID: "5", Name: "error"},
+	}, nil)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(statusTypes, tc.DeepEquals, []v4_1_0.RelationStatusType{
+		{ID: 0, Name: "joining"},
+		{ID: 5, Name: "error"},
+	})
 }
 
 // TestTextIDsRejectNonNumeric verifies that non-numeric values halt the
@@ -240,6 +259,12 @@ func (s *deltasSuite) TestTextIDsRejectNonNumeric(c *tc.C) {
 
 	_, err = deltas{}.Unit(c.Context(), []v4_0_12.Unit{{UUID: "u", PasswordHashAlgorithmID: new("x")}}, nil)
 	c.Check(err, tc.ErrorMatches, `invalid password_hash_algorithm_id "x".*`)
+
+	_, err = deltas{}.RelationStatus(c.Context(), []v4_0_12.RelationStatus{{RelationUUID: "r", RelationStatusTypeID: "joined"}}, nil)
+	c.Check(err, tc.ErrorMatches, `invalid relation_status_type_id "joined".*`)
+
+	_, err = deltas{}.RelationStatusType(c.Context(), []v4_0_12.RelationStatusType{{ID: "", Name: "joining"}}, nil)
+	c.Check(err, tc.ErrorMatches, `invalid relation_status_type.id "".*`)
 }
 
 // TestRemovalConvertsForce verifies that the integer force flag becomes a

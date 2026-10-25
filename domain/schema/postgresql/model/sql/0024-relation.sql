@@ -219,7 +219,7 @@ CREATE TABLE relation_application_settings_hash (
 );
 
 CREATE TABLE relation_status_type (
-    id TEXT NOT NULL PRIMARY KEY,
+    id BIGINT NOT NULL PRIMARY KEY,
     name TEXT NOT NULL
 );
 
@@ -238,7 +238,7 @@ INSERT INTO relation_status_type VALUES
 -- as defined in the relation_status_type table.
 CREATE TABLE relation_status (
     relation_uuid TEXT NOT NULL PRIMARY KEY,
-    relation_status_type_id TEXT NOT NULL,
+    relation_status_type_id BIGINT NOT NULL,
     message TEXT,
     updated_at TIMESTAMPTZ,
     CONSTRAINT fk_relation_uuid
