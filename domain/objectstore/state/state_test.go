@@ -365,6 +365,42 @@ func (s *stateSuite) TestPutMetadataWithSameHashDifferentSize(c *tc.C) {
 	c.Assert(err, tc.ErrorIs, objectstoreerrors.ErrHashAndSizeAlreadyExists)
 }
 
+func (s *stateSuite) TestPutMetadataWithSameUUIDDifferentHashes(c *tc.C) {
+	st := NewState(s.TxnRunnerFactory(), clock.WallClock)
+
+	// A reused UUID with different hashes must not replace or alias the
+	// existing metadata.
+
+	uuid := tc.Must(c, coreobjectstore.NewUUID).String()
+
+	metadata1 := coreobjectstore.Metadata{
+		SHA256: "sha256-1",
+		SHA384: "sha384-1",
+		Path:   "blah-foo-1",
+		Size:   666,
+	}
+	metadata2 := coreobjectstore.Metadata{
+		SHA256: "sha256-2",
+		SHA384: "sha384-2",
+		Path:   "blah-foo-2",
+		Size:   666,
+	}
+
+	_, err := st.PutMetadata(c.Context(), uuid, metadata1)
+	c.Assert(err, tc.ErrorIsNil)
+
+	_, err = st.PutMetadata(c.Context(), uuid, metadata2)
+	c.Assert(err, tc.ErrorIs, objectstoreerrors.ErrHashAndSizeAlreadyExists)
+
+	got, err := st.GetMetadata(c.Context(), "blah-foo-1")
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(got.SHA256, tc.Equals, metadata1.SHA256)
+	c.Check(got.SHA384, tc.Equals, metadata1.SHA384)
+
+	_, err = st.GetMetadata(c.Context(), "blah-foo-2")
+	c.Check(err, tc.ErrorIs, objectstoreerrors.ErrNotFound)
+}
+
 func (s *stateSuite) TestPutMetadataMultipleTimes(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), clock.WallClock)
 

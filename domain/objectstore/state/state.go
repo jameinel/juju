@@ -307,8 +307,7 @@ func (s *State) putMetadata(ctx context.Context, tx *sqlair.TX, uuid string, met
 	metadataStmt, err := s.Prepare(`
 INSERT INTO object_store_metadata (uuid, sha_256, sha_384, size)
 VALUES ($dbMetadata.*) 
-ON CONFLICT (sha_256) DO NOTHING
-ON CONFLICT (sha_384) DO NOTHING`, dbMetadata)
+ON CONFLICT DO NOTHING`, dbMetadata)
 	if err != nil {
 		return "", errors.Errorf("preparing insert metadata statement: %w", err)
 	}
