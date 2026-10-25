@@ -8,6 +8,7 @@ import (
 	"database/sql"
 
 	"github.com/juju/juju/core/database"
+	"github.com/juju/juju/core/database/dialect"
 	"github.com/juju/juju/internal/errors"
 )
 
@@ -16,33 +17,9 @@ type Tx interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 
-// Dialect identifies the SQL dialect of a database, which determines how
-// the schema bookkeeping table is created and written.
-type Dialect int
-
-const (
-	// SQLite is the dialect of dqlite and SQLite databases. It is the
-	// default.
-	SQLite Dialect = iota
-	// PostgreSQL is the dialect of PostgreSQL databases.
-	PostgreSQL
-)
-
-// String returns the name of the dialect.
-func (d Dialect) String() string {
-	switch d {
-	case SQLite:
-		return "sqlite"
-	case PostgreSQL:
-		return "postgresql"
-	default:
-		return "unknown"
-	}
-}
-
 // Schema captures the schema of a database as a series of ordered updates.
 type Schema struct {
-	dialect Dialect
+	dialect dialect.Dialect
 	patches []Patch
 	hook    Hook
 }
@@ -74,24 +51,24 @@ func (p Patch) run(ctx context.Context, tx Tx) error {
 // It allows mutation of the DDL about to be run.
 type Hook func(int, string) (string, error)
 
-// New creates a new [Schema] with the input patches, for the [SQLite]
-// dialect.
+// New creates a new [Schema] with the input patches, for the
+// [dialect.SQLite] dialect.
 func New(patches ...Patch) *Schema {
-	return NewForDialect(SQLite, patches...)
+	return NewForDialect(dialect.SQLite, patches...)
 }
 
 // NewForDialect creates a new [Schema] with the input patches, for the given
 // dialect. The patches must be written in that dialect.
-func NewForDialect(dialect Dialect, patches ...Patch) *Schema {
+func NewForDialect(d dialect.Dialect, patches ...Patch) *Schema {
 	return &Schema{
-		dialect: dialect,
+		dialect: d,
 		patches: patches,
 		hook:    omitHook,
 	}
 }
 
 // Dialect returns the SQL dialect of the schema.
-func (s *Schema) Dialect() Dialect {
+func (s *Schema) Dialect() dialect.Dialect {
 	return s.dialect
 }
 

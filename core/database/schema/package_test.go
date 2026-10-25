@@ -27,6 +27,7 @@ func (*ImportTest) TestImports(c *tc.C) {
 	c.Assert(found, tc.SameContents, []string{
 		"core/credential",
 		"core/database",
+		"core/database/dialect",
 		"core/errors",
 		"core/life",
 		"core/model",

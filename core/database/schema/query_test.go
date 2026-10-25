@@ -12,8 +12,16 @@ import (
 	"github.com/juju/collections/set"
 	"github.com/juju/tc"
 
+	"github.com/juju/juju/core/database/dialect"
 	databasetesting "github.com/juju/juju/internal/database/testing"
 )
+
+// tableNamesQueries holds, for each dialect, a query that returns the names
+// of the tables in the test database.
+var tableNamesQueries = map[dialect.Dialect]string{
+	dialect.SQLite:     "SELECT tbl_name FROM sqlite_master",
+	dialect.PostgreSQL: "SELECT tablename FROM pg_tables WHERE schemaname = current_schema()",
+}
 
 type querySuite struct {
 	databasetesting.DqliteSuite
@@ -25,23 +33,23 @@ func TestQuerySuite(t *testing.T) {
 
 func (s *querySuite) TestCreateSchemaTable(c *tc.C) {
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		return createSchemaTable(ctx, tx, SQLite)
+		return createSchemaTable(ctx, tx, s.SchemaDialect())
 	})
 	c.Assert(err, tc.ErrorIsNil)
 
-	tableNames := set.NewStrings(readTableNames(c, s.DB())...)
+	tableNames := set.NewStrings(s.readTableNames(c)...)
 	c.Check(tableNames.Contains("schema"), tc.IsTrue)
 }
 
 func (s *querySuite) TestCreateSchemaTableIdempotent(c *tc.C) {
 	for range 2 {
 		err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-			return createSchemaTable(ctx, tx, SQLite)
+			return createSchemaTable(ctx, tx, s.SchemaDialect())
 		})
 		c.Assert(err, tc.ErrorIsNil)
 	}
 
-	tableNames := set.NewStrings(readTableNames(c, s.DB())...)
+	tableNames := set.NewStrings(s.readTableNames(c)...)
 	c.Check(tableNames.Contains("schema"), tc.IsTrue)
 }
 
@@ -92,12 +100,12 @@ func (s *querySuite) TestCheckSchemaHashesMatch(c *tc.C) {
 }
 
 func (s *querySuite) TestEnsurePatchesAreAppliedWithHigherCurrent(c *tc.C) {
-	err := ensurePatchesAreApplied(c.Context(), nil, SQLite, 10, []Patch{}, nil)
+	err := ensurePatchesAreApplied(c.Context(), nil, s.SchemaDialect(), 10, []Patch{}, nil)
 	c.Assert(err, tc.ErrorMatches, `schema version '10' is more recent than expected '0'`)
 }
 
 func (s *querySuite) TestEnsurePatchesNoPatches(c *tc.C) {
-	err := ensurePatchesAreApplied(c.Context(), nil, SQLite, 0, []Patch{}, nil)
+	err := ensurePatchesAreApplied(c.Context(), nil, s.SchemaDialect(), 0, []Patch{}, nil)
 	c.Assert(err, tc.ErrorIsNil)
 }
 
@@ -111,14 +119,14 @@ func (s *querySuite) TestEnsurePatches(c *tc.C) {
 	computed := computeHashes(patches)
 
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		return ensurePatchesAreApplied(c.Context(), tx, SQLite, 0, patches, computed)
+		return ensurePatchesAreApplied(c.Context(), tx, s.SchemaDialect(), 0, patches, computed)
 	})
 	c.Assert(err, tc.ErrorIsNil)
 }
 
 func (s *querySuite) createSchemaTable(c *tc.C) {
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		return createSchemaTable(ctx, tx, SQLite)
+		return createSchemaTable(ctx, tx, s.SchemaDialect())
 	})
 	c.Assert(err, tc.ErrorIsNil)
 }
@@ -136,7 +144,7 @@ func (s *querySuite) expectCurrentVersion(c *tc.C, expected int, hashes []string
 
 func (s *querySuite) insertSchemaVersion(c *tc.C, version int, hash string) {
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		return insertSchemaVersion(ctx, tx, SQLite, versionHash{
+		return insertSchemaVersion(ctx, tx, s.SchemaDialect(), versionHash{
 			version: version,
 			hash:    hash,
 		})
@@ -144,14 +152,17 @@ func (s *querySuite) insertSchemaVersion(c *tc.C, version int, hash string) {
 	c.Assert(err, tc.ErrorIsNil)
 }
 
-func readTableNames(c *tc.C, db *sql.DB) []string {
+func (s *querySuite) readTableNames(c *tc.C) []string {
+	query, ok := tableNamesQueries[s.SchemaDialect()]
+	c.Assert(ok, tc.IsTrue, tc.Commentf("no table names query for dialect %s", s.SchemaDialect()))
+
 	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
 	defer cancel()
 
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := s.DB().BeginTx(ctx, nil)
 	c.Assert(err, tc.ErrorIsNil)
 
-	rows, err := tx.QueryContext(ctx, "SELECT tbl_name FROM sqlite_master")
+	rows, err := tx.QueryContext(ctx, query)
 	c.Assert(err, tc.ErrorIsNil)
 	defer func() { _ = rows.Close() }()
 

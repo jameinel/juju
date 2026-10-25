@@ -11,6 +11,7 @@ import (
 	"github.com/canonical/gomock/gomock"
 	"github.com/juju/tc"
 
+	"github.com/juju/juju/core/database/dialect"
 	databasetesting "github.com/juju/juju/internal/database/testing"
 	"github.com/juju/juju/internal/testhelpers"
 )
@@ -83,15 +84,20 @@ func (s *schemaSuite) TestSchemaAdd(c *tc.C) {
 	c.Check(schema.Len(), tc.Equals, 4)
 }
 
+func (s *schemaSuite) TestNewDefaultsToSQLite(c *tc.C) {
+	c.Check(New().Dialect(), tc.Equals, dialect.SQLite)
+	c.Check(NewForDialect(dialect.PostgreSQL).Dialect(), tc.Equals, dialect.PostgreSQL)
+}
+
 func (s *schemaSuite) TestEnsureWithNoPatches(c *tc.C) {
-	schema := New()
+	schema := NewForDialect(s.SchemaDialect())
 	current, err := schema.Ensure(c.Context(), s.TxnRunner())
 	c.Assert(err, tc.IsNil)
 	c.Assert(current, tc.DeepEquals, ChangeSet{Current: 0, Post: 0})
 }
 
 func (s *schemaSuite) TestSchemaRunMultipleTimes(c *tc.C) {
-	schema := New(
+	schema := NewForDialect(s.SchemaDialect(),
 		MakePatch("CREATE TEMP TABLE foo (id INTEGER PRIMARY KEY);"),
 		MakePatch("CREATE TEMP TABLE bar (id INTEGER PRIMARY KEY);"),
 	)
@@ -99,7 +105,7 @@ func (s *schemaSuite) TestSchemaRunMultipleTimes(c *tc.C) {
 	c.Assert(err, tc.IsNil)
 	c.Assert(current, tc.DeepEquals, ChangeSet{Current: 0, Post: 2})
 
-	schema = New(
+	schema = NewForDialect(s.SchemaDialect(),
 		MakePatch("CREATE TEMP TABLE foo (id INTEGER PRIMARY KEY);"),
 		MakePatch("CREATE TEMP TABLE bar (id INTEGER PRIMARY KEY);"),
 	)
@@ -109,7 +115,7 @@ func (s *schemaSuite) TestSchemaRunMultipleTimes(c *tc.C) {
 }
 
 func (s *schemaSuite) TestSchemaRunMultipleTimesWithAdditions(c *tc.C) {
-	schema := New(
+	schema := NewForDialect(s.SchemaDialect(),
 		MakePatch("CREATE TEMP TABLE foo (id INTEGER PRIMARY KEY);"),
 		MakePatch("CREATE TEMP TABLE bar (id INTEGER PRIMARY KEY);"),
 	)
@@ -117,7 +123,7 @@ func (s *schemaSuite) TestSchemaRunMultipleTimesWithAdditions(c *tc.C) {
 	c.Assert(err, tc.IsNil)
 	c.Assert(current, tc.DeepEquals, ChangeSet{Current: 0, Post: 2})
 
-	schema = New(
+	schema = NewForDialect(s.SchemaDialect(),
 		MakePatch("CREATE TEMP TABLE foo (id INTEGER PRIMARY KEY);"),
 		MakePatch("CREATE TEMP TABLE bar (id INTEGER PRIMARY KEY);"),
 		MakePatch("CREATE TEMP TABLE baz (id INTEGER PRIMARY KEY);"),
@@ -128,7 +134,7 @@ func (s *schemaSuite) TestSchemaRunMultipleTimesWithAdditions(c *tc.C) {
 }
 
 func (s *schemaSuite) TestEnsure(c *tc.C) {
-	schema := New(
+	schema := NewForDialect(s.SchemaDialect(),
 		MakePatch("CREATE TEMP TABLE foo (id INTEGER PRIMARY KEY);"),
 		MakePatch("CREATE TEMP TABLE bar (id INTEGER PRIMARY KEY);"),
 	)
@@ -138,7 +144,7 @@ func (s *schemaSuite) TestEnsure(c *tc.C) {
 }
 
 func (s *schemaSuite) TestEnsureIdempotent(c *tc.C) {
-	schema := New(
+	schema := NewForDialect(s.SchemaDialect(),
 		MakePatch("CREATE TEMP TABLE foo (id INTEGER PRIMARY KEY);"),
 		MakePatch("CREATE TEMP TABLE bar (id INTEGER PRIMARY KEY);"),
 	)
@@ -152,7 +158,7 @@ func (s *schemaSuite) TestEnsureIdempotent(c *tc.C) {
 }
 
 func (s *schemaSuite) TestEnsureTwiceWithAdditionalChanges(c *tc.C) {
-	schema := New(
+	schema := NewForDialect(s.SchemaDialect(),
 		MakePatch("CREATE TEMP TABLE foo (id INTEGER PRIMARY KEY);"),
 		MakePatch("CREATE TEMP TABLE bar (id INTEGER PRIMARY KEY);"),
 	)
@@ -174,7 +180,7 @@ func (s *schemaSuite) TestEnsureTwiceWithAdditionalChanges(c *tc.C) {
 }
 
 func (s *schemaSuite) TestEnsureHashBreaks(c *tc.C) {
-	schema := New(
+	schema := NewForDialect(s.SchemaDialect(),
 		MakePatch("CREATE TEMP TABLE foo (id INTEGER PRIMARY KEY);"),
 		MakePatch("CREATE TEMP TABLE bar (id INTEGER PRIMARY KEY);"),
 	)
@@ -195,7 +201,7 @@ func (s *schemaSuite) TestEnsureHashBreaks(c *tc.C) {
 }
 
 func (s *schemaSuite) TestHookIsApplied(c *tc.C) {
-	schema := New(
+	schema := NewForDialect(s.SchemaDialect(),
 		MakePatch("this would fail if the hook is not applied"),
 	)
 	schema.Hook(func(int, string) (string, error) {
