@@ -57,7 +57,7 @@ func (s *freshStateSuite) TestPreparationDoesNotChangeConfigOrState(c *tc.C) {
 	err = s.DB().QueryRow("SELECT COUNT(*) FROM controller").Scan(&count)
 	c.Assert(err, tc.ErrorIsNil)
 	c.Check(count, tc.Equals, 0)
-	err = s.DB().QueryRow("SELECT COUNT(*) FROM user").Scan(&count)
+	err = s.DB().QueryRow(`SELECT COUNT(*) FROM "user"`).Scan(&count)
 	c.Assert(err, tc.ErrorIsNil)
 	c.Check(count, tc.Equals, 0)
 }
@@ -115,7 +115,7 @@ func (s *freshStateSuite) assertFreshState(c *tc.C, cloudType string, modelType 
 	var hash string
 	var salt []byte
 	err = s.DB().QueryRow(`SELECT p.password_hash, p.password_salt
-FROM user_password AS p JOIN user AS u ON u.uuid = p.user_uuid
+FROM user_password AS p JOIN "user" AS u ON u.uuid = p.user_uuid
 WHERE u.name = 'admin'`).Scan(&hash, &salt)
 	c.Assert(err, tc.ErrorIsNil)
 	password := auth.NewPassword("bootstrap-secret")

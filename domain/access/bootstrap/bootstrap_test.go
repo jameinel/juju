@@ -46,7 +46,7 @@ func (s *bootstrapSuite) TestAddUserWithPassword(c *tc.C) {
 	// Check that the user was created.
 	var name string
 	row := s.DB().QueryRow(`
-SELECT name FROM user WHERE name = ?`, "admin")
+SELECT name FROM "user" WHERE name = ?`, "admin")
 	c.Assert(row.Scan(&name), tc.ErrorIsNil)
 	c.Assert(name, tc.Equals, "admin")
 }
