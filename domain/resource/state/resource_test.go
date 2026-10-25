@@ -2431,7 +2431,7 @@ func (s *resourceSuite) getPendingResource(c *tc.C, resID string) (pendingResour
 	retVal := pendingResourceTest{}
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		return tx.QueryRow(`
-SELECT r.uuid, r.charm_uuid, r.charm_resource_name, IFNULL(r.revision , 0) , rot.name
+SELECT r.uuid, r.charm_uuid, r.charm_resource_name, COALESCE(r.revision , 0) , rot.name
 FROM   resource r
 JOIN   resource_origin_type rot ON r.origin_type_id = rot.id
 WHERE  r.uuid = ?`, resID).Scan(&retVal.UUID, &retVal.CharmUUID, &retVal.Name, &retVal.Revision, &retVal.OriginType)

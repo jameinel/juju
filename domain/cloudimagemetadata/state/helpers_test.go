@@ -6,6 +6,7 @@ package state
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/canonical/sqlair"
 	"github.com/juju/tc"
@@ -67,7 +68,18 @@ JOIN architecture arch on cloud_image_metadata.architecture_id = arch.id
 	return metadata, err
 }
 
+// createdAt holds the creation times that test queries bind. SQLite compares
+// them as text with the expiry time that the state binds, so they come from
+// the same wall clock and time zone.
+type createdAt struct {
+	Now          time.Time `db:"now"`
+	TwoDaysAgo   time.Time `db:"two_days_ago"`
+	ThreeDaysAgo time.Time `db:"three_days_ago"`
+}
+
 // runQuery executes the provided SQL query string using the current state's database connection.
+// The query binds creation times with $createdAt.now, $createdAt.two_days_ago
+// and $createdAt.three_days_ago.
 //
 // It is a convenient function to set up test with a specific database state.
 func (s *stateSuite) runQuery(c *tc.C, query string) error {
@@ -75,12 +87,18 @@ func (s *stateSuite) runQuery(c *tc.C, query string) error {
 	if err != nil {
 		return err
 	}
-	stmt, err := sqlair.Prepare(query)
+	now := time.Now()
+	times := createdAt{
+		Now:          now,
+		TwoDaysAgo:   now.Add(-48 * time.Hour),
+		ThreeDaysAgo: now.Add(-72 * time.Hour),
+	}
+	stmt, err := sqlair.Prepare(query, times)
 	if err != nil {
 		return err
 	}
 	return db.Txn(c.Context(), func(ctx context.Context, tx *sqlair.TX) error {
-		return tx.Query(ctx, stmt).Run()
+		return tx.Query(ctx, stmt, times).Run()
 	})
 }
 
