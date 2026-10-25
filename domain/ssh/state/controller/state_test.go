@@ -177,7 +177,7 @@ VALUES (?, TRUE, ?, 0, 0, ?, 'prod')`, uuid, "cloud-"+uuid, name)
 func (s *stateSuite) addUser(c *tc.C, username string) string {
 	userUUID := internaluuid.MustNewUUID().String()
 	_, err := s.DB().ExecContext(c.Context(), `
-INSERT INTO user (uuid, name, display_name, external, removed, created_by_uuid, created_at)
+INSERT INTO "user" (uuid, name, display_name, external, removed, created_by_uuid, created_at)
 VALUES (?, ?, ?, FALSE, FALSE, ?, ?)`, userUUID, username, username, userUUID, time.Now())
 	c.Assert(err, tc.ErrorIsNil)
 	return userUUID

@@ -78,7 +78,7 @@ func (s *stateSuite) SetUpTest(c *tc.C) {
 	var userUUID user.UUID
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context,
 		tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, "SELECT uuid FROM user where name = ?", "test-userkeys").Scan(&userUUID)
+		return tx.QueryRowContext(ctx, `SELECT uuid FROM "user" where name = ?`, "test-userkeys").Scan(&userUUID)
 	})
 	c.Assert(err, tc.ErrorIsNil)
 	c.Assert(userUUID, tc.NotNil)
