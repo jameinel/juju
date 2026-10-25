@@ -258,7 +258,7 @@ func (s *exportWatcherSuite) insertMinionReport(c *tc.C, migrationUUID string, p
 	err := s.ControllerTxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
 INSERT INTO model_migration_export_minion_sync (migration_uuid, phase_id, entity_key, success, reported_at)
-VALUES (?, ?, ?, ?, DATETIME('now', 'utc'))`,
+VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 			migrationUUID, phaseID, entityKey, success)
 		return err
 	})
@@ -278,7 +278,7 @@ func (s *exportWatcherSuite) insertExport(c *tc.C) string {
 		_, err := tx.ExecContext(ctx, `
 INSERT INTO model_migration_export
     (uuid, model_uuid, target_controller_uuid, current_phase_id, updated_at, start_time)
-VALUES (?, ?, ?, 1, DATETIME('now', 'utc'), DATETIME('now', 'utc'))`,
+VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
 			migrationUUID, s.modelUUID, ctrlUUID)
 		return err
 	})
@@ -290,7 +290,7 @@ VALUES (?, ?, ?, 1, DATETIME('now', 'utc'), DATETIME('now', 'utc'))`,
 func (s *exportWatcherSuite) setExportPhase(c *tc.C, migrationUUID string, phaseID int) {
 	err := s.ControllerTxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx,
-			"UPDATE model_migration_export SET current_phase_id = ?, updated_at = DATETIME('now', 'utc') WHERE uuid = ?",
+			"UPDATE model_migration_export SET current_phase_id = ?, updated_at = CURRENT_TIMESTAMP WHERE uuid = ?",
 			phaseID, migrationUUID)
 		return err
 	})
@@ -307,7 +307,7 @@ func (s *exportWatcherSuite) insertPhase(c *tc.C, migrationUUID string, phaseID 
 	err := s.ControllerTxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
 INSERT INTO model_migration_export_phase (migration_uuid, model_uuid, phase_id, changed_at)
-VALUES (?, ?, ?, DATETIME('now', 'utc'))`,
+VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
 			migrationUUID, s.modelUUID, phaseID)
 		return err
 	})
@@ -328,7 +328,7 @@ func (s *exportWatcherSuite) setImportClaimPhase(c *tc.C, modelUUID string, phas
 	err := s.ControllerTxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
 UPDATE model_migration_import
-SET    phase_type_id = ?, updated_at = DATETIME('now', 'utc')
+SET    phase_type_id = ?, updated_at = CURRENT_TIMESTAMP
 WHERE  model_uuid = ?`, phaseID, modelUUID)
 		return err
 	})
@@ -346,7 +346,7 @@ func (s *exportWatcherSuite) deleteImportClaim(c *tc.C, modelUUID string) {
 func (s *exportWatcherSuite) stageModelDatabaseDeletion(c *tc.C, namespace string) {
 	err := s.ControllerTxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx,
-			"INSERT INTO model_database_deletion (namespace, created_at) VALUES (?, DATETIME('now', 'utc'))", namespace)
+			"INSERT INTO model_database_deletion (namespace, created_at) VALUES (?, CURRENT_TIMESTAMP)", namespace)
 		return err
 	})
 	c.Assert(err, tc.ErrorIsNil)

@@ -182,7 +182,7 @@ func (s *stateSuite) TestReapFullPath(c *tc.C) {
 	// Target auth secrets are scrubbed; the row itself is retained.
 	var user, token string
 	c.Assert(db.QueryRowContext(ctx,
-		"SELECT target_user, IFNULL(target_token, '') FROM model_migration_export_target_auth WHERE migration_uuid = ?",
+		"SELECT target_user, COALESCE(target_token, '') FROM model_migration_export_target_auth WHERE migration_uuid = ?",
 		spec.MigrationUUID).Scan(&user, &token), tc.ErrorIsNil)
 	c.Check(user, tc.Equals, "")
 	c.Check(token, tc.Equals, "")
@@ -193,7 +193,7 @@ func (s *stateSuite) TestReapFullPath(c *tc.C) {
 		completedAt                                      sql.NullString
 	)
 	c.Assert(db.QueryRowContext(ctx, `
-SELECT target_controller_uuid, IFNULL(target_controller_alias, ''),
+SELECT target_controller_uuid, COALESCE(target_controller_alias, ''),
        target_addresses, target_ca_cert, completed_at
 FROM   model_migration_redirect WHERE model_uuid = ?`, s.modelUUID).
 		Scan(&gotTargetUUID, &gotAlias, &gotAddresses, &gotCACert, &completedAt), tc.ErrorIsNil)

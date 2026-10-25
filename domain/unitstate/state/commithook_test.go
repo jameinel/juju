@@ -1042,7 +1042,7 @@ func (s *commitHookSuite) TestGrantSecretsAccessScopeGoneIsSkipped(c *tc.C) {
 
 func (s *commitHookSuite) addSecret(c *tc.C, secretID string) {
 	s.query(c, `INSERT INTO secret (id) VALUES (?)`, secretID)
-	s.query(c, `INSERT INTO secret_metadata (secret_id, version, rotate_policy_id, create_time, update_time) VALUES (?, 1, 0, DATETIME('now', 'utc'), DATETIME('now', 'utc'))`,
+	s.query(c, `INSERT INTO secret_metadata (secret_id, version, rotate_policy_id, create_time, update_time) VALUES (?, 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
 		secretID)
 }
 
@@ -1108,7 +1108,7 @@ func (s *commitHookSuite) addSecretRevision(c *tc.C, secretID string, revision i
 	revUUID := tc.Must(c, uuid.NewUUID).String()
 	s.query(c, `
 INSERT INTO secret_revision (uuid, secret_id, revision, create_time)
-VALUES (?, ?, ?, DATETIME('now'))
+VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 `, revUUID, secretID, revision)
 	return revUUID
 }
@@ -2143,7 +2143,7 @@ func (s *commitHookSuite) TestUpdateSecretsWithExpireTimeAndNewData(c *tc.C) {
 // addSecretWithOwner inserts a secret with an owner row.
 func (s *commitHookSuite) addSecretWithOwner(c *tc.C, secretID, ownerUUID, ownerKind string) {
 	s.query(c, `INSERT INTO secret (id) VALUES (?)`, secretID)
-	s.query(c, `INSERT INTO secret_metadata (secret_id, version, rotate_policy_id, create_time, update_time) VALUES (?, 1, 0, DATETIME('now', 'utc'), DATETIME('now', 'utc'))`, secretID)
+	s.query(c, `INSERT INTO secret_metadata (secret_id, version, rotate_policy_id, create_time, update_time) VALUES (?, 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`, secretID)
 	switch ownerKind {
 	case "unit":
 		s.query(c, `INSERT INTO secret_unit_owner (secret_id, unit_uuid) VALUES (?, ?)`, secretID, ownerUUID)

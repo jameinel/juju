@@ -36,7 +36,7 @@ INSERT INTO model_migration_redirect (model_uuid, source_migration_uuid,
     target_controller_uuid, target_controller_alias, target_addresses,
     target_ca_cert, created_at, completed_at)
 VALUES (?, ?, ?, 'target-alias', '10.0.0.1:17070,[2001:db8::1]:17070',
-    'ca-cert-data', DATETIME('now', 'utc'), ?)`,
+    'ca-cert-data', CURRENT_TIMESTAMP, ?)`,
 			modelUUID, uuid.MustNewUUID().String(), targetControllerUUID, completedAt); err != nil {
 			return err
 		}

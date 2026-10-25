@@ -372,7 +372,7 @@ func (s *watcherSuite) TestWatchModelMachineLifeStartTimes(c *tc.C) {
 
 	harness.AddTest(c, func(c *tc.C) {
 		err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-			_, err := tx.ExecContext(ctx, "UPDATE machine SET agent_started_at = DATETIME('2022-02-02')")
+			_, err := tx.ExecContext(ctx, "UPDATE machine SET agent_started_at = '2022-02-02 00:00:00'")
 			return err
 		})
 		c.Assert(err, tc.ErrorIsNil)

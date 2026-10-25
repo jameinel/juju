@@ -286,7 +286,7 @@ func (s *stateSuite) TestFinalizeAbortedImportDeletionPending(c *tc.C) {
 	s.insertClaim(c, modelUUID)
 	s.setImportPhase(c, modelUUID, 2) // aborting
 	_, err := db.ExecContext(c.Context(),
-		"INSERT INTO model_database_deletion (namespace, created_at) VALUES (?, DATETIME('now'))", modelUUID)
+		"INSERT INTO model_database_deletion (namespace, created_at) VALUES (?, CURRENT_TIMESTAMP)", modelUUID)
 	c.Assert(err, tc.ErrorIsNil)
 
 	err = st.FinalizeAbortedImport(c.Context(), modelUUID)

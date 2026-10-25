@@ -432,9 +432,9 @@ func (s *stateSuite) TestDeleteMetadataWithImageID(c *tc.C) {
 	err := s.runQuery(c, `
 INSERT INTO cloud_image_metadata (uuid, created_at,source,stream,region,version,architecture_id,virt_type,root_storage_type,priority,image_id)
 VALUES 
-('a', datetime('now','localtime'), 'custom', 'stream', 'region-1', '22.04',0, 'virtType-test', 'rootStorageType-test', 42, 'to-keep'),
-('b', datetime('now','localtime'), 'custom', 'stream', 'region-2', '22.04',0, 'virtType-test', 'rootStorageType-test', 3, 'to-delete'),
-('c', datetime('now','localtime'), 'custom', 'stream', 'region-3', '22.04',0, 'virtType-test', 'rootStorageType-test', 42, 'to-delete')
+('a', $createdAt.now, 'custom', 'stream', 'region-1', '22.04',0, 'virtType-test', 'rootStorageType-test', 42, 'to-keep'),
+('b', $createdAt.now, 'custom', 'stream', 'region-2', '22.04',0, 'virtType-test', 'rootStorageType-test', 3, 'to-delete'),
+('c', $createdAt.now, 'custom', 'stream', 'region-3', '22.04',0, 'virtType-test', 'rootStorageType-test', 42, 'to-delete')
 `)
 	c.Assert(err, tc.ErrorIsNil)
 
@@ -467,15 +467,15 @@ func (s *stateSuite) TestFindMetadata(c *tc.C) {
 	err := s.runQuery(c, `
 INSERT INTO cloud_image_metadata (uuid,created_at,source,stream,region,version,architecture_id,virt_type,root_storage_type,priority,image_id)
 VALUES 
-('a',datetime('now','localtime'), 'non-custom', 'stream', 'region', '08.04',0, 'virtType', 'storage', 42, 'id'),
-('b',datetime('now','localtime'), 'non-custom', 'unique', 'region', '10.04',1, 'virtType', 'storage', 42, 'id'),
-('c',datetime('now','localtime'), 'non-custom', 'stream', 'unique', '12.04',2, 'virtType', 'storage', 42, 'id'),
-('d',datetime('now','localtime'), 'non-custom', 'stream', 'region', '14.00',3, 'virtType', 'storage', 42, 'id'),
-('e',datetime('now','localtime'), 'non-custom', 'stream', 'region', '16.04',4, 'virtType', 'storage', 42, 'id'),
-('f',datetime('now','localtime'), 'non-custom', 'stream', 'region', '18.04',0, 'unique', 'storage', 42, 'id'),
-('g',datetime('now','localtime'), 'non-custom', 'stream', 'region', '20.04',1, 'virtType', 'unique', 42, 'id'),
-('h',datetime('now','localtime'), 'non-custom', 'stream', 'region', '22.04',2, 'virtType', 'storage', 1, 'id'),
-('i',datetime('now','localtime'), 'non-custom', 'stream', 'region', '24.04',3, 'virtType', 'storage', 42, 'unique');
+('a',$createdAt.now, 'non-custom', 'stream', 'region', '08.04',0, 'virtType', 'storage', 42, 'id'),
+('b',$createdAt.now, 'non-custom', 'unique', 'region', '10.04',1, 'virtType', 'storage', 42, 'id'),
+('c',$createdAt.now, 'non-custom', 'stream', 'unique', '12.04',2, 'virtType', 'storage', 42, 'id'),
+('d',$createdAt.now, 'non-custom', 'stream', 'region', '14.00',3, 'virtType', 'storage', 42, 'id'),
+('e',$createdAt.now, 'non-custom', 'stream', 'region', '16.04',4, 'virtType', 'storage', 42, 'id'),
+('f',$createdAt.now, 'non-custom', 'stream', 'region', '18.04',0, 'unique', 'storage', 42, 'id'),
+('g',$createdAt.now, 'non-custom', 'stream', 'region', '20.04',1, 'virtType', 'unique', 42, 'id'),
+('h',$createdAt.now, 'non-custom', 'stream', 'region', '22.04',2, 'virtType', 'storage', 1, 'id'),
+('i',$createdAt.now, 'non-custom', 'stream', 'region', '24.04',3, 'virtType', 'storage', 42, 'unique');
 `)
 	c.Assert(err, tc.ErrorIsNil)
 	expectedBase, err := s.retrieveMetadataFromDB(c)
@@ -544,8 +544,8 @@ func (s *stateSuite) TestFindMetadataNotFound(c *tc.C) {
 	err := s.runQuery(c, `
 INSERT INTO cloud_image_metadata (uuid,created_at,source,stream,region,version,architecture_id,virt_type,root_storage_type,priority,image_id)
 VALUES 
-('a',datetime('now','localtime'), 'non-custom', 'stream', 'unique', '08.04',0, 'virtType', 'storage', 42, 'id'),
-('b',datetime('now','localtime'), 'non-custom', 'unique', 'region', '10.04',1, 'virtType', 'storage', 42, 'id');
+('a',$createdAt.now, 'non-custom', 'stream', 'unique', '08.04',0, 'virtType', 'storage', 42, 'id'),
+('b',$createdAt.now, 'non-custom', 'unique', 'region', '10.04',1, 'virtType', 'storage', 42, 'id');
 `)
 	c.Assert(err, tc.ErrorIsNil)
 
@@ -562,10 +562,10 @@ func (s *stateSuite) TestFindMetadataExpired(c *tc.C) {
 	err := s.runQuery(c, `
 INSERT INTO cloud_image_metadata (uuid,created_at,source,stream,region,version,architecture_id,virt_type,root_storage_type,priority,image_id)
 VALUES 
-('a',datetime('now','-3 days'), 'non-custom', 'stream', 'region', '08.04',0, 'virtType', 'storage', 42, 'id'),
-('b',datetime('now','localtime'), 'non-custom', 'stream', 'region', '10.04',1, 'virtType', 'storage', 42, 'id'),
-('c',datetime('now','-3 days'), 'non-custom', 'stream', 'region', '12.04',1, 'virtType', 'storage', 42, 'id'),
-('d',datetime('now','-2 days'), 'custom', 'stream', 'region', '14.04',1, 'virtType', 'storage', 42, 'id');
+('a',$createdAt.three_days_ago, 'non-custom', 'stream', 'region', '08.04',0, 'virtType', 'storage', 42, 'id'),
+('b',$createdAt.now, 'non-custom', 'stream', 'region', '10.04',1, 'virtType', 'storage', 42, 'id'),
+('c',$createdAt.three_days_ago, 'non-custom', 'stream', 'region', '12.04',1, 'virtType', 'storage', 42, 'id'),
+('d',$createdAt.two_days_ago, 'custom', 'stream', 'region', '14.04',1, 'virtType', 'storage', 42, 'id');
 `)
 	c.Assert(err, tc.ErrorIsNil)
 
@@ -615,9 +615,9 @@ func (s *stateSuite) TestFindMetadataCustomSourceFilteredByVersion(c *tc.C) {
 	err := s.runQuery(c, `
 INSERT INTO cloud_image_metadata (uuid,created_at,source,stream,region,version,architecture_id,virt_type,root_storage_type,priority,image_id)
 VALUES
-('a',datetime('now','localtime'), 'custom', 'released', 'region1', '20.04', 0, 'kvm', 'ssd', 50, 'img-focal'),
-('b',datetime('now','localtime'), 'custom', 'released', 'region1', '22.04', 0, 'kvm', 'ssd', 50, 'img-jammy'),
-('c',datetime('now','localtime'), 'custom', 'released', 'region1', '24.04', 0, 'kvm', 'ssd', 50, 'img-noble');
+('a',$createdAt.now, 'custom', 'released', 'region1', '20.04', 0, 'kvm', 'ssd', 50, 'img-focal'),
+('b',$createdAt.now, 'custom', 'released', 'region1', '22.04', 0, 'kvm', 'ssd', 50, 'img-jammy'),
+('c',$createdAt.now, 'custom', 'released', 'region1', '24.04', 0, 'kvm', 'ssd', 50, 'img-noble');
 `)
 	c.Assert(err, tc.ErrorIsNil)
 
@@ -640,8 +640,8 @@ func (s *stateSuite) TestFindMetadataCustomSourceFilteredByRegion(c *tc.C) {
 	err := s.runQuery(c, `
 INSERT INTO cloud_image_metadata (uuid,created_at,source,stream,region,version,architecture_id,virt_type,root_storage_type,priority,image_id)
 VALUES
-('a',datetime('now','localtime'), 'custom', 'released', 'us-east-1', '24.04', 0, 'kvm', 'ssd', 50, 'img-us-east'),
-('b',datetime('now','localtime'), 'custom', 'released', 'eu-west-1', '24.04', 0, 'kvm', 'ssd', 50, 'img-eu-west');
+('a',$createdAt.now, 'custom', 'released', 'us-east-1', '24.04', 0, 'kvm', 'ssd', 50, 'img-us-east'),
+('b',$createdAt.now, 'custom', 'released', 'eu-west-1', '24.04', 0, 'kvm', 'ssd', 50, 'img-eu-west');
 `)
 	c.Assert(err, tc.ErrorIsNil)
 
@@ -664,10 +664,10 @@ func (s *stateSuite) TestAllCloudImageMetadata(c *tc.C) {
 	err := s.runQuery(c, `
 INSERT INTO cloud_image_metadata (uuid,created_at,source,stream,region,version,architecture_id,virt_type,root_storage_type,priority,image_id)
 VALUES 
-('a',datetime('now','-3 days'), 'non-custom', 'stream', 'region', '08.04',0, 'virtType', 'storage', 42, 'id'),
-('b',datetime('now','localtime'), 'non-custom', 'stream', 'region', '10.04',1, 'virtType', 'storage', 42, 'id'),
-('c',datetime('now','-3 days'), 'non-custom', 'stream', 'region', '12.04',1, 'virtType', 'storage', 42, 'id'),
-('d',datetime('now','localtime'), 'non-custom', 'stream', 'region', '16.04',1, 'virtType', 'storage', 42, 'id');
+('a',$createdAt.three_days_ago, 'non-custom', 'stream', 'region', '08.04',0, 'virtType', 'storage', 42, 'id'),
+('b',$createdAt.now, 'non-custom', 'stream', 'region', '10.04',1, 'virtType', 'storage', 42, 'id'),
+('c',$createdAt.three_days_ago, 'non-custom', 'stream', 'region', '12.04',1, 'virtType', 'storage', 42, 'id'),
+('d',$createdAt.now, 'non-custom', 'stream', 'region', '16.04',1, 'virtType', 'storage', 42, 'id');
 `)
 	c.Assert(err, tc.ErrorIsNil)
 
@@ -716,8 +716,8 @@ func (s *stateSuite) TestAllCloudImageMetadataNoMetadata(c *tc.C) {
 	err := s.runQuery(c, `
 INSERT INTO cloud_image_metadata (uuid,created_at,source,stream,region,version,architecture_id,virt_type,root_storage_type,priority,image_id)
 VALUES 
-('a',datetime('now','-3 days'), 'non-custom', 'stream', 'region', '08.04',0, 'virtType', 'storage', 42, 'id'),
-('b',datetime('now','-3 days'), 'non-custom', 'stream', 'region', '12.04',1, 'virtType', 'storage', 42, 'id');
+('a',$createdAt.three_days_ago, 'non-custom', 'stream', 'region', '08.04',0, 'virtType', 'storage', 42, 'id'),
+('b',$createdAt.three_days_ago, 'non-custom', 'stream', 'region', '12.04',1, 'virtType', 'storage', 42, 'id');
 `)
 	c.Assert(err, tc.ErrorIsNil)
 
@@ -737,8 +737,8 @@ func (s *stateSuite) TestCleanupMetatada(c *tc.C) {
 	err := s.runQuery(c, `
 INSERT INTO cloud_image_metadata (uuid,created_at,source,stream,region,version,architecture_id,virt_type,root_storage_type,root_storage_size,priority,image_id)
 VALUES 
-('a',datetime('now','-3 days'), 'cloud', 'stream', 'region', '08.04',0, 'virtType', 'storage', 128, 42, 'id'),
-('b',datetime('now','-3 days'), 'custom', 'stream', 'region', '12.04',1, 'virtType', 'storage', 1024, 42, 'id');
+('a',$createdAt.three_days_ago, 'cloud', 'stream', 'region', '08.04',0, 'virtType', 'storage', 128, 42, 'id'),
+('b',$createdAt.three_days_ago, 'custom', 'stream', 'region', '12.04',1, 'virtType', 'storage', 1024, 42, 'id');
 `)
 	c.Assert(err, tc.ErrorIsNil)
 	attrs := cloudimagemetadata.MetadataAttributes{

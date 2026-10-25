@@ -257,12 +257,12 @@ func (s *storageSuite) TestEnsureStorageInstanceNotAliveCascadeAttached(c *tc.C)
 	c.Check(volumeLife, tc.Equals, 1)
 
 	var filesystemObliterate bool
-	res = s.DB().QueryRow("SELECT ifnull(obliterate_on_cleanup, false) FROM storage_filesystem WHERE uuid = ?", fsUUID)
+	res = s.DB().QueryRow("SELECT COALESCE(obliterate_on_cleanup, false) FROM storage_filesystem WHERE uuid = ?", fsUUID)
 	c.Assert(res.Scan(&filesystemObliterate), tc.ErrorIsNil)
 	c.Check(filesystemObliterate, tc.IsFalse)
 
 	var volumeObliterate bool
-	res = s.DB().QueryRow("SELECT ifnull(obliterate_on_cleanup, false) FROM storage_volume WHERE uuid = ?", volUUID)
+	res = s.DB().QueryRow("SELECT COALESCE(obliterate_on_cleanup, false) FROM storage_volume WHERE uuid = ?", volUUID)
 	c.Assert(res.Scan(&volumeObliterate), tc.ErrorIsNil)
 	c.Check(volumeObliterate, tc.IsFalse)
 }
@@ -345,12 +345,12 @@ func (s *storageSuite) TestEnsureStorageInstanceNotAliveCascadeDetached(c *tc.C)
 	c.Check(volumeLife, tc.Equals, 2)
 
 	var filesystemObliterate bool
-	res = s.DB().QueryRow("SELECT ifnull(obliterate_on_cleanup, false) FROM storage_filesystem WHERE uuid = ?", fsUUID)
+	res = s.DB().QueryRow("SELECT COALESCE(obliterate_on_cleanup, false) FROM storage_filesystem WHERE uuid = ?", fsUUID)
 	c.Assert(res.Scan(&filesystemObliterate), tc.ErrorIsNil)
 	c.Check(filesystemObliterate, tc.IsFalse)
 
 	var volumeObliterate bool
-	res = s.DB().QueryRow("SELECT ifnull(obliterate_on_cleanup, false) FROM storage_volume WHERE uuid = ?", volUUID)
+	res = s.DB().QueryRow("SELECT COALESCE(obliterate_on_cleanup, false) FROM storage_volume WHERE uuid = ?", volUUID)
 	c.Assert(res.Scan(&volumeObliterate), tc.ErrorIsNil)
 	c.Check(volumeObliterate, tc.IsFalse)
 }
@@ -390,12 +390,12 @@ func (s *storageSuite) TestEnsureStorageInstanceNotAliveCascadeWithObliterate(c 
 	c.Check(volumeLife, tc.Equals, 2)
 
 	var filesystemObliterate bool
-	res = s.DB().QueryRow("SELECT ifnull(obliterate_on_cleanup, false) FROM storage_filesystem WHERE uuid = ?", fsUUID)
+	res = s.DB().QueryRow("SELECT COALESCE(obliterate_on_cleanup, false) FROM storage_filesystem WHERE uuid = ?", fsUUID)
 	c.Assert(res.Scan(&filesystemObliterate), tc.ErrorIsNil)
 	c.Check(filesystemObliterate, tc.IsTrue)
 
 	var volumeObliterate bool
-	res = s.DB().QueryRow("SELECT ifnull(obliterate_on_cleanup, false) FROM storage_volume WHERE uuid = ?", volUUID)
+	res = s.DB().QueryRow("SELECT COALESCE(obliterate_on_cleanup, false) FROM storage_volume WHERE uuid = ?", volUUID)
 	c.Assert(res.Scan(&volumeObliterate), tc.ErrorIsNil)
 	c.Check(volumeObliterate, tc.IsTrue)
 }

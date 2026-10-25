@@ -174,7 +174,7 @@ func (s *controllerStateSuite) TestGetCachedImageMetadataRootStorageSize(c *tc.C
 	s.runQuery(c, `INSERT INTO cloud_image_metadata
 		(uuid, created_at, source, stream, region, version, architecture_id,
 		 virt_type, root_storage_type, root_storage_size, priority, image_id)
-		VALUES (?,datetime('now'),?,?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,CURRENT_TIMESTAMP,?,?,?,?,?,?,?,?,?,?)`,
 		"meta-uuid-1", "custom", "released", "us-east-1", "22.04", 0,
 		"hvm", "ebs", 8192, 10, "img-with-size")
 
@@ -263,7 +263,7 @@ func (s *controllerStateSuite) insertImageMetadata(c *tc.C, imageID, stream, reg
 	s.runQuery(c, `INSERT INTO cloud_image_metadata
 		(uuid, created_at, source, stream, region, version, architecture_id,
 		 virt_type, root_storage_type, priority, image_id)
-		VALUES (?,datetime('now'),?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,CURRENT_TIMESTAMP,?,?,?,?,?,?,?,?,?)`,
 		uuid, source, stream, region, version, archID,
 		virtType, rootStorageType, priority, imageID)
 }

@@ -188,7 +188,7 @@ func (s *stateSuite) TestGetConflictingCloudImageMetadata(c *tc.C) {
 	_, err := s.DB().ExecContext(c.Context(),
 		`INSERT INTO cloud_image_metadata
 		 (uuid, created_at, source, stream, region, version, architecture_id, virt_type, root_storage_type, priority, image_id)
-		 VALUES (?, DATETIME('now'), 'custom', 'released', 'us-east-1', '24.04', 0, 'hvm', 'ebs', 10, 'ami-target')`,
+		 VALUES (?, CURRENT_TIMESTAMP, 'custom', 'released', 'us-east-1', '24.04', 0, 'hvm', 'ebs', 10, 'ami-target')`,
 		uuid.MustNewUUID().String())
 	c.Assert(err, tc.ErrorIsNil)
 
