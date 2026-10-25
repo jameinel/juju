@@ -467,7 +467,7 @@ func (s *provisionerIntegrationSuite) addProviderSpace(c *tc.C, spaceUUID, provi
 
 func (s *provisionerIntegrationSuite) addAvailabilityZone(c *tc.C, subnetUUID, azName string) {
 	azUUID := uuid.MustNewUUID().String()
-	s.runQuery(c, `INSERT OR IGNORE INTO availability_zone (uuid, name) VALUES (?,?)`, azUUID, azName)
+	s.runQuery(c, `INSERT INTO availability_zone (uuid, name) VALUES (?,?) ON CONFLICT DO NOTHING`, azUUID, azName)
 	var actualUUID string
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, `SELECT uuid FROM availability_zone WHERE name = ?`, azName).Scan(&actualUUID)
@@ -527,7 +527,7 @@ func (s *provisionerIntegrationSuite) addModelInfo(c *tc.C, name, cloudType, clo
 }
 
 func (s *provisionerIntegrationSuite) setModelConfig(c *tc.C, key, value string) {
-	s.runQuery(c, `INSERT OR REPLACE INTO model_config (key, value) VALUES (?,?)`, key, value)
+	s.runQuery(c, `INSERT INTO model_config ("key", value) VALUES (?,?) ON CONFLICT ("key") DO UPDATE SET value = excluded.value`, key, value)
 }
 
 // --- Stubs for controller state and image metadata fetcher ---

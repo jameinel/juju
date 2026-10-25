@@ -71,7 +71,7 @@ func (s *controllerImportSuite) importForActivation(
 			}
 		}
 		_, err = tx.ExecContext(ctx,
-			"INSERT OR IGNORE INTO model_migrating (uuid, model_uuid) VALUES (?, ?)",
+			"INSERT INTO model_migrating (uuid, model_uuid) VALUES (?, ?) ON CONFLICT DO NOTHING",
 			uuid.MustNewUUID().String(), modelUUID.String())
 		return err
 	})

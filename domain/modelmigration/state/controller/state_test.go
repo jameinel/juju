@@ -1353,7 +1353,7 @@ func (s *stateSuite) TestGetControllerModelInfoIncludesAuthorizedKeyOwner(c *tc.
 	c.Assert(err, tc.ErrorIsNil)
 
 	_, err = db.ExecContext(c.Context(),
-		`INSERT OR IGNORE INTO user_authentication (user_uuid, disabled) VALUES (?, FALSE)`,
+		`INSERT INTO user_authentication (user_uuid, disabled) VALUES (?, FALSE) ON CONFLICT DO NOTHING`,
 		ownerUUID.String())
 	c.Assert(err, tc.ErrorIsNil)
 	var keyID int64
@@ -1405,7 +1405,7 @@ func (s *stateSuite) TestGetControllerModelInfoFullSet(c *tc.C) {
 	      WHERE uuid = ?`, s.credentialUUID.String())
 
 	// Authorized key: requires user_authentication (for the view) + a public key.
-	exec(`INSERT OR IGNORE INTO user_authentication (user_uuid, disabled) VALUES (?, FALSE)`, userUUID)
+	exec(`INSERT INTO user_authentication (user_uuid, disabled) VALUES (?, FALSE) ON CONFLICT DO NOTHING`, userUUID)
 	var keyID int64
 	err := db.QueryRowContext(c.Context(),
 		`INSERT INTO user_public_ssh_key (comment, fingerprint_hash_algorithm_id, fingerprint, public_key, user_uuid)
