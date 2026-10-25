@@ -104,7 +104,7 @@ func (s *stateSuite) TestGetModelUsersForRedirectExcludesRemovedAndDisabled(c *t
 			return err
 		}
 		_, err := tx.ExecContext(ctx,
-			"UPDATE user SET removed = true WHERE uuid = ?", removedUUID)
+			`UPDATE "user" SET removed = true WHERE uuid = ?`, removedUUID)
 		return err
 	})
 	c.Assert(err, tc.ErrorIsNil)

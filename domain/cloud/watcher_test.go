@@ -77,7 +77,7 @@ func (s *watcherSuite) TestWatchCloud(c *tc.C) {
 func (s *watcherSuite) ensureUser(c *tc.C, userUUID, name, createdByUUID string) {
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO user (uuid, name, display_name, external, removed, created_by_uuid, created_at)
+			INSERT INTO "user" (uuid, name, display_name, external, removed, created_by_uuid, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, userUUID, name, name, false, false, createdByUUID, time.Now())
 		return err

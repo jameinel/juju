@@ -61,7 +61,7 @@ func (s *userStateSuite) SetUpTest(c *tc.C) {
 func (s *userStateSuite) TestSingletonActiveUser(c *tc.C) {
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO user (uuid, name, display_name, external, removed, created_by_uuid, created_at)
+			INSERT INTO "user" (uuid, name, display_name, external, removed, created_by_uuid, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, "123", "bob", "Bob", false, true, "123", time.Now())
 		return err
@@ -70,7 +70,7 @@ func (s *userStateSuite) TestSingletonActiveUser(c *tc.C) {
 
 	err = s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO user (uuid, name, display_name, external, removed, created_by_uuid, created_at)
+			INSERT INTO "user" (uuid, name, display_name, external, removed, created_by_uuid, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, "124", "bob", "Bob", false, true, "123", time.Now())
 		return err
@@ -79,7 +79,7 @@ func (s *userStateSuite) TestSingletonActiveUser(c *tc.C) {
 
 	err = s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO user (uuid, name, display_name, external, removed, created_by_uuid, created_at)
+			INSERT INTO "user" (uuid, name, display_name, external, removed, created_by_uuid, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, "125", "bob", "Bob", false, true, "123", time.Now())
 		return err
@@ -89,7 +89,7 @@ func (s *userStateSuite) TestSingletonActiveUser(c *tc.C) {
 	// Insert the first non-removed (active) Bob user.
 	err = s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO user (uuid, name, display_name, external, removed, created_by_uuid, created_at)
+			INSERT INTO "user" (uuid, name, display_name, external, removed, created_by_uuid, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, "126", "bob", "Bob", false, false, "123", time.Now())
 		return err
@@ -100,7 +100,7 @@ func (s *userStateSuite) TestSingletonActiveUser(c *tc.C) {
 	// up the constraint.
 	err = s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO user (uuid, name, display_name, external, removed, created_by_uuid, created_at)
+			INSERT INTO "user" (uuid, name, display_name, external, removed, created_by_uuid, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, "127", "bob", "Bob", false, false, "123", time.Now())
 		return err
@@ -142,7 +142,7 @@ func (s *userStateSuite) TestBootstrapAddUserWithPassword(c *tc.C) {
 
 	row := db.QueryRow(`
 SELECT uuid, name, display_name, removed, created_by_uuid, created_at
-FROM user
+FROM "user"
 WHERE uuid = ?
 	`, adminUUID)
 
@@ -865,7 +865,7 @@ WHERE user_uuid = ?
 	// Check that the user was marked as removed.
 	row = db.QueryRow(`
 SELECT removed
-FROM user
+FROM "user"
 WHERE uuid = ?
 	`, userToRemoveUUID)
 	c.Assert(row.Err(), tc.ErrorIsNil)
@@ -1019,7 +1019,7 @@ WHERE user_uuid = ?
 	// Check that the user was marked as removed.
 	row = db.QueryRow(`
 SELECT removed
-FROM user
+FROM "user"
 WHERE uuid = ?
 	`, userToRemoveUUID)
 	c.Assert(row.Err(), tc.ErrorIsNil)

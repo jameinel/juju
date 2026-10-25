@@ -1254,7 +1254,7 @@ func (s *permissionStateSuite) TestAllModelAccessForOwner(c *tc.C) {
 
 	err = s.TxnRunner().StdTxn(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		var ownerUUID string
-		if err := tx.QueryRowContext(ctx, `SELECT uuid FROM user WHERE name = ?`,
+		if err := tx.QueryRowContext(ctx, `SELECT uuid FROM "user" WHERE name = ?`,
 			ownerName.Name()).Scan(&ownerUUID); err != nil {
 			return err
 		}
@@ -1542,7 +1542,7 @@ func (s *permissionStateSuite) setupForRead(c *tc.C, st *PermissionState) {
 func (s *permissionStateSuite) ensureUser(c *tc.C, userUUID, name, createdByUUID string, external bool) {
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO user (uuid, name, display_name, external, removed, created_by_uuid, created_at)
+			INSERT INTO "user" (uuid, name, display_name, external, removed, created_by_uuid, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, userUUID, name, name, external, false, createdByUUID, time.Now())
 		return err
@@ -1616,7 +1616,7 @@ func (s *permissionStateSuite) disableUser(c *tc.C, userUUID string) {
 func (s *permissionStateSuite) removeUser(c *tc.C, userUUID string) {
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
-			UPDATE user SET removed = true WHERE uuid = ?
+			UPDATE "user" SET removed = true WHERE uuid = ?
 		`, userUUID)
 		return err
 	})

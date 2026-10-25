@@ -593,7 +593,7 @@ func (s *stateSuite) TestAllowCloudTypeIdempotent(c *tc.C) {
 func (s *stateSuite) ensureUser(c *tc.C, userUUID, name, createdByUUID string) {
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO user (uuid, name, display_name, external, removed, created_by_uuid, created_at)
+			INSERT INTO "user" (uuid, name, display_name, external, removed, created_by_uuid, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, userUUID, name, name, false, false, createdByUUID, time.Now())
 		return err
@@ -614,7 +614,7 @@ func (s *stateSuite) checkPermissionRow(c *tc.C, access permission.Access, expec
 
 	row := db.QueryRow(`
 SELECT uuid
-FROM user
+FROM "user"
 WHERE name = ?
 `, expectedGrantTo)
 	c.Assert(row.Err(), tc.ErrorIsNil)

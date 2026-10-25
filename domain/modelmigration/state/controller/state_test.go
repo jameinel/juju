@@ -1277,7 +1277,7 @@ func (s *stateSuite) TestGetControllerModelInfoIncludesModelQualifierUser(c *tc.
 	))
 
 	_, err = db.ExecContext(c.Context(),
-		`UPDATE user SET removed = TRUE WHERE uuid = ?`,
+		`UPDATE "user" SET removed = TRUE WHERE uuid = ?`,
 		ownerUUID.String(),
 	)
 	c.Assert(err, tc.ErrorIsNil)
