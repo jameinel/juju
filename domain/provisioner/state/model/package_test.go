@@ -121,7 +121,7 @@ func (s *modelStateSuite) addProviderSpace(c *tc.C, spaceUUID, providerID string
 func (s *modelStateSuite) addAvailabilityZone(c *tc.C, subnetUUID, azName string) {
 	azUUID := uuid.MustNewUUID().String()
 	// Insert AZ if not exists.
-	s.runQuery(c, `INSERT OR IGNORE INTO availability_zone (uuid, name) VALUES (?,?)`, azUUID, azName)
+	s.runQuery(c, `INSERT INTO availability_zone (uuid, name) VALUES (?,?) ON CONFLICT DO NOTHING`, azUUID, azName)
 	// Get actual UUID (might already exist).
 	var actualUUID string
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
