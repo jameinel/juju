@@ -316,7 +316,7 @@ func (s *watcherSuite) addOperation(c *tc.C) internaluuid.UUID {
 	uuid := internaluuid.MustNewUUID()
 	s.runQuery(c, `
 INSERT INTO operation (uuid, operation_id, summary, enqueued_at, parallel, execution_group)
-VALUES (?, 1, 'test-operation', datetime('now'), false, 'test-group')`, uuid.String())
+VALUES (?, 1, 'test-operation', CURRENT_TIMESTAMP, false, 'test-group')`, uuid.String())
 	return uuid
 }
 
@@ -325,7 +325,7 @@ func (s *watcherSuite) addOperationTaskWithID(c *tc.C, operationUUID internaluui
 	uuid := internaluuid.MustNewUUID()
 	s.runQuery(c, `
 INSERT INTO operation_task (uuid, operation_uuid, task_id, enqueued_at)
-VALUES (?, ?, ?, datetime('now'))`, uuid.String(), operationUUID.String(), taskID)
+VALUES (?, ?, ?, CURRENT_TIMESTAMP)`, uuid.String(), operationUUID.String(), taskID)
 	s.runQuery(c, `
 INSERT INTO operation_task_status (task_uuid, status_id)
 SELECT ?, id FROM operation_task_status_value WHERE status = ?`, uuid.String(), string(status))
@@ -351,7 +351,7 @@ func (s *watcherSuite) setTaskStatus(c *tc.C, taskUUID internaluuid.UUID, status
 	s.runQuery(c, `
 UPDATE operation_task_status
 SET status_id = (SELECT id FROM operation_task_status_value WHERE status = ?),
-    updated_at = datetime('now')
+    updated_at = CURRENT_TIMESTAMP
 WHERE task_uuid = ?
 `, string(status), taskUUID.String())
 }

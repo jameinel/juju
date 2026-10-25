@@ -276,7 +276,7 @@ VALUES (?, ?, ?, ?)`, sec, 0, appUUID, time.Now().UTC())
 	c.Assert(err, tc.ErrorIsNil)
 
 	_, err = s.DB().ExecContext(
-		ctx, "INSERT INTO secret_rotation (secret_id, next_rotation_time) VALUES (?, DATETIME('now'))", sec)
+		ctx, "INSERT INTO secret_rotation (secret_id, next_rotation_time) VALUES (?, CURRENT_TIMESTAMP)", sec)
 	c.Assert(err, tc.ErrorIsNil)
 
 	for i := range 3 {
@@ -310,7 +310,7 @@ VALUES (?, ?, ?, ?, ?)`, rev, sec, i, s.now, s.now)
 		c.Assert(err, tc.ErrorIsNil)
 
 		_, err = s.DB().ExecContext(
-			ctx, "INSERT INTO secret_revision_expire (revision_uuid, expire_time) VALUES (?, DATETIME('now'))", rev)
+			ctx, "INSERT INTO secret_revision_expire (revision_uuid, expire_time) VALUES (?, CURRENT_TIMESTAMP)", rev)
 		c.Assert(err, tc.ErrorIsNil)
 
 		_, err = s.DB().ExecContext(
