@@ -145,6 +145,35 @@ INSERT INTO model_config (key, value)
 	})
 }
 
+// TestModelConfigAgentStreamAndVersionInConfig checks that the agent_version
+// table wins over model_config values for the agent keys, including values
+// that sort after the agent_version values.
+func (s *stateSuite) TestModelConfigAgentStreamAndVersionInConfig(c *tc.C) {
+	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+INSERT INTO agent_version (stream_id, target_version, latest_version)
+                   VALUES (1, ?, ?)`,
+			jujuversion.Current.String(), jujuversion.Current.String())
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `
+INSERT INTO model_config (key, value)
+                   VALUES ('agent-stream', 'testing'), ('agent-version', '99.9.9')`,
+		)
+		return err
+	})
+	c.Assert(err, tc.ErrorIsNil)
+
+	st := state.NewState(s.TxnRunnerFactory())
+	modelConfig, err := st.ModelConfig(c.Context())
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(modelConfig, tc.DeepEquals, map[string]string{
+		"agent-stream":  "proposed",
+		"agent-version": jujuversion.Current.String(),
+	})
+}
+
 func (s *stateSuite) TestModelConfigHasAttributesNil(c *tc.C) {
 	st := state.NewState(s.TxnRunnerFactory())
 	rval, err := st.ModelConfigHasAttributes(c.Context(), nil)
