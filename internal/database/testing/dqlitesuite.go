@@ -21,7 +21,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	coredatabase "github.com/juju/juju/core/database"
-	"github.com/juju/juju/core/database/schema"
+	"github.com/juju/juju/core/database/dialect"
 	"github.com/juju/juju/internal/database/app"
 	"github.com/juju/juju/internal/database/client"
 	"github.com/juju/juju/internal/database/dqlite"
@@ -179,11 +179,11 @@ func (s *DqliteSuite) DBPath() string {
 
 // SchemaDialect returns the SQL dialect of the suite's databases, for tests
 // that build their own schema.
-func (s *DqliteSuite) SchemaDialect() schema.Dialect {
+func (s *DqliteSuite) SchemaDialect() dialect.Dialect {
 	if s.postgresqlURL != "" {
-		return schema.PostgreSQL
+		return dialect.PostgreSQL
 	}
-	return schema.SQLite
+	return dialect.SQLite
 }
 
 // SkipOnPostgreSQL skips a test that needs dqlite itself, rather than a
