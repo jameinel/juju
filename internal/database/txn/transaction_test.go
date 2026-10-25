@@ -70,6 +70,7 @@ func (s *transactionRunnerSuite) TestTxnLogging(c *tc.C) {
 	if _, isSQLite := s.DB().Driver().(*sqlite3.SQLiteDriver); isSQLite {
 		c.Skip("TODO: log tracer is broken on sqlite")
 	}
+	testing.SkipOnPostgreSQL(c, "query tracing is emitted by the go-dqlite driver")
 
 	buffer := new(strings.Builder)
 	runner := txn.NewRetryingTxnRunner(txn.WithLogger(logRecorder{
