@@ -3,14 +3,14 @@
 -- domain/schema/AGENTS.md.
 
 CREATE TABLE bakery_config (
-    local_users_private_key TEXT NOT NULL,
-    local_users_public_key TEXT NOT NULL,
-    local_users_third_party_private_key TEXT NOT NULL,
-    local_users_third_party_public_key TEXT NOT NULL,
-    external_users_third_party_private_key TEXT NOT NULL,
-    external_users_third_party_public_key TEXT NOT NULL,
-    offers_third_party_private_key TEXT NOT NULL,
-    offers_third_party_public_key TEXT NOT NULL
+    local_users_private_key BYTEA NOT NULL,
+    local_users_public_key BYTEA NOT NULL,
+    local_users_third_party_private_key BYTEA NOT NULL,
+    local_users_third_party_public_key BYTEA NOT NULL,
+    external_users_third_party_private_key BYTEA NOT NULL,
+    external_users_third_party_public_key BYTEA NOT NULL,
+    offers_third_party_private_key BYTEA NOT NULL,
+    offers_third_party_public_key BYTEA NOT NULL
 );
 
 -- A unique constraint over a constant index ensures only 1 entry matching the
@@ -21,7 +21,7 @@ CREATE TABLE macaroon_root_key (
     id TEXT NOT NULL PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
-    root_key TEXT NOT NULL
+    root_key BYTEA NOT NULL
 );
 
 CREATE INDEX idx_macaroon_root_key_expires_at

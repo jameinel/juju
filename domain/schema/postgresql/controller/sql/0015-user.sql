@@ -44,7 +44,7 @@ CREATE TABLE user_password (
 
 CREATE TABLE user_activation_key (
     user_uuid TEXT NOT NULL PRIMARY KEY,
-    activation_key TEXT NOT NULL,
+    activation_key BYTEA NOT NULL,
     CONSTRAINT fk_user_activation_key_user
     FOREIGN KEY (user_uuid)
     REFERENCES user_authentication (user_uuid)
