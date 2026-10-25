@@ -297,13 +297,13 @@ LEFT JOIN application AS a ON u.application_uuid = a.uuid
 LEFT JOIN operation_machine_task AS mt ON t.uuid = mt.task_uuid
 LEFT JOIN machine AS m ON mt.machine_uuid = m.uuid
 WHERE
-    ($queryFlags.has_actions = 0 OR oa.charm_action_key IN ($actionNames[:]))
-    AND ($queryFlags.has_status = 0 OR sv.status IN ($statuses[:]))
+    ($queryFlags.has_actions = FALSE OR oa.charm_action_key IN ($actionNames[:]))
+    AND ($queryFlags.has_status = FALSE OR sv.status IN ($statuses[:]))
     AND (
-        ($queryFlags.has_applications = 0 AND $queryFlags.has_machines = 0 AND $queryFlags.has_units = 0)
-        OR ($queryFlags.has_applications = 1 AND a.name IN ($applications[:]))
-        OR ($queryFlags.has_machines = 1 AND m.name IN ($machines[:]))
-        OR ($queryFlags.has_units = 1 AND u.name IN ($units[:]))
+        ($queryFlags.has_applications = FALSE AND $queryFlags.has_machines = FALSE AND $queryFlags.has_units = FALSE)
+        OR ($queryFlags.has_applications = TRUE AND a.name IN ($applications[:]))
+        OR ($queryFlags.has_machines = TRUE AND m.name IN ($machines[:]))
+        OR ($queryFlags.has_units = TRUE AND u.name IN ($units[:]))
     )
 ORDER BY o.operation_id
 LIMIT $queryParams.limit OFFSET $queryParams.offset
