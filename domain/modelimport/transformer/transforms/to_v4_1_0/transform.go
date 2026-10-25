@@ -43,6 +43,8 @@ type Deltas interface {
 	RelationApplicationSetting(ctx context.Context, src []v4_0_12.RelationApplicationSetting, model *v4_0_12.ModelExport) ([]v4_1_0.RelationApplicationSetting, error)
 	// RelationUnitSetting: struct shape changed in 4.1.0.
 	RelationUnitSetting(ctx context.Context, src []v4_0_12.RelationUnitSetting, model *v4_0_12.ModelExport) ([]v4_1_0.RelationUnitSetting, error)
+	// Removal: struct shape changed in 4.1.0.
+	Removal(ctx context.Context, src []v4_0_12.Removal, model *v4_0_12.ModelExport) ([]v4_1_0.Removal, error)
 	// SecretPermission: struct shape changed in 4.1.0.
 	SecretPermission(ctx context.Context, src []v4_0_12.SecretPermission, model *v4_0_12.ModelExport) ([]v4_1_0.SecretPermission, error)
 	// Unit: struct shape changed in 4.1.0.
@@ -867,11 +869,6 @@ func NewTransform(d Deltas) transformer.TransformationFunc[v4_0_12.ModelExport, 
 			dst.RelationUnitSettingsHash[i] = v4_1_0.RelationUnitSettingsHash(src.RelationUnitSettingsHash[i])
 		}
 
-		dst.Removal = make([]v4_1_0.Removal, len(src.Removal))
-		for i := range src.Removal {
-			dst.Removal[i] = v4_1_0.Removal(src.Removal[i])
-		}
-
 		dst.RemovalType = make([]v4_1_0.RemovalType, len(src.RemovalType))
 		for i := range src.RemovalType {
 			dst.RemovalType[i] = v4_1_0.RemovalType(src.RemovalType[i])
@@ -1263,6 +1260,10 @@ func NewTransform(d Deltas) transformer.TransformationFunc[v4_0_12.ModelExport, 
 
 		if dst.RelationUnitSetting, err = d.RelationUnitSetting(ctx, src.RelationUnitSetting, &src); err != nil {
 			return v4_1_0.ModelExport{}, errors.Errorf("RelationUnitSetting delta: %w", err)
+		}
+
+		if dst.Removal, err = d.Removal(ctx, src.Removal, &src); err != nil {
+			return v4_1_0.ModelExport{}, errors.Errorf("Removal delta: %w", err)
 		}
 
 		if dst.SecretPermission, err = d.SecretPermission(ctx, src.SecretPermission, &src); err != nil {

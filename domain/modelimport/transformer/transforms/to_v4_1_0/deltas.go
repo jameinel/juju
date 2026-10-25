@@ -463,3 +463,25 @@ func (d deltas) Unit(_ context.Context, src []v4_0_12.Unit, _ *v4_0_12.ModelExpo
 	}
 	return result, nil
 }
+
+// Removal converts the force flag, which was an INT column in 4.0.12 and is a
+// BOOLEAN column in 4.1.0. Removal jobs were always written from a Go bool, so
+// any value other than 0 or 1 indicates data corruption and halts the
+// transform.
+func (d deltas) Removal(_ context.Context, src []v4_0_12.Removal, _ *v4_0_12.ModelExport) ([]v4_1_0.Removal, error) {
+	result := make([]v4_1_0.Removal, len(src))
+	for i, r := range src {
+		if r.Force != 0 && r.Force != 1 {
+			return nil, errors.Errorf("invalid force %d for removal %q", r.Force, r.UUID)
+		}
+		result[i] = v4_1_0.Removal{
+			UUID:          r.UUID,
+			RemovalTypeID: r.RemovalTypeID,
+			EntityUUID:    r.EntityUUID,
+			Force:         r.Force == 1,
+			ScheduledFor:  r.ScheduledFor,
+			Arg:           r.Arg,
+		}
+	}
+	return result, nil
+}

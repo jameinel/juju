@@ -241,3 +241,27 @@ func (s *deltasSuite) TestTextIDsRejectNonNumeric(c *tc.C) {
 	_, err = deltas{}.Unit(c.Context(), []v4_0_12.Unit{{UUID: "u", PasswordHashAlgorithmID: new("x")}}, nil)
 	c.Check(err, tc.ErrorMatches, `invalid password_hash_algorithm_id "x".*`)
 }
+
+// TestRemovalConvertsForce verifies that the integer force flag becomes a
+// boolean and that other fields are carried through.
+func (s *deltasSuite) TestRemovalConvertsForce(c *tc.C) {
+	scheduled := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	src := []v4_0_12.Removal{
+		{UUID: "r0", RemovalTypeID: 1, EntityUUID: "e0", Force: 0, ScheduledFor: scheduled},
+		{UUID: "r1", RemovalTypeID: 2, EntityUUID: "e1", Force: 1, ScheduledFor: scheduled, Arg: new("{}")},
+	}
+
+	got, err := deltas{}.Removal(c.Context(), src, nil)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(got, tc.DeepEquals, []v4_1_0.Removal{
+		{UUID: "r0", RemovalTypeID: 1, EntityUUID: "e0", Force: false, ScheduledFor: scheduled},
+		{UUID: "r1", RemovalTypeID: 2, EntityUUID: "e1", Force: true, ScheduledFor: scheduled, Arg: new("{}")},
+	})
+}
+
+// TestRemovalRejectsInvalidForce verifies that a force value other than 0 or 1
+// halts the transform.
+func (s *deltasSuite) TestRemovalRejectsInvalidForce(c *tc.C) {
+	_, err := deltas{}.Removal(c.Context(), []v4_0_12.Removal{{UUID: "r", Force: 2}}, nil)
+	c.Check(err, tc.ErrorMatches, `invalid force 2 for removal "r"`)
+}
