@@ -35,7 +35,8 @@ SELECT
     mc."key",
     mc.value
 FROM model_config AS mc
-UNION
+WHERE mc."key" NOT IN ('agent-stream', 'agent-version')
+UNION ALL
 SELECT
     'agent-stream' AS "key",
     mas.name AS value
