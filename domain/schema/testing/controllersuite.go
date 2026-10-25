@@ -6,6 +6,7 @@ package testing
 import (
 	"context"
 	"database/sql"
+	"strconv"
 
 	"github.com/juju/tc"
 
@@ -76,7 +77,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			controllerUUID,
 			controllerModelUUID,
 			jujuversion.Current.String(),
-			controller.DefaultAPIPort,
+			strconv.Itoa(controller.DefaultAPIPort),
 			"test-cert",
 			"test-private-key",
 			"test-ca-cert",
