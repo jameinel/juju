@@ -249,10 +249,10 @@ func (st *State) computeObjectStoreSize(ctx context.Context, tx *sqlair.TX, size
 	// Size of the operation_task_output table.
 	stmtSizeOutputTable, err := st.Prepare(`
 SELECT COALESCE(SUM(
-    octet_length(oto.task_uuid) +
-    octet_length(oto.store_path) +
-    octet_length(osm.path) +
-    octet_length(osm.metadata_uuid)              
+    octet_length(CAST(oto.task_uuid AS TEXT)) +
+    octet_length(CAST(oto.store_path AS TEXT)) +
+    octet_length(CAST(osm.path AS TEXT)) +
+    octet_length(CAST(osm.metadata_uuid AS TEXT))
 ),0) AS &result.size
 FROM operation_task_output as oto
 JOIN object_store_metadata_path AS osm ON oto.store_path = osm.path
@@ -275,10 +275,10 @@ uuids AS (
 )
 SELECT COALESCE(SUM(
     osm.size +
-    octet_length(osm.uuid) +
-    octet_length(osm.sha_256) +
-    octet_length(osm.sha_384) +
-    octet_length(osm.size)), 0) AS &result.size
+    octet_length(CAST(osm.uuid AS TEXT)) +
+    octet_length(CAST(osm.sha_256 AS TEXT)) +
+    octet_length(CAST(osm.sha_384 AS TEXT)) +
+    octet_length(CAST(osm.size AS TEXT))), 0) AS &result.size
 FROM   object_store_metadata AS osm 
 WHERE  uuid IN (SELECT metadata_uuid FROM uuids)`, result{})
 	if err != nil {
@@ -309,13 +309,15 @@ func roundDownNonZero(size int, sizeFactor int) int {
 
 // computeTableSize computes the size of the table in the database.
 // The sizeFactor allows to convert the size in bytes to the size in another ratio.
+// Each column is measured in its text form, which every backend supports for
+// every column type.
 func (st *State) computeTableSize(ctx context.Context, tx *sqlair.TX, sizeFactor int, table string,
 	columns ...string) (int, error) {
 	type result struct {
 		Size int `db:"size"`
 	}
 	octetLengths := transform.Slice(columns, func(col string) string {
-		return fmt.Sprintf("octet_length(%q)", col)
+		return fmt.Sprintf("octet_length(CAST(%q AS TEXT))", col)
 	})
 	sums := strings.Join(octetLengths, "+")
 	query := fmt.Sprintf(`
