@@ -321,7 +321,7 @@ VALUES ('claim', ?, 'source-migration-uuid', 2, '2026-01-02T03:04:05Z')`, modelU
 		}
 		_, err := tx.ExecContext(ctx, `
 INSERT INTO model_database_deletion (namespace, created_at)
-VALUES (?, DATETIME('now'))`, modelUUID)
+VALUES (?, CURRENT_TIMESTAMP)`, modelUUID)
 		return err
 	})
 	c.Assert(err, tc.ErrorIsNil)

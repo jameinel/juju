@@ -261,7 +261,7 @@ func (s *baseSuite) addOperationTaskWithUUIDAndID(
 ) string {
 	s.query(c, `
 INSERT INTO operation_task (uuid, operation_uuid, task_id, enqueued_at)
-VALUES (?, ?, ?, datetime('now'))`, taskUUID, operationUUID, taskID)
+VALUES (?, ?, ?, CURRENT_TIMESTAMP)`, taskUUID, operationUUID, taskID)
 	s.addOperationTaskStatus(c, taskUUID, status)
 	return taskUUID
 }
