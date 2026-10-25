@@ -125,6 +125,25 @@ func (s *stateSuite) TestAddPublicKeyForUser(c *tc.C) {
 	c.Check(keys, tc.DeepEquals, testingPublicKeys)
 }
 
+// TestAddPublicKeysForUserUnknownAlgorithm is asserting that a public key with
+// a fingerprint hash algorithm the database does not know is not added, and
+// that no other key id is used in its place.
+func (s *stateSuite) TestAddPublicKeysForUserUnknownAlgorithm(c *tc.C) {
+	state := NewState(s.TxnRunnerFactory())
+	keysToAdd := generatePublicKeys(c, testingPublicKeys[:1])
+	err := state.AddPublicKeysForUser(c.Context(), s.modelId, s.userId, keysToAdd)
+	c.Assert(err, tc.ErrorIsNil)
+
+	unknown := generatePublicKeys(c, testingPublicKeys[1:2])
+	unknown[0].FingerprintHash = keymanager.FingerprintHashAlgorithm("unknown")
+	err = state.AddPublicKeysForUser(c.Context(), s.modelId, s.userId, unknown)
+	c.Check(err, tc.ErrorMatches, `.*unknown fingerprint hash algorithm "unknown"`)
+
+	keys, err := state.GetPublicKeysDataForUser(c.Context(), s.modelId, s.userId)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(keys, tc.DeepEquals, testingPublicKeys[:1])
+}
+
 // TestAddPublicKeysForUserAlreadyExists is asserting that if we try and add the
 // same public key for a user more then once to a model we get back an error
 // that satisfies [keyerrors.PublicKeyAlreadyExists].
