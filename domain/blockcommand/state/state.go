@@ -146,7 +146,7 @@ func (s *State) GetBlocks(ctx context.Context) ([]blockcommand.Block, error) {
 	}
 
 	var block blockCommand
-	stmt, err := s.Prepare("SELECT &blockCommand.* FROM block_command ORDER BY rowid", block)
+	stmt, err := s.Prepare("SELECT &blockCommand.* FROM block_command ORDER BY block_command_type_id", block)
 	if err != nil {
 		return nil, errors.Errorf("preparing block command select: %w", err)
 	}
