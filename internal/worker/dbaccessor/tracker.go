@@ -140,6 +140,7 @@ func newTrackedDBWorker(
 	// racing with the application of schema DDL.
 	if namespace != coredatabase.ControllerNS {
 		if err := w.ensureModelDBInitialised(ctx); err != nil {
+			w.closeDB(ctx, db)
 			return nil, errors.Trace(err)
 		}
 	}
@@ -168,10 +169,18 @@ func (w *trackedDBWorker) openDatabase(ctx context.Context) (*sql.DB, error) {
 	// Ensure that foreign keys are enabled, as we rely on them for referential
 	// integrity.
 	if err := pragma.SetPragma(ctx, db, pragma.ForeignKeysPragma, true); err != nil {
+		w.closeDB(ctx, db)
 		return nil, errors.Annotate(err, "setting foreign keys pragma")
 	}
 
 	return db, nil
+}
+
+// closeDB closes a database that the worker opened but will not use.
+func (w *trackedDBWorker) closeDB(ctx context.Context, db *sql.DB) {
+	if err := db.Close(); err != nil {
+		w.logger.Errorf(ctx, "error closing database %q: %v", w.namespace, err)
+	}
 }
 
 func (w *trackedDBWorker) ensureModelDBInitialised(ctx context.Context) error {
@@ -413,7 +422,7 @@ func (w *trackedDBWorker) loop() error {
 // ensureDBAliveAndOpenNewIfRequired is a bit long-winded, but it is a way to
 // ensure that the underlying database is alive and well. If it is not, we
 // attempt to open a new one. If that fails, we return an error.
-func (w *trackedDBWorker) ensureDBAliveAndOpenIfRequired(ctx context.Context, db *sql.DB) (*sql.DB, error) {
+func (w *trackedDBWorker) ensureDBAliveAndOpenIfRequired(ctx context.Context, current *sql.DB) (*sql.DB, error) {
 	// Allow killing the tomb to cancel the context,
 	// so shutdown/restart can not be blocked by this call.
 	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
@@ -421,6 +430,15 @@ func (w *trackedDBWorker) ensureDBAliveAndOpenIfRequired(ctx context.Context, db
 
 	if w.logger.IsLevelEnabled(logger.TRACE) {
 		w.logger.Tracef(ctx, "ensuring database %q is alive", w.namespace)
+	}
+
+	// The caller closes the current database. A replacement opened here
+	// must be closed here unless it is returned.
+	db := current
+	closeReplacement := func() {
+		if db != nil && db != current {
+			w.closeDB(ctx, db)
+		}
 	}
 
 	// There are multiple levels of retries here.
@@ -465,6 +483,7 @@ func (w *trackedDBWorker) ensureDBAliveAndOpenIfRequired(ctx context.Context, db
 		// We exhausted the retry strategy for pinging the database.
 		// Terminate the worker with the error.
 		if i == DefaultVerifyAttempts-1 {
+			closeReplacement()
 			return nil, errors.Trace(err)
 		}
 
@@ -475,6 +494,7 @@ func (w *trackedDBWorker) ensureDBAliveAndOpenIfRequired(ctx context.Context, db
 
 		// Attempt to open a new database. If there is an error, just crash
 		// the worker, we can't do anything else.
+		closeReplacement()
 		if db, err = w.openDatabase(ctx); err != nil {
 			return nil, errors.Trace(err)
 		}

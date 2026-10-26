@@ -440,6 +440,126 @@ func (s *trackedDBWorkerSuite) TestWorkerAttemptsToVerifyDBButFails(c *tc.C) {
 	c.Assert(err, tc.ErrorMatches, "boom")
 }
 
+func (s *trackedDBWorkerSuite) TestWorkerClosesDBWhenPrepareFails(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	_, db := s.OpenDB(c)
+	s.dbApp.EXPECT().Open(gomock.Any(), "controller").Return(db, nil)
+
+	// A cancelled context makes setting the foreign keys pragma fail.
+	ctx, cancel := context.WithCancel(c.Context())
+	cancel()
+
+	_, err := newTrackedDBWorker(ctx, s.states, s.dbApp, "controller",
+		WithClock(s.clock),
+		WithLogger(s.logger),
+		WithMetricsCollector(NewMetricsCollector()),
+	)
+	c.Assert(err, tc.ErrorMatches, "setting foreign keys pragma: .*context canceled")
+	c.Check(db.PingContext(c.Context()), tc.ErrorMatches, "sql: database is closed")
+}
+
+func (s *trackedDBWorkerSuite) TestWorkerClosesDBWhenModelInitialisationFails(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	s.expectClock()
+
+	// A schema table without the expected columns makes the model DDL fail.
+	_, db := s.OpenDB(c)
+	_, err := db.ExecContext(c.Context(), "CREATE TABLE schema (id INTEGER)")
+	c.Assert(err, tc.ErrorIsNil)
+	s.dbApp.EXPECT().Open(gomock.Any(), "model").Return(db, nil)
+
+	_, err = newTrackedDBWorker(c.Context(), s.states, s.dbApp, "model",
+		WithClock(s.clock),
+		WithLogger(s.logger),
+		WithMetricsCollector(NewMetricsCollector()),
+	)
+	c.Assert(err, tc.ErrorMatches, ".*no such column: version.*")
+	c.Check(db.PingContext(c.Context()), tc.ErrorMatches, "sql: database is closed")
+}
+
+func (s *trackedDBWorkerSuite) TestWorkerClosesFailedReplacementDBs(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	s.expectClock()
+	defer s.expectTimer(1)()
+
+	dbs := make([]*sql.DB, DefaultVerifyAttempts)
+	exp := s.dbApp.EXPECT()
+	calls := make([]any, DefaultVerifyAttempts)
+	for i := range dbs {
+		_, dbs[i] = s.OpenDB(c)
+		calls[i] = exp.Open(gomock.Any(), "controller").Return(dbs[i], nil)
+	}
+	gomock.InOrder(calls...)
+
+	pingFn := func(context.Context, *sql.DB) error {
+		return errors.New("boom")
+	}
+
+	w, err := s.newTrackedDBWorker(c, pingFn)
+	c.Assert(err, tc.ErrorIsNil)
+	defer workertest.DirtyKill(c, w)
+
+	s.ensureStartup(c)
+
+	c.Assert(w.Wait(), tc.ErrorMatches, "boom")
+
+	for i, db := range dbs {
+		c.Check(db.PingContext(c.Context()), tc.ErrorMatches, "sql: database is closed",
+			tc.Commentf("database %d", i))
+	}
+}
+
+func (s *trackedDBWorkerSuite) TestWorkerClosesFailedReplacementDBOnRecovery(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	s.expectClock()
+	timerCh := s.setupTimer(PollInterval)
+
+	s.timer.EXPECT().Reset(gomock.Any()).Times(1)
+
+	dbs := make([]*sql.DB, DefaultVerifyAttempts)
+	exp := s.dbApp.EXPECT()
+	calls := make([]any, DefaultVerifyAttempts)
+	for i := range dbs {
+		_, dbs[i] = s.OpenDB(c)
+		calls[i] = exp.Open(gomock.Any(), "controller").Return(dbs[i], nil)
+	}
+	gomock.InOrder(calls...)
+
+	last := dbs[DefaultVerifyAttempts-1]
+	pingFn := func(_ context.Context, db *sql.DB) error {
+		if db == last {
+			return nil
+		}
+		return errors.New("boom")
+	}
+
+	w, err := s.newTrackedDBWorker(c, pingFn)
+	c.Assert(err, tc.ErrorIsNil)
+	defer workertest.DirtyKill(c, w)
+
+	s.ensureStartup(c)
+
+	select {
+	case timerCh <- time.Now():
+	case <-c.Context().Done():
+		c.Fatal("timed out waiting to trigger DB verification")
+	}
+
+	s.ensureDBReplaced(c)
+
+	for i, db := range dbs[:DefaultVerifyAttempts-1] {
+		c.Check(db.PingContext(c.Context()), tc.ErrorMatches, "sql: database is closed",
+			tc.Commentf("database %d", i))
+	}
+	c.Check(last.PingContext(c.Context()), tc.ErrorIsNil)
+
+	workertest.CleanKill(c, w)
+}
+
 func (s *trackedDBWorkerSuite) TestWorkerCancelsTxn(c *tc.C) {
 	defer s.setupMocks(c).Finish()
 
