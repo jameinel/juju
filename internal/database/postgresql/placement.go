@@ -126,6 +126,35 @@ func SchemaExists(ctx context.Context, db Querier, name string) (bool, error) {
 	return exists, nil
 }
 
+// SchemaInitialised reports whether Juju's DDL has been applied to the
+// schema: the schema has a "schema" bookkeeping table with at least one
+// version row. A failed first DDL run rolls back without leaving a row, so
+// an empty schema, or one holding other objects, is not initialised.
+func SchemaInitialised(ctx context.Context, db Querier, name string) (bool, error) {
+	var hasTable bool
+	err := db.QueryRowContext(ctx, `
+SELECT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class AS c
+    JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
+    WHERE n.nspname = $1 AND c.relname = 'schema' AND c.relkind = 'r'
+)`, name).Scan(&hasTable)
+	if err != nil {
+		return false, fmt.Errorf("checking schema %q is initialised: %w", name, err)
+	} else if !hasTable {
+		return false, nil
+	}
+
+	var hasVersion bool
+	err = db.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM `+QuoteIdentifier(name)+`."schema")`,
+	).Scan(&hasVersion)
+	if err != nil {
+		return false, fmt.Errorf("checking schema %q is initialised: %w", name, err)
+	}
+	return hasVersion, nil
+}
+
 func isPGCode(err error, code string) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == code
