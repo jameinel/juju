@@ -125,7 +125,7 @@ func (s *trackedDBWorkerSuite) TestVerifyDatabaseClosesFailedReplacementPools(c 
 
 	pingErr := errors.New("ping failed")
 	w := &trackedDBWorker{
-		dbApp: s.dbApp, namespace: "controller", clock: s.clock, logger: s.logger, report: &report{},
+		opener: s.dbApp, backend: dqliteBackend{}, namespace: "controller", clock: s.clock, logger: s.logger, report: &report{},
 		pingDBFunc: func(context.Context, *sql.DB) error { return pingErr },
 	}
 	db, err := w.ensureDBAliveAndOpenIfRequired(c.Context(), s.DB())
@@ -148,7 +148,7 @@ func (s *trackedDBWorkerSuite) TestVerifyDatabaseClosesReplacementOnReopenFailur
 	)
 
 	w := &trackedDBWorker{
-		dbApp: s.dbApp, namespace: "controller", clock: s.clock, logger: s.logger, report: &report{},
+		opener: s.dbApp, backend: dqliteBackend{}, namespace: "controller", clock: s.clock, logger: s.logger, report: &report{},
 		pingDBFunc: func(context.Context, *sql.DB) error { return errors.New("ping failed") },
 	}
 	db, err := w.ensureDBAliveAndOpenIfRequired(c.Context(), s.DB())
@@ -165,7 +165,7 @@ func (s *trackedDBWorkerSuite) TestVerifyDatabaseKeepsCallerOwnedPool(c *tc.C) {
 	s.dbApp.EXPECT().Open(gomock.Any(), "controller").Return(s.DB(), nil).Times(DefaultVerifyAttempts - 1)
 	pingErr := errors.New("ping failed")
 	w := &trackedDBWorker{
-		dbApp: s.dbApp, namespace: "controller", clock: s.clock, logger: s.logger, report: &report{},
+		opener: s.dbApp, backend: dqliteBackend{}, namespace: "controller", clock: s.clock, logger: s.logger, report: &report{},
 		pingDBFunc: func(context.Context, *sql.DB) error { return pingErr },
 	}
 	db, err := w.ensureDBAliveAndOpenIfRequired(c.Context(), s.DB())
@@ -189,7 +189,7 @@ func (s *trackedDBWorkerSuite) TestVerifyDatabaseClosesReplacementOnCancellation
 	ctx, cancel := context.WithCancel(c.Context())
 	defer cancel()
 	w := &trackedDBWorker{
-		dbApp: s.dbApp, namespace: "controller", clock: s.clock, logger: s.logger, report: &report{},
+		opener: s.dbApp, backend: dqliteBackend{}, namespace: "controller", clock: s.clock, logger: s.logger, report: &report{},
 		pingDBFunc: func(ctx context.Context, db *sql.DB) error {
 			if db == replacement {
 				cancel()
@@ -217,7 +217,7 @@ func (s *trackedDBWorkerSuite) TestVerifyDatabaseTransfersSuccessfulReplacementP
 	)
 
 	w := &trackedDBWorker{
-		dbApp: s.dbApp, namespace: "controller", clock: s.clock, logger: s.logger, report: &report{},
+		opener: s.dbApp, backend: dqliteBackend{}, namespace: "controller", clock: s.clock, logger: s.logger, report: &report{},
 		pingDBFunc: func(ctx context.Context, db *sql.DB) error {
 			if db == replacement {
 				return db.PingContext(ctx)
@@ -617,6 +617,39 @@ func (s *trackedDBWorkerSuite) TestWorkerAttemptsToVerifyDBButFails(c *tc.C) {
 		return nil
 	})
 	c.Assert(err, tc.ErrorMatches, "boom")
+}
+
+func (s *trackedDBWorkerSuite) TestWorkerDoesNotReopenDeadDB(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	s.expectClock()
+	defer s.expectTimer(1)()
+
+	_, db := s.OpenDB(c)
+	var opens atomic.Int64
+	s.dbApp.EXPECT().Open(gomock.Any(), "controller").DoAndReturn(
+		func(context.Context, string) (*sql.DB, error) {
+			opens.Add(1)
+			return db, nil
+		},
+	).AnyTimes()
+
+	var pings atomic.Int64
+	pingFn := func(context.Context, *sql.DB) error {
+		pings.Add(1)
+		return errors.Annotate(coredatabase.ErrDBDead, "gone")
+	}
+
+	w, err := s.newTrackedDBWorker(c, pingFn)
+	c.Assert(err, tc.ErrorIsNil)
+	defer workertest.DirtyKill(c, w)
+
+	s.ensureStartup(c)
+
+	c.Assert(w.Wait(), tc.ErrorIs, coredatabase.ErrDBDead)
+	c.Check(opens.Load(), tc.Equals, int64(1))
+	c.Check(pings.Load(), tc.Equals, int64(1))
+	c.Check(db.PingContext(c.Context()), tc.ErrorMatches, "sql: database is closed")
 }
 
 func (s *trackedDBWorkerSuite) TestWorkerCancelsTxn(c *tc.C) {
