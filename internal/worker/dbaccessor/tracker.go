@@ -48,10 +48,40 @@ type TrackedDB interface {
 	worker.Worker
 }
 
+// TrackedDBBackend is the backend-specific behaviour of a tracked database.
+// The default is dqlite.
+type TrackedDBBackend interface {
+	// PrepareDB configures a newly opened database before it is used. It is
+	// called each time the database is opened, including reopens.
+	PrepareDB(ctx context.Context, db *sql.DB) error
+
+	// EnsureModelInitialised applies the model schema to the namespace if it
+	// has not been applied. It is called once, before the tracked database
+	// is returned, and never for the controller namespace. The runner
+	// runs transactions against db.
+	EnsureModelInitialised(
+		ctx context.Context, namespace string, db *sql.DB,
+		runner coredatabase.TxnRunner, logger logger.Logger,
+	) error
+
+	// Ping verifies that the namespace's database is still usable. An error
+	// satisfying errors.Is(err, coredatabase.ErrDBDead) ends the tracked
+	// database without reopening it.
+	Ping(ctx context.Context, namespace string, db *sql.DB) error
+}
+
 // TrackedDBWorkerOption is a function that configures a TrackedDBWorker.
 type TrackedDBWorkerOption func(*trackedDBWorker)
 
-// WithPingDBFunc sets the function used to verify the database connection.
+// WithBackend sets the backend of the tracked database.
+func WithBackend(backend TrackedDBBackend) TrackedDBWorkerOption {
+	return func(w *trackedDBWorker) {
+		w.backend = backend
+	}
+}
+
+// WithPingDBFunc sets the function used to verify the database connection,
+// in place of the backend's Ping.
 func WithPingDBFunc(f func(context.Context, *sql.DB) error) TrackedDBWorkerOption {
 	return func(w *trackedDBWorker) {
 		w.pingDBFunc = f
@@ -83,7 +113,8 @@ type trackedDBWorker struct {
 	internalStates chan string
 	tomb           tomb.Tomb
 
-	dbApp     DBApp
+	opener    DBOpener
+	backend   TrackedDBBackend
 	namespace string
 
 	mutex sync.RWMutex
@@ -101,27 +132,31 @@ type trackedDBWorker struct {
 
 // NewTrackedDBWorker creates a new TrackedDBWorker
 func NewTrackedDBWorker(
-	ctx context.Context, dbApp DBApp, namespace string, opts ...TrackedDBWorkerOption,
+	ctx context.Context, opener DBOpener, namespace string, opts ...TrackedDBWorkerOption,
 ) (TrackedDB, error) {
-	return newTrackedDBWorker(ctx, nil, dbApp, namespace, opts...)
+	return newTrackedDBWorker(ctx, nil, opener, namespace, opts...)
 }
 
 func newTrackedDBWorker(
 	ctx context.Context, internalStates chan string,
-	dbApp DBApp, namespace string,
+	opener DBOpener, namespace string,
 	opts ...TrackedDBWorkerOption,
 ) (TrackedDB, error) {
 	w := &trackedDBWorker{
 		internalStates: internalStates,
-		dbApp:          dbApp,
+		opener:         opener,
+		backend:        dqliteBackend{},
 		namespace:      namespace,
 		clock:          clock.WallClock,
-		pingDBFunc:     defaultPingDBFunc,
 		report:         &report{},
 	}
 
 	for _, opt := range opts {
 		opt(w)
+	}
+
+	if w.pingDBFunc == nil {
+		w.pingDBFunc = w.pingBackend
 	}
 
 	// Set the db transaction metrics for the namespace.
@@ -139,7 +174,7 @@ func newTrackedDBWorker(
 	// started. This prevents calls to GetDB for the same namespace
 	// racing with the application of schema DDL.
 	if namespace != coredatabase.ControllerNS {
-		if err := w.ensureModelDBInitialised(ctx); err != nil {
+		if err := w.backend.EnsureModelInitialised(ctx, namespace, db, w, w.logger); err != nil {
 			w.closeDB(ctx, db)
 			return nil, errors.Trace(err)
 		}
@@ -159,18 +194,16 @@ func (w *trackedDBWorker) openDatabase(ctx context.Context) (*sql.DB, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbOpenTimeout)
 	defer cancel()
 
-	db, err := w.dbApp.Open(ctx, w.namespace)
+	db, err := w.opener.Open(ctx, w.namespace)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	applyDBLimits(db)
 
-	// Ensure that foreign keys are enabled, as we rely on them for referential
-	// integrity.
-	if err := pragma.SetPragma(ctx, db, pragma.ForeignKeysPragma, true); err != nil {
+	if err := w.backend.PrepareDB(ctx, db); err != nil {
 		w.closeDB(ctx, db)
-		return nil, errors.Annotate(err, "setting foreign keys pragma")
+		return nil, errors.Trace(err)
 	}
 
 	return db, nil
@@ -183,10 +216,32 @@ func (w *trackedDBWorker) closeDB(ctx context.Context, db *sql.DB) {
 	}
 }
 
-func (w *trackedDBWorker) ensureModelDBInitialised(ctx context.Context) error {
+// pingBackend verifies the database with the backend's Ping.
+func (w *trackedDBWorker) pingBackend(ctx context.Context, db *sql.DB) error {
+	return w.backend.Ping(ctx, w.namespace, db)
+}
+
+// dqliteBackend is the default TrackedDBBackend.
+type dqliteBackend struct{}
+
+// PrepareDB enables foreign keys, as we rely on them for referential
+// integrity.
+func (dqliteBackend) PrepareDB(ctx context.Context, db *sql.DB) error {
+	if err := pragma.SetPragma(ctx, db, pragma.ForeignKeysPragma, true); err != nil {
+		return errors.Annotate(err, "setting foreign keys pragma")
+	}
+	return nil
+}
+
+// EnsureModelInitialised applies the model DDL unless the database already
+// has the change_log table.
+func (dqliteBackend) EnsureModelInitialised(
+	ctx context.Context, _ string, _ *sql.DB,
+	runner coredatabase.TxnRunner, logger logger.Logger,
+) error {
 	// Check if the DB has metadata for one of our known tables.
 	var runDBMigration bool
-	if err := errors.Trace(w.StdTxn(ctx, func(ctx context.Context, tx *sql.Tx) error {
+	if err := errors.Trace(runner.StdTxn(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		row := tx.QueryRowContext(ctx, "SELECT 1 FROM sqlite_master WHERE name='change_log'")
 
 		var dummy int
@@ -208,7 +263,12 @@ func (w *trackedDBWorker) ensureModelDBInitialised(ctx context.Context) error {
 		return nil
 	}
 
-	return errors.Trace(database.NewDBMigration(w, w.logger, schema.ModelDDL()).Apply(ctx))
+	return errors.Trace(database.NewDBMigration(runner, logger, schema.ModelDDL()).Apply(ctx))
+}
+
+// Ping checks that the database can be reached.
+func (dqliteBackend) Ping(ctx context.Context, _ string, db *sql.DB) error {
+	return defaultPingDBFunc(ctx, db)
 }
 
 // Txn executes the input function against the tracked database,
@@ -478,6 +538,13 @@ func (w *trackedDBWorker) ensureDBAliveAndOpenIfRequired(ctx context.Context, cu
 		// early.
 		if err == nil {
 			return db, nil
+		}
+
+		// Reopening cannot revive a dead database, and must not recreate
+		// one that was removed.
+		if errors.Is(err, coredatabase.ErrDBDead) {
+			closeReplacement()
+			return nil, errors.Trace(err)
 		}
 
 		// We exhausted the retry strategy for pinging the database.

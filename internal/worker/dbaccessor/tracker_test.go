@@ -560,6 +560,39 @@ func (s *trackedDBWorkerSuite) TestWorkerClosesFailedReplacementDBOnRecovery(c *
 	workertest.CleanKill(c, w)
 }
 
+func (s *trackedDBWorkerSuite) TestWorkerDoesNotReopenDeadDB(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	s.expectClock()
+	defer s.expectTimer(1)()
+
+	_, db := s.OpenDB(c)
+	var opens atomic.Int64
+	s.dbApp.EXPECT().Open(gomock.Any(), "controller").DoAndReturn(
+		func(context.Context, string) (*sql.DB, error) {
+			opens.Add(1)
+			return db, nil
+		},
+	).AnyTimes()
+
+	var pings atomic.Int64
+	pingFn := func(context.Context, *sql.DB) error {
+		pings.Add(1)
+		return errors.Annotate(coredatabase.ErrDBDead, "gone")
+	}
+
+	w, err := s.newTrackedDBWorker(c, pingFn)
+	c.Assert(err, tc.ErrorIsNil)
+	defer workertest.DirtyKill(c, w)
+
+	s.ensureStartup(c)
+
+	c.Assert(w.Wait(), tc.ErrorIs, coredatabase.ErrDBDead)
+	c.Check(opens.Load(), tc.Equals, int64(1))
+	c.Check(pings.Load(), tc.Equals, int64(1))
+	c.Check(db.PingContext(c.Context()), tc.ErrorMatches, "sql: database is closed")
+}
+
 func (s *trackedDBWorkerSuite) TestWorkerCancelsTxn(c *tc.C) {
 	defer s.setupMocks(c).Finish()
 

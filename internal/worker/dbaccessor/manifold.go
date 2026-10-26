@@ -44,7 +44,7 @@ type ControllerStartupValuesProvider interface {
 }
 
 // NewDBWorkerFunc creates a tracked db worker.
-type NewDBWorkerFunc func(context.Context, DBApp, string, ...TrackedDBWorkerOption) (TrackedDB, error)
+type NewDBWorkerFunc func(context.Context, DBOpener, string, ...TrackedDBWorkerOption) (TrackedDB, error)
 
 // NewNodeManagerFunc creates a NodeManager from explicit controller startup
 // values.

@@ -24,11 +24,17 @@ type Client interface {
 	Close() error
 }
 
+// DBOpener opens the database for a namespace.
+type DBOpener interface {
+	// Open the database with the given name.
+	Open(context.Context, string) (*sql.DB, error)
+}
+
 // DBApp describes methods of a Dqlite database application,
 // required to run this host as a Dqlite node.
 type DBApp interface {
-	// Open the dqlite database with the given name
-	Open(context.Context, string) (*sql.DB, error)
+	// DBOpener opens the dqlite database with the given name.
+	DBOpener
 
 	// Ready can be used to wait for a node to complete tasks that
 	// are initiated at startup. For example a new node will attempt
