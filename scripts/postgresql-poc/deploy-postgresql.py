@@ -15,13 +15,28 @@ absolute path. Otherwise the URL uses sslmode=disable. Once TLS is enabled the
 server rejects unencrypted connections, so compare plain and TLS using
 separate models.
 
-Test suites create and drop many schemas, so postgresql is configured to keep
-disk use down: pgaudit, connection logging and disconnection logging are off,
-and wal_keep_size is 128 MB, Patroni's default (the charm keeps 4 GB of WAL by
-default). The charm hard-codes log_statement=ddl, so DDL is still logged. All
-charm storage is on the root filesystem, sized by --root-disk and placed in the
-LXD storage pool --root-disk-source. Re-running applies the configuration to an
-existing postgresql, but cannot change its constraints or storage.
+--profile selects how much durability to trade for speed and disk:
+
+  production  charm defaults and charm-managed storage: pgaudit and connection
+              logging on, 4 GB of kept WAL, fsync on.
+  testing     (default) for Juju development and test suites on a server whose
+              data matters for a few days. Disk use is kept down: pgaudit,
+              connection logging and disconnection logging are off, and
+              wal_keep_size is 128 MB, Patroni's default. synchronous_commit is
+              off, so a crash can lose the last fraction of a second of
+              commits but cannot corrupt the cluster. All charm storage is on
+              the root filesystem. This barely speeds up schema setup.
+  disposable  testing plus fsync=off and full_page_writes=off, the equivalent
+              of running under libeatmydata. Schema setup is about four times
+              faster, but a crash or power loss can corrupt the whole cluster,
+              so use it only where all content is reproducible.
+
+The charm hard-codes log_statement=ddl, so DDL is always logged. The charm
+cannot set fsync, full_page_writes or synchronous_commit=off, so they go in
+Patroni's dynamic configuration, which the charm only merges its own keys into;
+they reload without a restart. Re-running with another profile switches the
+Patroni and charm settings, but cannot change the model's constraints or
+storage; --root-disk and --root-disk-source apply to the first deployment.
 
 Status messages go to stderr. The URL goes to stdout, or to --output (mode
 0600). See docs/implementation-plans/postgresql/PLAN.md (Stage 1).
@@ -33,6 +48,7 @@ Teardown:
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -49,14 +65,42 @@ PG_SETTINGS = {
     # 128 and its minimum 16; the charm's default is 4096.
     "durability-wal-keep-size": "128",
 }
-# Rev 1218 builds some PostgreSQL parameters from both spellings of an option,
-# and the deprecated underscored option's default wins, so set both.
-PG_CONFIG = {
-    name: value
-    for option, value in PG_SETTINGS.items()
-    for name in (option, option.replace("-", "_"))
+PROFILES = ("production", "testing", "disposable")
+DEFAULT_PROFILE = "testing"
+# Parameters set through Patroni's dynamic configuration. Every profile sets
+# all of them, so re-running with another profile restores the values.
+PATRONI_PARAMETERS = {
+    "production": {"fsync": "on", "full_page_writes": "on", "synchronous_commit": "on"},
+    "testing": {"fsync": "on", "full_page_writes": "on", "synchronous_commit": "off"},
+    "disposable": {
+        "fsync": "off",
+        "full_page_writes": "off",
+        "synchronous_commit": "off",
+    },
 }
-PG_STORAGE = {name: "rootfs" for name in ("archive", "data", "logs", "temp")}
+PATRONI_CONFIG = "/var/snap/charmed-postgresql/current/etc/patroni/patroni.yaml"
+
+
+def charm_config(profile):
+    """Returns the postgresql charm options for the profile.
+
+    Rev 1218 builds some PostgreSQL parameters from both spellings of an
+    option, and the deprecated underscored option's default wins, so each
+    option is given in both.
+    """
+    if profile == "production":
+        return {}
+    return {
+        name: value
+        for option, value in PG_SETTINGS.items()
+        for name in (option, option.replace("-", "_"))
+    }
+
+
+def charm_storage(profile):
+    if profile == "production":
+        return None
+    return {name: "rootfs" for name in ("archive", "data", "logs", "temp")}
 DEFAULT_ROOT_DISK = "20G"
 DI_APP = "data-integrator"
 DI_CHANNEL = "latest/stable"
@@ -82,8 +126,9 @@ def main(argv=None):
     if args.root_disk_source:
         constraints += f" root-disk-source={args.root_disk_source}"
     try:
-        deploy(juju, tls=ca_file is not None, constraints=constraints)
+        deploy(juju, args.profile, tls=ca_file is not None, constraints=constraints)
         wait_settled(juju, args.timeout)
+        set_patroni_parameters(juju, args.profile)
         if ca_file:
             creds = wait_tls_credentials(juju, args.timeout)
             ca_file.write_text(creds["tls-ca"].rstrip("\n") + "\n")
@@ -123,6 +168,13 @@ def parse_args(argv):
         "--root-disk-source",
         help="LXD storage pool for the postgresql root disk "
         "(default: the pool of the LXD default profile)",
+    )
+    parser.add_argument(
+        "-p",
+        "--profile",
+        choices=PROFILES,
+        default=DEFAULT_PROFILE,
+        help="durability and disk-use profile, see above (default: %(default)s)",
     )
     parser.add_argument(
         "--juju", default="juju", help="Juju client to use (default: %(default)s)"
@@ -174,6 +226,12 @@ class Juju:
         pairs = [f"{key}={value}" for key, value in config.items()]
         self._run("config", "-m", self.target, app, *pairs)
 
+    def config_reset(self, app, keys):
+        self._run("config", "-m", self.target, app, "--reset", ",".join(keys))
+
+    def exec(self, unit, *command):
+        return self._run("exec", "-m", self.target, "--unit", unit, "--", *command)
+
     def run_action(self, unit, action):
         out = self._run("run", "-m", self.target, unit, action, "--format=json")
         return json.loads(out)
@@ -197,7 +255,7 @@ class Juju:
         )
 
 
-def deploy(juju, tls, constraints):
+def deploy(juju, profile, tls, constraints):
     if juju.model_exists():
         log(f"Using existing model {juju.target}")
     else:
@@ -205,12 +263,16 @@ def deploy(juju, tls, constraints):
         juju.add_model()
 
     status = juju.status()
+    config = charm_config(profile)
     if has_app(status, PG_APP):
-        log(f"Using existing application {PG_APP}; applying its configuration")
-        juju.config_set(PG_APP, PG_CONFIG)
+        log(f"Using existing application {PG_APP}; applying profile {profile}")
+        if config:
+            juju.config_set(PG_APP, config)
+        else:
+            juju.config_reset(PG_APP, charm_config(DEFAULT_PROFILE))
     else:
-        log(f"Deploying {PG_APP} ({PG_CHANNEL})")
-        juju.deploy(PG_APP, PG_CHANNEL, PG_CONFIG, constraints, PG_STORAGE)
+        log(f"Deploying {PG_APP} ({PG_CHANNEL}), profile {profile}")
+        juju.deploy(PG_APP, PG_CHANNEL, config, constraints, charm_storage(profile))
     if has_app(status, DI_APP):
         configured = juju.config_get(DI_APP, "database-name")
         if configured != DATABASE:
@@ -289,6 +351,23 @@ def pending_units(status):
             if workload != "active" or agent != "idle":
                 pending.append(f"{name}: {workload}/{agent}")
     return pending
+
+
+def set_patroni_parameters(juju, profile):
+    values = PATRONI_PARAMETERS[profile]
+    log(f"Setting {', '.join(f'{k}={v}' for k, v in values.items())}")
+    patronictl = ["snap", "run", "charmed-postgresql.patronictl", "-c", PATRONI_CONFIG]
+    sets = []
+    for name, value in values.items():
+        sets += ["-s", f"postgresql.parameters.{name}={value}"]
+    unit = f"{PG_APP}/leader"
+    juju.exec(unit, *patronictl, "edit-config", "--force", *sets)
+    shown = juju.exec(unit, *patronictl, "show-config")
+    for name, value in values.items():
+        # Patroni shows "on" as the YAML boolean true.
+        wanted = {"on": "(true|'on')", "off": "(false|'off')"}[value]
+        if not re.search(rf"^\s+{name}: {wanted}\s*$", shown, re.MULTILINE):
+            raise DeployError(f"patroni did not apply {name}={value}")
 
 
 def get_credentials(juju):
