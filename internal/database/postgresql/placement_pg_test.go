@@ -104,3 +104,52 @@ func (s *schemaSuite) TestEnsureSchemaConcurrent(c *tc.C) {
 		c.Check(<-errs, tc.ErrorIsNil)
 	}
 }
+
+func (s *schemaSuite) TestSchemaInitialised(c *tc.C) {
+	admin, err := s.placement.OpenAdmin()
+	c.Assert(err, tc.ErrorIsNil)
+	defer admin.Close()
+
+	name := s.placement.SchemaName("initialised")
+	other := s.placement.SchemaName("other")
+	quoted := postgresql.QuoteIdentifier(name)
+
+	check := func(expected bool) {
+		c.Helper()
+		initialised, err := postgresql.SchemaInitialised(c.Context(), admin, name)
+		c.Assert(err, tc.ErrorIsNil)
+		c.Check(initialised, tc.Equals, expected)
+	}
+	exec := func(stmt string) {
+		c.Helper()
+		_, err := admin.ExecContext(c.Context(), stmt)
+		c.Assert(err, tc.ErrorIsNil)
+	}
+
+	// A missing schema is not initialised.
+	check(false)
+
+	// Nor is an empty one.
+	err = postgresql.CreateSchema(c.Context(), admin, name)
+	c.Assert(err, tc.ErrorIsNil)
+	check(false)
+
+	// A view named schema is not the bookkeeping table.
+	exec("CREATE VIEW " + quoted + `."schema" AS SELECT 1 AS version`)
+	check(false)
+	exec("DROP VIEW " + quoted + `."schema"`)
+
+	// A bookkeeping table in another schema does not count.
+	err = postgresql.CreateSchema(c.Context(), admin, other)
+	c.Assert(err, tc.ErrorIsNil)
+	exec("CREATE TABLE " + postgresql.QuoteIdentifier(other) + `."schema" (version BIGINT)`)
+	exec("INSERT INTO " + postgresql.QuoteIdentifier(other) + `."schema" VALUES (1)`)
+	check(false)
+
+	// The bookkeeping table without a version row is not initialised.
+	exec("CREATE TABLE " + quoted + `."schema" (version BIGINT)`)
+	check(false)
+
+	exec("INSERT INTO " + quoted + `."schema" VALUES (1)`)
+	check(true)
+}
