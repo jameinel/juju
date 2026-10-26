@@ -22,19 +22,20 @@ separate models.
   testing     (default) for Juju development and test suites on a server whose
               data matters for a few days. Disk use is kept down: pgaudit,
               connection logging and disconnection logging are off, and
-              wal_keep_size is 128 MB, Patroni's default. synchronous_commit is
-              off, so a crash can lose the last fraction of a second of
-              commits but cannot corrupt the cluster. All charm storage is on
-              the root filesystem. This barely speeds up schema setup.
+              wal_keep_size is 128 MB, Patroni's default. fsync stays on, so
+              this does not speed up schema setup. All charm storage is on the
+              root filesystem.
   disposable  testing plus fsync=off and full_page_writes=off, the equivalent
               of running under libeatmydata. Schema setup is about four times
               faster, but a crash or power loss can corrupt the whole cluster,
               so use it only where all content is reproducible.
 
 The charm hard-codes log_statement=ddl, so DDL is always logged. The charm
-cannot set fsync, full_page_writes or synchronous_commit=off, so they go in
-Patroni's dynamic configuration, which the charm only merges its own keys into;
-they reload without a restart. Re-running with another profile switches the
+cannot set fsync or full_page_writes, so they go in Patroni's dynamic
+configuration, which the charm only merges its own keys into; they reload
+without a restart. synchronous_commit cannot be turned off server-wide: the
+charm accepts only on, remote_write and remote_apply, and pins its value in
+the local Patroni file. A client can still set it per connection. Re-running with another profile switches the
 Patroni and charm settings, but cannot change the model's constraints or
 storage; --root-disk and --root-disk-source apply to the first deployment.
 
@@ -70,13 +71,9 @@ DEFAULT_PROFILE = "testing"
 # Parameters set through Patroni's dynamic configuration. Every profile sets
 # all of them, so re-running with another profile restores the values.
 PATRONI_PARAMETERS = {
-    "production": {"fsync": "on", "full_page_writes": "on", "synchronous_commit": "on"},
-    "testing": {"fsync": "on", "full_page_writes": "on", "synchronous_commit": "off"},
-    "disposable": {
-        "fsync": "off",
-        "full_page_writes": "off",
-        "synchronous_commit": "off",
-    },
+    "production": {"fsync": "on", "full_page_writes": "on"},
+    "testing": {"fsync": "on", "full_page_writes": "on"},
+    "disposable": {"fsync": "off", "full_page_writes": "off"},
 }
 PATRONI_CONFIG = "/var/snap/charmed-postgresql/current/etc/patroni/patroni.yaml"
 
