@@ -41,6 +41,7 @@ import (
 	"github.com/juju/juju/internal/charmhub"
 	containerbroker "github.com/juju/juju/internal/container/broker"
 	"github.com/juju/juju/internal/container/lxd"
+	"github.com/juju/juju/internal/database/connsource"
 	internalhttp "github.com/juju/juju/internal/http"
 	internallease "github.com/juju/juju/internal/lease"
 	internallogger "github.com/juju/juju/internal/logger"
@@ -872,6 +873,7 @@ func commonManifolds(config ManifoldsConfig) dependency.Manifolds {
 			QueryLoggerName:           queryLoggerName,
 			ControllerAgentConfigName: controllerAgentConfigName,
 			ControllerStartupValues:   config.StartupValueProvider,
+			DBConnectionSource:        config.StartupValueProvider,
 			Logger:                    internallogger.GetLogger("juju.worker.dbaccessor"),
 			PrometheusRegisterer:      config.PrometheusRegisterer,
 			NewApp:                    dbaccessor.NewApp,
@@ -1683,6 +1685,7 @@ type ControllerStartupValueProvider interface {
 	apiserver.LocalConfigReader
 	apiremotecaller.APIInfoProvider
 	logrouter.LokiConfigProvider
+	connsource.Source
 }
 
 const (

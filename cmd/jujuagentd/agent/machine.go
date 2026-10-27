@@ -57,6 +57,7 @@ import (
 	jujuversion "github.com/juju/juju/core/version"
 	"github.com/juju/juju/environs"
 	"github.com/juju/juju/internal/container/broker"
+	"github.com/juju/juju/internal/database/connsource"
 	internaldependency "github.com/juju/juju/internal/dependency"
 	"github.com/juju/juju/internal/flightrecorder"
 	internallogger "github.com/juju/juju/internal/logger"
@@ -110,6 +111,12 @@ func (p machineControllerStartupValueProvider) ControllerStartupValues() (dbacce
 		ControllerCert:        info.Cert,
 		ControllerPrivateKey:  info.PrivateKey,
 	}, nil
+}
+
+// Details returns the current database connection details from agent
+// config.
+func (p machineControllerStartupValueProvider) Details(ctx context.Context) (connsource.Details, error) {
+	return connsource.NewAgentConfigSource(p.agent.CurrentConfig()).Details(ctx)
 }
 
 // CertMaterial returns the current controller certificate material from agent

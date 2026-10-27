@@ -17,6 +17,7 @@ import (
 	"github.com/juju/juju/cmd/internal/agent/agentconf"
 	"github.com/juju/juju/controller"
 	corelogger "github.com/juju/juju/core/logger"
+	"github.com/juju/juju/internal/database/connsource"
 	internallogger "github.com/juju/juju/internal/logger"
 	"github.com/juju/juju/internal/testhelpers"
 )
@@ -249,6 +250,57 @@ func (s *machineControllerStartupValueProviderSuite) TestControllerStartupValues
 	c.Check(values.ControllerPrivateKey, tc.Equals, "key-two")
 }
 
+func (s *machineControllerStartupValueProviderSuite) TestDetailsReadCurrentAgentConfig(c *tc.C) {
+	provider := machineControllerStartupValueProvider{
+		agent: &MachineAgent{AgentConfigWriter: &fakeMachineAgentConfigWriter{
+			config: &fakeMachineConfig{},
+		}},
+	}
+
+	details, err := provider.Details(c.Context())
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(details, tc.DeepEquals, connsource.Details{Backend: controller.DBBackendDqlite})
+
+	provider.agent.AgentConfigWriter = &fakeMachineAgentConfigWriter{
+		config: &fakeMachineConfig{
+			dbBackend: controller.DBBackendPostgreSQL,
+			dbURL:     "postgres://db.example/juju",
+			dbCACert:  "db-ca",
+		},
+	}
+	details, err = provider.Details(c.Context())
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(details, tc.DeepEquals, connsource.Details{
+		Backend: controller.DBBackendPostgreSQL,
+		URL:     "postgres://db.example/juju",
+		CACert:  "db-ca",
+	})
+
+	provider.agent.AgentConfigWriter = &fakeMachineAgentConfigWriter{
+		config: &fakeMachineConfig{dbBackend: controller.DBBackendPostgreSQL},
+	}
+	_, err = provider.Details(c.Context())
+	c.Check(err, tc.ErrorMatches, `database backend "postgresql" requires a URL`)
+}
+
+func (s *machineControllerStartupValueProviderSuite) TestSafeModeDetailsReadCurrentAgentConfig(c *tc.C) {
+	provider := safeModeControllerStartupValuesProvider{
+		agent: &SafeModeMachineAgent{AgentConfigWriter: &fakeMachineAgentConfigWriter{
+			config: &fakeMachineConfig{
+				dbBackend: controller.DBBackendPostgreSQL,
+				dbURL:     "postgres://db.example/juju",
+			},
+		}},
+	}
+
+	details, err := provider.Details(c.Context())
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(details, tc.DeepEquals, connsource.Details{
+		Backend: controller.DBBackendPostgreSQL,
+		URL:     "postgres://db.example/juju",
+	})
+}
+
 func (s *machineControllerStartupValueProviderSuite) TestBootstrapStartupValuesAllowMissingControllerData(c *tc.C) {
 	apiPort, password := bootstrapStartupValues(&fakeMachineConfig{
 		controllerInfoFound: false,
@@ -308,6 +360,21 @@ type fakeMachineConfig struct {
 	apiInfo               *api.Info
 	apiInfoFound          bool
 	oldPassword           string
+	dbBackend             string
+	dbURL                 string
+	dbCACert              string
+}
+
+func (f *fakeMachineConfig) DBBackend() string {
+	return f.dbBackend
+}
+
+func (f *fakeMachineConfig) DBURL() string {
+	return f.dbURL
+}
+
+func (f *fakeMachineConfig) DBCACert() string {
+	return f.dbCACert
 }
 
 func (f *fakeMachineConfig) DataDir() string {
