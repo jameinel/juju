@@ -12,6 +12,7 @@ import (
 	coreagent "github.com/juju/juju/agent"
 	"github.com/juju/juju/agent/engine"
 	"github.com/juju/juju/cmd/jujuagentd/util"
+	"github.com/juju/juju/internal/database/connsource"
 	internallogger "github.com/juju/juju/internal/logger"
 	"github.com/juju/juju/internal/worker/agent"
 	"github.com/juju/juju/internal/worker/controlleragentconfig"
@@ -38,6 +39,9 @@ type ManifoldsConfig struct {
 	// ControllerStartupValues provides the controller-local startup values
 	// needed by dbaccessor from agent config.
 	ControllerStartupValues dbaccessor.ControllerStartupValuesProvider
+
+	// DBConnectionSource selects the database backend used by dbaccessor.
+	DBConnectionSource connsource.Source
 
 	// ControllerID is the numeric ID of the controller.
 	ControllerID string
@@ -110,6 +114,7 @@ func Manifolds(config ManifoldsConfig) dependency.Manifolds {
 			QueryLoggerName:           queryLoggerName,
 			ControllerAgentConfigName: controllerAgentConfigName,
 			ControllerStartupValues:   config.ControllerStartupValues,
+			DBConnectionSource:        config.DBConnectionSource,
 			Logger:                    internallogger.GetLogger("juju.worker.dbaccessor"),
 			PrometheusRegisterer:      noopPrometheusRegisterer{},
 			NewApp:                    dbaccessor.NewApp,
