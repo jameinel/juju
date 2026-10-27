@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -60,10 +61,63 @@ var (
 	swept     atomic.Bool
 )
 
+// sessionTimeouts bound how long a test session waits for a lock, runs a
+// statement or sits idle in a transaction. A blocked test then fails with a
+// PostgreSQL error instead of waiting for the go test timeout. The slowest
+// expected statement, a model schema apply, takes a few seconds.
+var sessionTimeouts = []struct{ name, value string }{
+	{name: "lock_timeout", value: "30s"},
+	{name: "statement_timeout", value: "60s"},
+	{name: "idle_in_transaction_session_timeout", value: "60s"},
+}
+
 // URL returns the PostgreSQL URL for tests, or "" when tests should not use
-// PostgreSQL.
+// PostgreSQL. It adds each of sessionTimeouts that the URL does not set.
 func URL() string {
-	return os.Getenv(URLEnvVar)
+	return withSessionTimeouts(os.Getenv(URLEnvVar))
+}
+
+// withSessionTimeouts appends the missing sessionTimeouts to a connection
+// string in URL or keyword/value form, without rewriting the rest of it.
+// The driver passes unrecognised parameters to the server as settings. A
+// string it cannot parse is returned unchanged for the driver to report,
+// because the driver redacts the password from its errors.
+func withSessionTimeouts(conn string) string {
+	if conn == "" {
+		return ""
+	}
+	if !strings.HasPrefix(conn, "postgres://") &&
+		!strings.HasPrefix(conn, "postgresql://") {
+		for _, t := range sessionTimeouts {
+			if !keywordSetRE(t.name).MatchString(conn) {
+				conn += " " + t.name + "=" + t.value
+			}
+		}
+		return conn
+	}
+
+	_, rawQuery, hasQuery := strings.Cut(conn, "?")
+	query, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return conn
+	}
+	sep := "&"
+	if !hasQuery {
+		sep = "?"
+	} else if rawQuery == "" {
+		sep = ""
+	}
+	for _, t := range sessionTimeouts {
+		if !query.Has(t.name) {
+			conn += sep + t.name + "=" + t.value
+			sep = "&"
+		}
+	}
+	return conn
+}
+
+func keywordSetRE(name string) *regexp.Regexp {
+	return regexp.MustCompile(`(^|\s)` + regexp.QuoteMeta(name) + `\s*=`)
 }
 
 // OpenAdmin opens a connection to the test PostgreSQL with the default
