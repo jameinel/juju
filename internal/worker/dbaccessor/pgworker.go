@@ -247,10 +247,11 @@ func (w *pgWorker) GetDB(ctx context.Context, namespace string) (database.TxnRun
 	return tracked.(database.TxnRunner), nil
 }
 
-// DeleteDB stops the tracked database for the namespace. It refuses the
-// controller namespace. Dropping the namespace's schema is not implemented
-// yet, so it always returns an error satisfying errors.NotImplemented once
-// the tracked database has stopped.
+// DeleteDB stops the tracked database for the namespace, then drops the
+// namespace's schema without CASCADE (D47). An object that Juju did not
+// create, or a lock held for longer than the delete's lock timeout, fails the
+// delete and nothing is dropped; the caller retries it. Deleting a namespace
+// whose schema does not exist succeeds. It refuses the controller namespace.
 func (w *pgWorker) DeleteDB(namespace string) error {
 	select {
 	case <-w.dbReady:
@@ -313,7 +314,10 @@ func (w *pgWorker) deleteDatabase(ctx context.Context, namespace string) error {
 		}
 	}
 
-	return errors.NotImplementedf("dropping the PostgreSQL schema of namespace %q", namespace)
+	// This runs on the worker loop, so other requests wait behind it. Each
+	// lock wait is bounded, and a delete that fails is retried by the
+	// caller.
+	return errors.Trace(w.namespaces.Delete(ctx, namespace))
 }
 
 func (w *pgWorker) workerFromCache(ctx context.Context, namespace string) (database.TxnRunner, error) {

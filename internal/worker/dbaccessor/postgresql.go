@@ -6,6 +6,7 @@ package dbaccessor
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/juju/errors"
 
@@ -22,6 +23,11 @@ import (
 type PostgresNamespaces struct {
 	placement postgresql.Placement
 }
+
+// deleteLockTimeout bounds each lock wait while deleting a schema. A model's
+// schema is busy only while something still uses the model, so a delete
+// that times out is retried later by its caller. The value is not tuned.
+const deleteLockTimeout = 15 * time.Second
 
 // NewPostgresNamespaces returns PostgresNamespaces for the placement.
 func NewPostgresNamespaces(placement postgresql.Placement) *PostgresNamespaces {
@@ -109,4 +115,23 @@ func (n *PostgresNamespaces) CheckControllerInitialised(ctx context.Context, run
 		return errors.Errorf("controller schema %q is not initialised", schemaName)
 	}
 	return nil
+}
+
+// Delete drops the namespace's schema without CASCADE (D47), on a
+// short-lived admin pool. Each lock wait is bounded by deleteLockTimeout. An
+// object that Juju did not create, in the schema or depending on it from
+// outside, fails the delete and nothing is dropped. Deleting a schema that
+// does not exist succeeds. The controller namespace cannot be deleted.
+func (n *PostgresNamespaces) Delete(ctx context.Context, namespace string) error {
+	if namespace == coredatabase.ControllerNS {
+		return errors.Forbiddenf("cannot delete controller schema")
+	}
+
+	db, err := n.placement.OpenAdmin()
+	if err != nil {
+		return errors.Annotatef(err, "opening admin pool to delete namespace %q", namespace)
+	}
+	defer func() { _ = db.Close() }()
+
+	return errors.Trace(postgresql.DeleteSchema(ctx, db, n.placement.SchemaName(namespace), deleteLockTimeout))
 }
