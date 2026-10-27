@@ -9,6 +9,11 @@
 // A schema created by CreateSchema records the owning process and test in its
 // comment.
 //
+// When the test finishes, its schemas are dropped with CASCADE, removing
+// whatever the test left in them. The test fails if the drop also removes
+// objects outside its schemas, such as a view in another schema that reads
+// one of its tables.
+//
 // A test run that panics or is killed leaves its schemas behind. The first
 // OpenAdmin call in each process sweeps them: it drops every test schema
 // whose process is no longer running, and every schema carrying this
@@ -168,7 +173,8 @@ func NewSchemaPrefix(c *tc.C) string {
 }
 
 // CreateSchema creates the named schema, records the owning process and
-// test in its comment, and drops the schema when the test finishes.
+// test in its comment, and drops the schema when the test finishes. The
+// test fails if the drop removes objects outside the schema.
 func CreateSchema(c *tc.C, admin *sql.DB, name string) {
 	quoted := pgx.Identifier{name}.Sanitize()
 	_, err := admin.ExecContext(c.Context(), "CREATE SCHEMA "+quoted)
@@ -185,7 +191,9 @@ func CreateSchema(c *tc.C, admin *sql.DB, name string) {
 }
 
 // DropSchemasOnCleanup drops every schema whose name starts with prefix
-// when the test finishes. It is for schemas created by code under test.
+// when the test finishes. It is for schemas created by code under test. The
+// test fails if a drop removes objects outside the schema being dropped,
+// including objects in another of the dropped schemas.
 func DropSchemasOnCleanup(c *tc.C, admin *sql.DB, prefix string) {
 	if !strings.HasPrefix(prefix, SchemaNamePrefix) {
 		c.Fatalf("schema prefix %q does not start with %q", prefix, SchemaNamePrefix)
@@ -280,11 +288,136 @@ func schemaNames(ctx context.Context, admin *sql.DB) ([]string, error) {
 	return names, rows.Err()
 }
 
-func dropSchema(c *tc.C, admin *sql.DB, name string) {
-	_, err := admin.ExecContext(context.Background(),
-		"DROP SCHEMA IF EXISTS "+pgx.Identifier{name}.Sanitize()+" CASCADE")
-	c.Check(err, tc.ErrorIsNil, tc.Commentf("dropping schema %q", name))
+// reporter fails a test. *tc.C implements it.
+type reporter interface {
+	Errorf(format string, args ...any)
 }
+
+// dropSchema drops a test schema and everything in it with CASCADE, so that
+// the database is clean for later tests. It fails the test if the drop also
+// removes objects outside the schema. A test that makes objects elsewhere
+// depend on its schema must remove them before it finishes.
+func dropSchema(r reporter, admin *sql.DB, name string) {
+	ctx := context.Background()
+	outside, err := outsideDependents(ctx, admin, name)
+	if err != nil {
+		r.Errorf("listing objects outside schema %q that depend on it: %v",
+			name, err)
+	} else if len(outside) > 0 {
+		r.Errorf("dropping schema %q with CASCADE also drops these objects "+
+			"outside it, which the test should drop first:\n%s",
+			name, strings.Join(outside, "\n"))
+	}
+
+	_, err = admin.ExecContext(ctx,
+		"DROP SCHEMA IF EXISTS "+pgx.Identifier{name}.Sanitize()+" CASCADE")
+	if err != nil {
+		r.Errorf("dropping schema %q: %v", name, err)
+	}
+}
+
+type queryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+// outsideDependents describes each dependency of an object outside the named
+// schema on the schema or an object inside it. Dropping the schema with
+// CASCADE drops those outside objects too.
+//
+// An object is inside when its catalog row names the schema, or when it
+// belongs to a relation or operator family that does. Objects in catalogs
+// not listed count as outside, so a gap reports too much rather than too
+// little. Internal dependents are skipped: they are part of the object they
+// depend on and are dropped even without CASCADE, like a table's TOAST
+// table in pg_toast. A chain of dependents that leaves the schema has a
+// first link outside it, so only direct dependents need checking.
+func outsideDependents(ctx context.Context, db queryer, name string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, outsideDependentsQuery, name)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var deps []string
+	for rows.Next() {
+		var dep string
+		if err := rows.Scan(&dep); err != nil {
+			return nil, err
+		}
+		deps = append(deps, dep)
+	}
+	return deps, rows.Err()
+}
+
+const outsideDependentsQuery = `
+WITH target AS (
+    SELECT oid FROM pg_namespace WHERE nspname = $1
+),
+inside_rel AS (
+    SELECT c.oid FROM pg_class c JOIN target t ON c.relnamespace = t.oid
+),
+inside_opf AS (
+    SELECT f.oid FROM pg_opfamily f JOIN target t ON f.opfnamespace = t.oid
+),
+inside (classid, objid) AS (
+    SELECT 'pg_namespace'::regclass, oid FROM target
+    UNION ALL SELECT 'pg_class'::regclass, oid FROM inside_rel
+    UNION ALL SELECT 'pg_opfamily'::regclass, oid FROM inside_opf
+    UNION ALL SELECT 'pg_type'::regclass, x.oid
+        FROM pg_type x JOIN target t ON x.typnamespace = t.oid
+    UNION ALL SELECT 'pg_proc'::regclass, x.oid
+        FROM pg_proc x JOIN target t ON x.pronamespace = t.oid
+    UNION ALL SELECT 'pg_constraint'::regclass, x.oid
+        FROM pg_constraint x JOIN target t ON x.connamespace = t.oid
+    UNION ALL SELECT 'pg_collation'::regclass, x.oid
+        FROM pg_collation x JOIN target t ON x.collnamespace = t.oid
+    UNION ALL SELECT 'pg_conversion'::regclass, x.oid
+        FROM pg_conversion x JOIN target t ON x.connamespace = t.oid
+    UNION ALL SELECT 'pg_operator'::regclass, x.oid
+        FROM pg_operator x JOIN target t ON x.oprnamespace = t.oid
+    UNION ALL SELECT 'pg_opclass'::regclass, x.oid
+        FROM pg_opclass x JOIN target t ON x.opcnamespace = t.oid
+    UNION ALL SELECT 'pg_statistic_ext'::regclass, x.oid
+        FROM pg_statistic_ext x JOIN target t ON x.stxnamespace = t.oid
+    UNION ALL SELECT 'pg_ts_config'::regclass, x.oid
+        FROM pg_ts_config x JOIN target t ON x.cfgnamespace = t.oid
+    UNION ALL SELECT 'pg_ts_dict'::regclass, x.oid
+        FROM pg_ts_dict x JOIN target t ON x.dictnamespace = t.oid
+    UNION ALL SELECT 'pg_ts_parser'::regclass, x.oid
+        FROM pg_ts_parser x JOIN target t ON x.prsnamespace = t.oid
+    UNION ALL SELECT 'pg_ts_template'::regclass, x.oid
+        FROM pg_ts_template x JOIN target t ON x.tmplnamespace = t.oid
+    UNION ALL SELECT 'pg_default_acl'::regclass, x.oid
+        FROM pg_default_acl x JOIN target t ON x.defaclnamespace = t.oid
+    UNION ALL SELECT 'pg_trigger'::regclass, x.oid
+        FROM pg_trigger x JOIN inside_rel r ON x.tgrelid = r.oid
+    UNION ALL SELECT 'pg_rewrite'::regclass, x.oid
+        FROM pg_rewrite x JOIN inside_rel r ON x.ev_class = r.oid
+    UNION ALL SELECT 'pg_attrdef'::regclass, x.oid
+        FROM pg_attrdef x JOIN inside_rel r ON x.adrelid = r.oid
+    UNION ALL SELECT 'pg_policy'::regclass, x.oid
+        FROM pg_policy x JOIN inside_rel r ON x.polrelid = r.oid
+    UNION ALL SELECT 'pg_amop'::regclass, x.oid
+        FROM pg_amop x JOIN inside_opf f ON x.amopfamily = f.oid
+    UNION ALL SELECT 'pg_amproc'::regclass, x.oid
+        FROM pg_amproc x JOIN inside_opf f ON x.amprocfamily = f.oid
+)
+-- A description is NULL when another session has just dropped the object.
+SELECT dep FROM (
+    SELECT DISTINCT
+        pg_describe_object(d.classid, d.objid, d.objsubid) || ' depends on ' ||
+        pg_describe_object(d.refclassid, d.refobjid, d.refobjsubid) AS dep
+    FROM pg_depend d
+    JOIN inside ref ON ref.classid = d.refclassid AND ref.objid = d.refobjid
+    WHERE d.deptype <> 'i'
+    AND NOT EXISTS (
+        SELECT 1 FROM inside dep
+        WHERE dep.classid = d.classid AND dep.objid = d.objid
+    )
+) deps
+WHERE dep IS NOT NULL
+ORDER BY dep
+`
 
 func quoteLiteral(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
