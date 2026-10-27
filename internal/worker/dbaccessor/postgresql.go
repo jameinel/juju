@@ -76,15 +76,37 @@ func (n *PostgresNamespaces) EnsureModelInitialised(
 }
 
 // Ping checks that the namespace's schema still exists, which also checks
-// that the database can be reached. A missing schema returns an error
-// satisfying errors.Is(err, coredatabase.ErrDBDead).
+// that the database can be reached. A missing model schema returns an error
+// satisfying errors.Is(err, coredatabase.ErrDBDead). A missing controller
+// schema returns a plain error instead: Juju never deletes it, so its loss
+// must fail the dbaccessor worker rather than quietly retire one tracker.
 func (n *PostgresNamespaces) Ping(ctx context.Context, namespace string, db *sql.DB) error {
 	schemaName := n.placement.SchemaName(namespace)
 	exists, err := postgresql.SchemaExists(ctx, db, schemaName)
 	if err != nil {
 		return errors.Trace(err)
-	} else if !exists {
-		return errors.Annotatef(coredatabase.ErrDBDead, "schema %q no longer exists", schemaName)
+	} else if exists {
+		return nil
+	}
+	if namespace == coredatabase.ControllerNS {
+		return errors.Errorf("controller schema %q no longer exists", schemaName)
+	}
+	return errors.Annotatef(coredatabase.ErrDBDead, "schema %q no longer exists", schemaName)
+}
+
+// CheckControllerInitialised returns an error unless the controller schema
+// has had its DDL applied. Only bootstrap creates and initialises it.
+func (n *PostgresNamespaces) CheckControllerInitialised(ctx context.Context, runner coredatabase.TxnRunner) error {
+	schemaName := n.placement.SchemaName(coredatabase.ControllerNS)
+	var initialised bool
+	if err := runner.StdTxn(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		var err error
+		initialised, err = postgresql.SchemaInitialised(ctx, tx, schemaName)
+		return err
+	}); err != nil {
+		return errors.Trace(err)
+	} else if !initialised {
+		return errors.Errorf("controller schema %q is not initialised", schemaName)
 	}
 	return nil
 }
