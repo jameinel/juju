@@ -4,6 +4,7 @@
 package upgradedatabase
 
 import (
+	"context"
 	"testing"
 
 	"github.com/canonical/gomock/gomock"
@@ -16,9 +17,12 @@ import (
 	dependencytesting "github.com/juju/worker/v5/dependency/testing"
 	"github.com/juju/worker/v5/workertest"
 
+	"github.com/juju/juju/controller"
 	"github.com/juju/juju/core/semversion"
 	controllernodeservice "github.com/juju/juju/domain/controllernode/service"
+	"github.com/juju/juju/domain/schema"
 	upgradeservice "github.com/juju/juju/domain/upgrade/service"
+	"github.com/juju/juju/internal/database/connsource"
 	"github.com/juju/juju/internal/worker/upgradedatabase/upgradesteps"
 )
 
@@ -84,6 +88,10 @@ func (s *manifoldSuite) TestValidateConfig(c *tc.C) {
 	c.Check(cfg.Validate(), tc.ErrorIs, errors.NotValid)
 
 	cfg = s.getConfig()
+	cfg.DBConnectionSource = nil
+	c.Check(cfg.Validate(), tc.ErrorIs, errors.NotValid)
+
+	cfg = s.getConfig()
 	cfg.Logger = nil
 	c.Check(cfg.Validate(), tc.ErrorIs, errors.NotValid)
 
@@ -138,10 +146,13 @@ func (s *manifoldSuite) getConfig() ManifoldConfig {
 		UpgradeDBGateName:   "upgrade-database-lock",
 		UpgradeServicesName: "upgrade-services",
 		DBAccessorName:      "db-accessor",
-		Logger:              s.logger,
-		Clock:               clock.WallClock,
-		NewWorker:           func(Config) (worker.Worker, error) { return s.worker, nil },
-		UpgradeSteps:        map[VersionWindow][]UpgradeStep{},
+		DBConnectionSource: stubConnectionSource{details: connsource.Details{
+			Backend: controller.DBBackendDqlite,
+		}},
+		Logger:       s.logger,
+		Clock:        clock.WallClock,
+		NewWorker:    func(Config) (worker.Worker, error) { return s.worker, nil },
+		UpgradeSteps: map[VersionWindow][]UpgradeStep{},
 	}
 }
 
@@ -166,14 +177,66 @@ func (s *manifoldSuite) TestInputs(c *tc.C) {
 func (s *manifoldSuite) TestStart(c *tc.C) {
 	defer s.setupMocks(c).Finish()
 
+	cfg := s.start(c, controller.DBBackendDqlite)
+	c.Check(cfg.Backend, tc.Equals, schema.BackendDqlite)
+}
+
+func (s *manifoldSuite) TestStartPostgreSQL(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	cfg := s.start(c, controller.DBBackendPostgreSQL)
+	c.Check(cfg.Backend, tc.Equals, schema.BackendPostgreSQL)
+}
+
+func (s *manifoldSuite) TestStartUnknownBackend(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	cfg := s.getConfig()
+	cfg.DBConnectionSource = stubConnectionSource{details: connsource.Details{Backend: "mysql"}}
+
+	_, err := Manifold(cfg).Start(c.Context(), s.newGetter())
+	c.Check(err, tc.ErrorMatches, `unknown database backend "mysql"`)
+}
+
+func (s *manifoldSuite) TestStartConnectionSourceError(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	cfg := s.getConfig()
+	cfg.DBConnectionSource = stubConnectionSource{err: errors.New("boom")}
+
+	_, err := Manifold(cfg).Start(c.Context(), s.newGetter())
+	c.Check(err, tc.ErrorMatches, `reading database connection details: boom`)
+}
+
+// start starts the manifold with a connection source for the given backend,
+// and returns the config passed to the worker.
+func (s *manifoldSuite) start(c *tc.C, backend string) Config {
 	s.expectWorker()
 
-	w, err := Manifold(s.getConfig()).Start(c.Context(), s.newGetter())
+	var workerConfig Config
+	cfg := s.getConfig()
+	cfg.DBConnectionSource = stubConnectionSource{details: connsource.Details{Backend: backend}}
+	cfg.NewWorker = func(config Config) (worker.Worker, error) {
+		workerConfig = config
+		return s.worker, nil
+	}
+
+	w, err := Manifold(cfg).Start(c.Context(), s.newGetter())
 	c.Assert(err, tc.ErrorIsNil)
 	workertest.CleanKill(c, w)
+	return workerConfig
 }
 
 func (s *manifoldSuite) expectWorker() {
 	s.worker.EXPECT().Kill()
 	s.worker.EXPECT().Wait().Return(nil)
+}
+
+type stubConnectionSource struct {
+	details connsource.Details
+	err     error
+}
+
+func (s stubConnectionSource) Details(context.Context) (connsource.Details, error) {
+	return s.details, s.err
 }

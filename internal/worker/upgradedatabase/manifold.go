@@ -12,11 +12,14 @@ import (
 	"github.com/juju/worker/v5/dependency"
 
 	"github.com/juju/juju/agent"
+	"github.com/juju/juju/controller"
 	coredatabase "github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/logger"
 	"github.com/juju/juju/core/model"
 	"github.com/juju/juju/core/semversion"
 	jujuversion "github.com/juju/juju/core/version"
+	"github.com/juju/juju/domain/schema"
+	"github.com/juju/juju/internal/database/connsource"
 	"github.com/juju/juju/internal/services"
 	"github.com/juju/juju/internal/worker/gate"
 	"github.com/juju/juju/internal/worker/upgradedatabase/upgradesteps"
@@ -33,6 +36,10 @@ type ManifoldConfig struct {
 	UpgradeDBGateName   string
 	DBAccessorName      string
 	UpgradeServicesName string
+
+	// DBConnectionSource selects the database backend, and with it the
+	// schemas that the upgrade applies.
+	DBConnectionSource connsource.Source
 
 	Logger    logger.Logger
 	Clock     clock.Clock
@@ -54,6 +61,9 @@ func (cfg ManifoldConfig) Validate() error {
 	}
 	if cfg.UpgradeServicesName == "" {
 		return errors.NotValidf("empty UpgradeServicesName")
+	}
+	if cfg.DBConnectionSource == nil {
+		return errors.NotValidf("nil DBConnectionSource")
 	}
 	if cfg.Logger == nil {
 		return errors.NotValidf("nil Logger")
@@ -109,6 +119,11 @@ func Manifold(cfg ManifoldConfig) dependency.Manifold {
 
 			currentConfig := controllerAgent.CurrentConfig()
 
+			backend, err := databaseBackend(ctx, cfg.DBConnectionSource)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+
 			// Work out where we're upgrading from and, where we want to upgrade
 			// to.
 			fromVersion := currentConfig.UpgradedToVersion()
@@ -123,6 +138,7 @@ func Manifold(cfg ManifoldConfig) dependency.Manifold {
 					ServicesForController().Upgrade(),
 				UpgradeSteps: filterSteps(cfg.UpgradeSteps, fromVersion),
 				DBGetter:     dbGetter,
+				Backend:      backend,
 				Tag:          currentConfig.Tag(),
 				FromVersion:  fromVersion,
 				ToVersion:    toVersion,
@@ -130,6 +146,23 @@ func Manifold(cfg ManifoldConfig) dependency.Manifold {
 				Clock:        cfg.Clock,
 			})
 		},
+	}
+}
+
+// databaseBackend returns the schema backend for the database backend that
+// the connection source selects.
+func databaseBackend(ctx context.Context, source connsource.Source) (schema.Backend, error) {
+	details, err := source.Details(ctx)
+	if err != nil {
+		return "", errors.Annotate(err, "reading database connection details")
+	}
+	switch details.Backend {
+	case controller.DBBackendDqlite:
+		return schema.BackendDqlite, nil
+	case controller.DBBackendPostgreSQL:
+		return schema.BackendPostgreSQL, nil
+	default:
+		return "", errors.Errorf("unknown database backend %q", details.Backend)
 	}
 }
 
