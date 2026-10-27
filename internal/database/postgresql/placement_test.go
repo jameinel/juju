@@ -6,8 +6,12 @@ package postgresql
 import (
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
+	"fmt"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/juju/tc"
 
 	coretesting "github.com/juju/juju/internal/testing"
@@ -87,6 +91,37 @@ func (s *placementSuite) TestWithRootCAsVerifyCAUsesPool(c *tc.C) {
 	)
 	c.Assert(err, tc.ErrorIsNil)
 	c.Check(cfg.TLSConfig.VerifyPeerCertificate([][]byte{serverCert}, nil), tc.ErrorMatches, ".*unknown authority.*")
+}
+
+func (s *placementSuite) TestDeleteSchemaRejectsShortLockTimeout(c *tc.C) {
+	// Zero disables PostgreSQL's lock timeout, so it must not get through.
+	for _, timeout := range []time.Duration{-time.Second, 0, time.Millisecond - 1} {
+		c.Logf("lock timeout %v", timeout)
+		err := DeleteSchema(c.Context(), nil, "juju_x", timeout)
+		c.Check(err, tc.ErrorMatches, `deleting schema "juju_x": lock timeout .* is less than a millisecond`)
+	}
+}
+
+func (s *placementSuite) TestWithDetail(c *tc.C) {
+	err := withDetail(fmt.Errorf("dropping: %w", &pgconn.PgError{
+		Severity: "ERROR",
+		Code:     "2BP01",
+		Message:  "cannot drop table t because other objects depend on it",
+		Detail:   "view v depends on table t",
+		Hint:     "Use DROP ... CASCADE to drop the dependent objects too.",
+	}))
+	c.Check(err, tc.ErrorMatches,
+		`dropping: ERROR: cannot drop table t because other objects depend on it \(SQLSTATE 2BP01\): view v depends on table t`)
+	var pgErr *pgconn.PgError
+	c.Check(errors.As(err, &pgErr), tc.IsTrue)
+
+	err = withDetail(&pgconn.PgError{
+		Severity: "ERROR", Code: "55P03", Message: "canceling statement due to lock timeout",
+	})
+	c.Check(err, tc.ErrorMatches, `ERROR: canceling statement due to lock timeout \(SQLSTATE 55P03\)`)
+
+	plain := errors.New("boom")
+	c.Check(withDetail(plain), tc.Equals, plain)
 }
 
 func caPool(c *tc.C, caPEM string) *x509.CertPool {

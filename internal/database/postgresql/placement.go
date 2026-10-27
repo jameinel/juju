@@ -8,6 +8,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -104,14 +107,158 @@ func EnsureSchema(ctx context.Context, db Execer, name string) error {
 	return nil
 }
 
-// DropSchema drops the schema and everything in it. Dropping a schema that
-// does not exist is not an error.
+// DropSchema drops the schema and everything in it, with CASCADE. Dropping a
+// schema that does not exist is not an error. It is for tests only: Juju
+// deletes a namespace's schema with DeleteSchema, which never cascades.
 func DropSchema(ctx context.Context, db Execer, name string) error {
 	_, err := db.ExecContext(ctx, "DROP SCHEMA IF EXISTS "+QuoteIdentifier(name)+" CASCADE")
 	if err != nil {
 		return fmt.Errorf("dropping schema %q: %w", name, err)
 	}
 	return nil
+}
+
+// DeleteSchema drops a Juju namespace's schema without CASCADE, so it removes
+// only the kinds of object that Juju creates there. In one transaction it
+// lists the schema's objects from pg_catalog and drops its views, then its
+// tables (with their indexes, triggers and owned sequences), then its
+// functions, then any remaining sequences, and finally the schema, each with
+// RESTRICT. Any other object in the schema, or an object outside it that
+// depends on one inside, fails the delete and nothing is dropped. The error
+// then carries PostgreSQL's detail, which names the dependent objects.
+//
+// Each lock wait is bounded by lockTimeout, which must be at least a
+// millisecond. Deleting a schema that does not exist succeeds, as does
+// deleting one that another session deletes concurrently.
+func DeleteSchema(ctx context.Context, db *sql.DB, name string, lockTimeout time.Duration) error {
+	if lockTimeout < time.Millisecond {
+		return fmt.Errorf("deleting schema %q: lock timeout %v is less than a millisecond", name, lockTimeout)
+	}
+
+	// The transaction reads pg_catalog after waiting for locks, so each
+	// statement needs a fresh snapshot: a SERIALIZABLE snapshot would still
+	// list objects that a concurrent delete has since dropped, and regclass
+	// renders a dropped relation as its bare OID. SERIALIZABLE (D7) adds
+	// nothing here, as PostgreSQL does not track reads of system catalogs.
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return fmt.Errorf("deleting schema %q: %w", name, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := deleteSchema(ctx, tx, name, lockTimeout); err != nil {
+		return fmt.Errorf("deleting schema %q: %w", name, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("deleting schema %q: committing: %w", name, withDetail(err))
+	}
+	return nil
+}
+
+// deleteSteps are the kinds of object that DeleteSchema drops, in order. Each
+// list query takes the schema name as its only parameter and returns names
+// that PostgreSQL has quoted and qualified for the session's search_path.
+var deleteSteps = []struct {
+	kind string
+	drop string
+	list string
+}{{
+	kind: "views",
+	drop: "VIEW",
+	list: listRelations("v"),
+}, {
+	kind: "tables",
+	drop: "TABLE",
+	list: listRelations("r"),
+}, {
+	kind: "functions",
+	drop: "FUNCTION",
+	list: `
+SELECT p.oid::pg_catalog.regprocedure::text
+FROM pg_catalog.pg_proc AS p
+JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace
+WHERE n.nspname = $1 AND p.prokind = 'f'
+ORDER BY p.oid`,
+}, {
+	kind: "sequences",
+	drop: "SEQUENCE",
+	list: listRelations("S"),
+}}
+
+// listRelations returns the query listing a schema's relations of one
+// pg_class relkind: "v" for views, "r" for tables and "S" for sequences.
+func listRelations(relkind string) string {
+	return `
+SELECT c.oid::pg_catalog.regclass::text
+FROM pg_catalog.pg_class AS c
+JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
+WHERE n.nspname = $1 AND c.relkind = '` + relkind + `'
+ORDER BY c.oid`
+}
+
+func deleteSchema(ctx context.Context, tx *sql.Tx, name string, lockTimeout time.Duration) error {
+	// SET takes no parameters, so the value is formatted into the statement.
+	_, err := tx.ExecContext(ctx,
+		"SET LOCAL lock_timeout = "+strconv.FormatInt(lockTimeout.Milliseconds(), 10))
+	if err != nil {
+		return fmt.Errorf("setting lock timeout: %w", err)
+	}
+
+	if exists, err := SchemaExists(ctx, tx, name); err != nil {
+		return err
+	} else if !exists {
+		return nil
+	}
+
+	// Each list is read after the previous drop, so it holds only what
+	// remains, such as sequences that no table owned. IF EXISTS skips an
+	// object that a concurrent delete dropped after it was listed.
+	for _, step := range deleteSteps {
+		names, err := listNames(ctx, tx, step.list, name)
+		if err != nil {
+			return fmt.Errorf("listing %s: %w", step.kind, err)
+		} else if len(names) == 0 {
+			continue
+		}
+		stmt := "DROP " + step.drop + " IF EXISTS " + strings.Join(names, ", ") + " RESTRICT"
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("dropping %s: %w", step.kind, withDetail(err))
+		}
+	}
+
+	_, err = tx.ExecContext(ctx, "DROP SCHEMA IF EXISTS "+QuoteIdentifier(name)+" RESTRICT")
+	if err != nil {
+		return fmt.Errorf("dropping schema: %w", withDetail(err))
+	}
+	return nil
+}
+
+func listNames(ctx context.Context, tx *sql.Tx, query, schemaName string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, query, schemaName)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
+}
+
+// withDetail appends a PostgreSQL error's detail, which pgconn leaves out of
+// the error's message. For a failed drop it names the dependent objects.
+func withDetail(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Detail != "" {
+		return fmt.Errorf("%w: %s", err, pgErr.Detail)
+	}
+	return err
 }
 
 // SchemaExists reports whether the schema exists.
