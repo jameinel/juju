@@ -526,6 +526,7 @@ func commonManifolds(config ManifoldsConfig) dependency.Manifolds {
 			UpgradeDBGateName:   upgradeDatabaseGateName,
 			UpgradeServicesName: upgradeDomainServicesName,
 			DBAccessorName:      dbAccessorName,
+			DBConnectionSource:  config.StartupValueProvider,
 			NewWorker:           upgradedatabase.NewUpgradeDatabaseWorker,
 			Logger:              internallogger.GetLogger("juju.worker.upgradedatabase"),
 			Clock:               config.Clock,

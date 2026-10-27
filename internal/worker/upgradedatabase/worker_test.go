@@ -29,6 +29,7 @@ import (
 	watcher "github.com/juju/juju/core/watcher"
 	"github.com/juju/juju/core/watcher/watchertest"
 	"github.com/juju/juju/domain/schema"
+	schematesting "github.com/juju/juju/domain/schema/testing"
 	domainupgrade "github.com/juju/juju/domain/upgrade"
 	upgradeerrors "github.com/juju/juju/domain/upgrade/errors"
 	databasetesting "github.com/juju/juju/internal/database/testing"
@@ -736,8 +737,9 @@ func (s *workerSuite) TestUpgradeControllerThatIsAlreadyUpgraded(c *tc.C) {
 	//  - Upgrade the controller db and re-run the upgrades to ensure that they
 	//    don't break in the worker.
 
-	schema := schema.ControllerDDL()
-	_, err := schema.Ensure(c.Context(), s.TxnRunner())
+	ddl, err := schema.ControllerDDLForBackend(cfg.Backend)
+	c.Assert(err, tc.ErrorIsNil)
+	_, err = ddl.Ensure(c.Context(), s.TxnRunner())
 	c.Assert(err, tc.ErrorIsNil)
 
 	s.expectControllerDBUpgrade()
@@ -877,8 +879,9 @@ func (s *workerSuite) TestUpgradeModelsThatIsAlreadyUpgraded(c *tc.C) {
 
 	// Run the upgrade steps on the existing model, to ensure it doesn't break
 	// in the worker.
-	schema := schema.ModelDDL()
-	_, err := schema.Ensure(c.Context(), txnRunner)
+	ddl, err := schema.ModelDDLForBackend(cfg.Backend)
+	c.Assert(err, tc.ErrorIsNil)
+	_, err = ddl.Ensure(c.Context(), txnRunner)
 	c.Assert(err, tc.ErrorIsNil)
 
 	s.expectDBCompleted()
@@ -899,6 +902,89 @@ func (s *workerSuite) TestUpgradeModelsThatIsAlreadyUpgraded(c *tc.C) {
 
 	err = workertest.CheckKill(c, w)
 	c.Check(err, tc.ErrorIs, dependency.ErrUninstall)
+}
+
+func (s *workerSuite) TestValidateBackend(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	cfg := s.getConfig()
+	for _, backend := range []schema.Backend{schema.BackendDqlite, schema.BackendPostgreSQL} {
+		cfg.Backend = backend
+		c.Check(cfg.Validate(), tc.ErrorIsNil, tc.Commentf("backend %q", backend))
+	}
+	for _, backend := range []schema.Backend{"", "mysql"} {
+		cfg.Backend = backend
+		c.Check(cfg.Validate(), tc.ErrorIs, errors.NotValid, tc.Commentf("backend %q", backend))
+	}
+}
+
+// TestUpgradeControllerUsesConfiguredBackend checks that the controller
+// schema follows the configured backend. The other backend's schema cannot
+// be applied to the test database, so the upgrade is aborted.
+func (s *workerSuite) TestUpgradeControllerUsesConfiguredBackend(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	s.controllerNodeService.EXPECT().SetControllerNodeReportedAgentVersion(
+		gomock.Any(),
+		"0",
+		coreagentbinary.Version{
+			Number: jujuversion.Current,
+			Arch:   arch.HostArch(),
+		},
+	)
+
+	// Ensure that the update hasn't already happened.
+	s.lock.EXPECT().IsUnlocked().Return(false)
+
+	cfg := s.getConfig()
+	cfg.Backend = otherBackend()
+
+	ch := make(chan struct{}, 1)
+
+	watcher := watchertest.NewMockNotifyWatcher(ch)
+	defer workertest.DirtyKill(c, watcher)
+
+	s.expectStartUpgrade(cfg.FromVersion, cfg.ToVersion, watcher)
+	s.expectControllerDBUpgrade()
+
+	failed := make(chan struct{})
+	s.upgradeService.EXPECT().SetDBUpgradeFailed(gomock.Any(), s.upgradeUUID).DoAndReturn(
+		func(context.Context, domainupgrade.UUID) error {
+			close(failed)
+			return nil
+		},
+	)
+
+	w, err := NewUpgradeDatabaseWorker(cfg)
+	c.Assert(err, tc.ErrorIsNil)
+	defer workertest.DirtyKill(c, w)
+
+	// Dispatch the upgrade-ready event (consumed by the loop).
+	s.dispatchChange(c, ch)
+
+	<-failed
+
+	err = workertest.CheckKill(c, w)
+	c.Check(err, tc.ErrorMatches, `aborting upgrade: applying controller schema: .*`)
+}
+
+// TestUpgradeModelUsesConfiguredBackend checks that the model schema follows
+// the configured backend, by applying the other backend's schema to the test
+// database.
+func (s *workerSuite) TestUpgradeModelUsesConfiguredBackend(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	modelUUID := tc.Must(c, coremodel.NewUUID)
+	modelDB, _ := s.OpenDB(c)
+	s.dbGetter.EXPECT().GetDB(gomock.Any(), modelUUID.String()).Return(modelDB, nil)
+
+	w := &upgradeDBWorker{
+		dbGetter: s.dbGetter,
+		backend:  otherBackend(),
+		logger:   s.logger,
+	}
+	err := w.upgradeModel(c.Context(), modelUUID)
+	c.Check(err, tc.ErrorMatches, `applying model schema `+modelUUID.String()+`: .*`)
 }
 
 func (s *workerSuite) TestUpgradeFailsWhenKilled(c *tc.C) {
@@ -1237,10 +1323,19 @@ func (s *workerSuite) getConfig() Config {
 		UpgradeService:        s.upgradeService,
 		ControllerNodeService: s.controllerNodeService,
 		DBGetter:              s.dbGetter,
+		Backend:               schematesting.BackendForTest(),
 		FromVersion:           semversion.MustParse("3.0.0"),
 		ToVersion:             semversion.MustParse("6.6.6"),
 		Tag:                   names.NewMachineTag("0"),
 	}
+}
+
+// otherBackend returns the schema backend that the tests are not using.
+func otherBackend() schema.Backend {
+	if schematesting.BackendForTest() == schema.BackendPostgreSQL {
+		return schema.BackendDqlite
+	}
+	return schema.BackendPostgreSQL
 }
 
 func (s *workerSuite) expectStartUpgrade(from, to semversion.Number, watcher watcher.NotifyWatcher) {

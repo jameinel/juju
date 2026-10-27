@@ -106,6 +106,10 @@ type Config struct {
 	// DBGetter is the database getter used to get the database for each model.
 	DBGetter coredatabase.DBGetter
 
+	// Backend selects the controller and model schemas that the upgrade
+	// applies.
+	Backend schema.Backend
+
 	// Tag holds the controller tag information.
 	Tag names.Tag
 
@@ -143,6 +147,11 @@ func (c Config) Validate() error {
 	if c.UpgradeService == nil {
 		return errors.NotValidf("nil UpgradeService")
 	}
+	switch c.Backend {
+	case schema.BackendDqlite, schema.BackendPostgreSQL:
+	default:
+		return errors.NotValidf("Backend %q", c.Backend)
+	}
 	return nil
 }
 
@@ -159,6 +168,7 @@ type upgradeDBWorker struct {
 	upgradeSteps []UpgradeStep
 
 	dbGetter coredatabase.DBGetter
+	backend  schema.Backend
 
 	upgradeService        UpgradeService
 	controllerNodeService ControllerNodeService
@@ -184,6 +194,7 @@ func NewUpgradeDatabaseWorker(config Config) (worker.Worker, error) {
 		toVersion:   config.ToVersion,
 
 		dbGetter: config.DBGetter,
+		backend:  config.Backend,
 
 		upgradeService:        config.UpgradeService,
 		controllerNodeService: config.ControllerNodeService,
@@ -502,7 +513,10 @@ func (w *upgradeDBWorker) upgradeController(ctx context.Context) error {
 		return errors.Annotatef(err, "controller db")
 	}
 
-	ddl := schema.ControllerDDL()
+	ddl, err := schema.ControllerDDLForBackend(w.backend)
+	if err != nil {
+		return errors.Annotatef(err, "selecting controller schema")
+	}
 	changeSet, err := ddl.Ensure(ctx, db)
 	if err != nil {
 		return errors.Annotatef(err, "applying controller schema")
@@ -534,7 +548,10 @@ func (w *upgradeDBWorker) upgradeModel(ctx context.Context, modelUUID coremodel.
 		return errors.Annotatef(err, "model db %s", modelUUID)
 	}
 
-	ddl := schema.ModelDDL()
+	ddl, err := schema.ModelDDLForBackend(w.backend)
+	if err != nil {
+		return errors.Annotatef(err, "selecting model schema")
+	}
 	changeSet, err := ddl.Ensure(ctx, modelDB)
 	if err != nil {
 		return errors.Annotatef(err, "applying model schema %s", modelUUID)
