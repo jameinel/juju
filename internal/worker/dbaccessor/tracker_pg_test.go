@@ -215,7 +215,7 @@ func (s *trackedDBPostgresSuite) TestCancelledInitialisationLeavesNoMarker(c *tc
 		errs <- err
 	}()
 
-	waitForBlocked(c, s.admin, blocker)
+	pgtesting.WaitForBlocked(c, s.admin, blocker)
 	cancel()
 
 	select {
@@ -380,27 +380,6 @@ func (s *trackedDBPostgresSuite) adminRelationExists(c *tc.C, schemaName, relati
 	).Scan(&exists)
 	c.Assert(err, tc.ErrorIsNil)
 	return exists
-}
-
-// waitForBlocked waits until another session is waiting on a lock held by
-// the blocker backend.
-func waitForBlocked(c *tc.C, admin *sql.DB, blocker int) {
-	for {
-		var waiting bool
-		err := admin.QueryRowContext(c.Context(),
-			"SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)))",
-			blocker,
-		).Scan(&waiting)
-		c.Assert(err, tc.ErrorIsNil)
-		if waiting {
-			return
-		}
-		select {
-		case <-time.After(10 * time.Millisecond):
-		case <-c.Context().Done():
-			c.Fatal("timed out waiting for a session to block")
-		}
-	}
 }
 
 func modelDDL(c *tc.C) *coreschema.Schema {

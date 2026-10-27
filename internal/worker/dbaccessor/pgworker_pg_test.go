@@ -184,7 +184,7 @@ func (s *pgWorkerSuite) TestKillWhileRegistering(c *tc.C) {
 
 	w := s.newWorker(c, s.config(c, "0"))
 	defer workertest.DirtyKill(c, w)
-	waitForBlocked(c, s.admin, blocker)
+	pgtesting.WaitForBlocked(c, s.admin, blocker)
 
 	ctx, cancel := context.WithCancel(c.Context())
 	cancel()
@@ -384,7 +384,7 @@ func (s *pgWorkerSuite) TestDeleteDBWaitsForLock(c *tc.C) {
 	go func() {
 		done <- w.DeleteDB(modelNS)
 	}()
-	waitForBlocked(c, s.admin, blockerPID)
+	pgtesting.WaitForBlocked(c, s.admin, blockerPID)
 
 	// A cached database is still served while the delete waits.
 	controller, err := w.GetDB(c.Context(), coredatabase.ControllerNS)
@@ -419,7 +419,7 @@ func (s *pgWorkerSuite) TestKillWhileDeleting(c *tc.C) {
 	go func() {
 		done <- w.DeleteDB(modelNS)
 	}()
-	waitForBlocked(c, s.admin, blockerPID)
+	pgtesting.WaitForBlocked(c, s.admin, blockerPID)
 
 	// Killing the worker cancels the delete. Whether the caller sees the
 	// worker dying or the cancelled delete is a race; either is an error.

@@ -330,7 +330,7 @@ func (s *schemaSuite) TestDeleteSchemaWaitsForLock(c *tc.C) {
 	go func() {
 		done <- postgresql.DeleteSchema(c.Context(), admin, name, time.Minute)
 	}()
-	waitForBlocked(c, admin, blockerPID)
+	pgtesting.WaitForBlocked(c, admin, blockerPID)
 	s.checkSchemaExists(c, admin, name, true)
 
 	c.Assert(blocker.Rollback(), tc.ErrorIsNil)
@@ -352,7 +352,7 @@ func (s *schemaSuite) TestDeleteSchemaCancelled(c *tc.C) {
 	go func() {
 		done <- postgresql.DeleteSchema(ctx, admin, name, time.Minute)
 	}()
-	waitForBlocked(c, admin, blockerPID)
+	pgtesting.WaitForBlocked(c, admin, blockerPID)
 	cancel()
 	c.Check(<-done, tc.ErrorIs, context.Canceled)
 	c.Check(schemaObjects(c, admin, name), tc.DeepEquals, before)
@@ -386,7 +386,7 @@ func (s *schemaSuite) TestDeleteSchemaConcurrentlyDeleted(c *tc.C) {
 	go func() {
 		done <- postgresql.DeleteSchema(c.Context(), admin, name, time.Minute)
 	}()
-	waitForBlocked(c, admin, otherPID)
+	pgtesting.WaitForBlocked(c, admin, otherPID)
 
 	c.Assert(other.Commit(), tc.ErrorIsNil)
 	c.Check(<-done, tc.ErrorIsNil)
@@ -490,27 +490,6 @@ func lockTable(c *tc.C, admin *sql.DB, schemaName, table string) (*sql.Tx, int) 
 		" IN ACCESS SHARE MODE")
 	c.Assert(err, tc.ErrorIsNil)
 	return tx, pid
-}
-
-// waitForBlocked waits until another session is waiting on a lock held by
-// the blocker backend.
-func waitForBlocked(c *tc.C, admin *sql.DB, blocker int) {
-	for {
-		var waiting bool
-		err := admin.QueryRowContext(c.Context(),
-			"SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)))",
-			blocker,
-		).Scan(&waiting)
-		c.Assert(err, tc.ErrorIsNil)
-		if waiting {
-			return
-		}
-		select {
-		case <-time.After(10 * time.Millisecond):
-		case <-c.Context().Done():
-			c.Fatal("timed out waiting for a session to block")
-		}
-	}
 }
 
 func exec(c *tc.C, db *sql.DB, stmt string) {
