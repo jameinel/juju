@@ -226,31 +226,7 @@ func NewWorker(cfg WorkerConfig) (*dbWorker, error) {
 		return nil, errors.Trace(err)
 	}
 
-	runner, err := worker.NewRunner(worker.RunnerParams{
-		Name:  "dbaccessor",
-		Clock: cfg.Clock,
-		// If a worker goes down, we've attempted multiple retries and in
-		// that case we do want to cause the dbaccessor to go down. This
-		// will then bring up a new dqlite app.
-		IsFatal: func(err error) bool {
-			// If a database is dead we should not kill the worker of the
-			// runner.
-			if internalerrors.IsOneOf(err, database.ErrDBDead, database.ErrDBNotFound) {
-				return false
-			}
-
-			// If there is a rebind during starting up a worker the dbApp
-			// will be nil. In this case, we'll return ErrTryAgain. In this
-			// case we don't want to kill the worker. We'll force the
-			// worker to try again.
-			return !errors.Is(err, errTryAgain)
-		},
-		ShouldRestart: func(err error) bool {
-			return !internalerrors.IsOneOf(err, database.ErrDBDead, database.ErrDBNotFound)
-		},
-		RestartDelay: time.Second * 10,
-		Logger:       internalworker.WrapLogger(cfg.Logger),
-	})
+	runner, err := newTrackedDBRunner(cfg.Clock, cfg.Logger)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -274,6 +250,36 @@ func NewWorker(cfg WorkerConfig) (*dbWorker, error) {
 	}
 
 	return w, nil
+}
+
+// newTrackedDBRunner returns the runner that starts and caches a tracked
+// database for each namespace.
+func newTrackedDBRunner(clock clock.Clock, logger logger.Logger) (*worker.Runner, error) {
+	return worker.NewRunner(worker.RunnerParams{
+		Name:  "dbaccessor",
+		Clock: clock,
+		// If a worker goes down, we've attempted multiple retries and in
+		// that case we do want to cause the dbaccessor to go down. This
+		// will then bring up a new dqlite app.
+		IsFatal: func(err error) bool {
+			// If a database is dead we should not kill the worker of the
+			// runner.
+			if internalerrors.IsOneOf(err, database.ErrDBDead, database.ErrDBNotFound) {
+				return false
+			}
+
+			// If there is a rebind during starting up a worker the dbApp
+			// will be nil. In this case, we'll return ErrTryAgain. In this
+			// case we don't want to kill the worker. We'll force the
+			// worker to try again.
+			return !errors.Is(err, errTryAgain)
+		},
+		ShouldRestart: func(err error) bool {
+			return !internalerrors.IsOneOf(err, database.ErrDBDead, database.ErrDBNotFound)
+		},
+		RestartDelay: time.Second * 10,
+		Logger:       internalworker.WrapLogger(logger),
+	})
 }
 
 func (w *dbWorker) loop() (err error) {
