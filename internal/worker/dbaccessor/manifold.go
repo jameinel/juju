@@ -14,11 +14,14 @@ import (
 	"github.com/juju/worker/v5/dependency"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/juju/juju/controller"
 	coredatabase "github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/logger"
 	"github.com/juju/juju/internal/database"
 	"github.com/juju/juju/internal/database/app"
+	"github.com/juju/juju/internal/database/connsource"
 	"github.com/juju/juju/internal/database/dqlite"
+	"github.com/juju/juju/internal/database/postgresql"
 	"github.com/juju/juju/internal/worker/common"
 	"github.com/juju/juju/internal/worker/controlleragentconfig"
 )
@@ -57,12 +60,15 @@ type ManifoldConfig struct {
 	QueryLoggerName           string
 	ControllerAgentConfigName string
 	ControllerStartupValues   ControllerStartupValuesProvider
-	Logger                    logger.Logger
-	PrometheusRegisterer      prometheus.Registerer
-	NewApp                    func(string, ...app.Option) (DBApp, error)
-	NewDBWorker               NewDBWorkerFunc
-	NewNodeManager            NewNodeManagerFunc
-	NewMetricsCollector       func() *Collector
+	// DBConnectionSource selects the database backend, and locates the
+	// database when it is external.
+	DBConnectionSource   connsource.Source
+	Logger               logger.Logger
+	PrometheusRegisterer prometheus.Registerer
+	NewApp               func(string, ...app.Option) (DBApp, error)
+	NewDBWorker          NewDBWorkerFunc
+	NewNodeManager       NewNodeManagerFunc
+	NewMetricsCollector  func() *Collector
 }
 
 func (cfg ManifoldConfig) Validate() error {
@@ -74,6 +80,9 @@ func (cfg ManifoldConfig) Validate() error {
 	}
 	if cfg.ControllerStartupValues == nil {
 		return errors.NotValidf("nil ControllerStartupValues")
+	}
+	if cfg.DBConnectionSource == nil {
+		return errors.NotValidf("nil DBConnectionSource")
 	}
 	if cfg.Logger == nil {
 		return errors.NotValidf("nil Logger")
@@ -113,6 +122,18 @@ func Manifold(config ManifoldConfig) dependency.Manifold {
 			startupValues, err := config.ControllerStartupValues.ControllerStartupValues()
 			if err != nil {
 				return nil, errors.Annotate(err, "reading controller startup values")
+			}
+
+			details, err := config.DBConnectionSource.Details(ctx)
+			if err != nil {
+				return nil, errors.Annotate(err, "reading database connection details")
+			}
+			switch details.Backend {
+			case controller.DBBackendDqlite:
+			case controller.DBBackendPostgreSQL:
+				return startPostgresWorker(config, startupValues.ControllerID, details)
+			default:
+				return nil, errors.Errorf("unknown database backend %q", details.Backend)
 			}
 
 			controllerID := startupValues.ControllerID
@@ -175,9 +196,41 @@ func Manifold(config ManifoldConfig) dependency.Manifold {
 	}
 }
 
+// startPostgresWorker starts the dbaccessor worker for a controller whose
+// databases are in an external PostgreSQL database. It does not use the
+// query logger or the controller agent config, which only configure dqlite.
+func startPostgresWorker(config ManifoldConfig, controllerID string, details connsource.Details) (worker.Worker, error) {
+	metricsCollector := config.NewMetricsCollector()
+	if err := config.PrometheusRegisterer.Register(metricsCollector); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	w, err := NewPostgresWorker(PostgresWorkerConfig{
+		Placement: postgresql.Placement{
+			URL:    details.URL,
+			CACert: details.CACert,
+		},
+		Clock:            clock.WallClock,
+		MetricsCollector: metricsCollector,
+		Logger:           config.Logger,
+		NewDBWorker:      config.NewDBWorker,
+		ControllerID:     controllerID,
+	})
+	if err != nil {
+		config.PrometheusRegisterer.Unregister(metricsCollector)
+		return nil, errors.Trace(err)
+	}
+	return common.NewCleanupWorker(w, func() {
+		config.PrometheusRegisterer.Unregister(metricsCollector)
+	}), nil
+}
+
 func dbAccessorOutput(in worker.Worker, out any) error {
 	if w, ok := in.(*common.CleanupWorker); ok {
 		in = w.Worker
+	}
+	if w, ok := in.(*pgWorker); ok {
+		return pgWorkerOutput(w, out)
 	}
 	w, ok := in.(*dbWorker)
 	if !ok {
@@ -195,6 +248,23 @@ func dbAccessorOutput(in worker.Worker, out any) error {
 		var target coredatabase.ClusterDescriber = &clusterDetailer{
 			nodeManager: w.cfg.NodeManager,
 		}
+		*out = target
+	default:
+		return errors.Errorf("expected output of *database.DBGetter or *database.DBDeleter, got %T", out)
+	}
+	return nil
+}
+
+func pgWorkerOutput(w *pgWorker, out any) error {
+	switch out := out.(type) {
+	case *coredatabase.DBGetter:
+		var target coredatabase.DBGetter = w
+		*out = target
+	case *coredatabase.DBDeleter:
+		var target coredatabase.DBDeleter = w
+		*out = target
+	case *coredatabase.ClusterDescriber:
+		var target coredatabase.ClusterDescriber = noClusterDescriber{}
 		*out = target
 	default:
 		return errors.Errorf("expected output of *database.DBGetter or *database.DBDeleter, got %T", out)

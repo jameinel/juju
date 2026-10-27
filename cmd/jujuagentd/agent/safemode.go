@@ -31,6 +31,7 @@ import (
 	"github.com/juju/juju/cmd/jujuagentd/reboot"
 	cmdutil "github.com/juju/juju/cmd/jujuagentd/util"
 	"github.com/juju/juju/core/semversion"
+	"github.com/juju/juju/internal/database/connsource"
 	internaldependency "github.com/juju/juju/internal/dependency"
 	internallogger "github.com/juju/juju/internal/logger"
 	internalworker "github.com/juju/juju/internal/worker"
@@ -308,6 +309,7 @@ func (a *SafeModeMachineAgent) makeEngineCreator(
 			AgentConfigChanged:      a.configChangedVal,
 			NewDBWorkerFunc:         a.newDBWorkerFunc,
 			ControllerStartupValues: startupValueProvider,
+			DBConnectionSource:      startupValueProvider,
 			// Safe mode is only meaningful on a controller, where the
 			// controller-agent-config manifold unlocks this once the socket
 			// listener starts (see controlleragentconfig.Manifold). On a
@@ -354,6 +356,12 @@ func (p safeModeControllerStartupValuesProvider) ControllerStartupValues() (dbac
 		ControllerCert:        info.Cert,
 		ControllerPrivateKey:  info.PrivateKey,
 	}, nil
+}
+
+// Details returns the current database connection details from agent
+// config.
+func (p safeModeControllerStartupValuesProvider) Details(ctx context.Context) (connsource.Details, error) {
+	return connsource.NewAgentConfigSource(p.agent.CurrentConfig()).Details(ctx)
 }
 
 func (a *SafeModeMachineAgent) executeRebootOrShutdown(action params.RebootAction) error {
