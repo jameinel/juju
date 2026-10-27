@@ -215,7 +215,7 @@ func (s *trackedDBPostgresSuite) TestCancelledInitialisationLeavesNoMarker(c *tc
 		errs <- err
 	}()
 
-	s.waitForBlocked(c, blocker)
+	waitForBlocked(c, s.admin, blocker)
 	cancel()
 
 	select {
@@ -303,8 +303,11 @@ func (s *trackedDBPostgresSuite) TestControllerNamespaceIsNotCreated(c *tc.C) {
 	defer workertest.DirtyKill(c, w)
 
 	// The tracker never creates the controller schema, so its first ping
-	// finds the schema missing.
-	c.Check(w.Wait(), tc.ErrorIs, coredatabase.ErrDBDead)
+	// finds the schema missing. Juju never deletes the controller schema,
+	// so its loss is not reported as a dead database.
+	err = w.Wait()
+	c.Check(err, tc.ErrorMatches, `.*controller schema ".*" no longer exists`)
+	c.Check(err, tc.Not(tc.ErrorIs), coredatabase.ErrDBDead)
 	exists, err := postgresql.SchemaExists(c.Context(), s.admin,
 		s.placement.SchemaName(coredatabase.ControllerNS))
 	c.Assert(err, tc.ErrorIsNil)
@@ -381,10 +384,10 @@ func (s *trackedDBPostgresSuite) adminRelationExists(c *tc.C, schemaName, relati
 
 // waitForBlocked waits until another session is waiting on a lock held by
 // the blocker backend.
-func (s *trackedDBPostgresSuite) waitForBlocked(c *tc.C, blocker int) {
+func waitForBlocked(c *tc.C, admin *sql.DB, blocker int) {
 	for {
 		var waiting bool
-		err := s.admin.QueryRowContext(c.Context(),
+		err := admin.QueryRowContext(c.Context(),
 			"SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)))",
 			blocker,
 		).Scan(&waiting)
@@ -395,7 +398,7 @@ func (s *trackedDBPostgresSuite) waitForBlocked(c *tc.C, blocker int) {
 		select {
 		case <-time.After(10 * time.Millisecond):
 		case <-c.Context().Done():
-			c.Fatal("timed out waiting for the tracker to block")
+			c.Fatal("timed out waiting for a session to block")
 		}
 	}
 }
