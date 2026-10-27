@@ -53,6 +53,61 @@ func (s *schemaSuite) TestQuoteLiteral(c *tc.C) {
 	c.Check(quoteLiteral(`back\slash`), tc.Equals, `'back\slash'`)
 }
 
+func (s *schemaSuite) TestWithSessionTimeouts(c *tc.C) {
+	const all = "lock_timeout=30s&statement_timeout=60s&" +
+		"idle_in_transaction_session_timeout=60s"
+	tests := []struct {
+		conn string
+		want string
+	}{
+		{conn: "", want: ""},
+		{
+			conn: "postgres://u:p%3Fw@h:5432/db",
+			want: "postgres://u:p%3Fw@h:5432/db?" + all,
+		},
+		{
+			conn: "postgresql://h/db?sslmode=disable",
+			want: "postgresql://h/db?sslmode=disable&" + all,
+		},
+		{conn: "postgres://h/db?", want: "postgres://h/db?" + all},
+		{
+			conn: "postgres://h/db?statement_timeout=5s",
+			want: "postgres://h/db?statement_timeout=5s&lock_timeout=30s&" +
+				"idle_in_transaction_session_timeout=60s",
+		},
+		{conn: "postgres://h/db?bad=%zz", want: "postgres://h/db?bad=%zz"},
+		{
+			conn: "host=h dbname=db",
+			want: "host=h dbname=db lock_timeout=30s statement_timeout=60s " +
+				"idle_in_transaction_session_timeout=60s",
+		},
+		{
+			conn: "host=h lock_timeout = 1s",
+			want: "host=h lock_timeout = 1s statement_timeout=60s " +
+				"idle_in_transaction_session_timeout=60s",
+		},
+	}
+	for _, test := range tests {
+		c.Check(withSessionTimeouts(test.conn), tc.Equals, test.want,
+			tc.Commentf("%q", test.conn))
+	}
+}
+
+func (s *schemaSuite) TestURLSetsSessionTimeouts(c *tc.C) {
+	admin := OpenAdmin(c)
+
+	for name, want := range map[string]string{
+		"lock_timeout":                        "30s",
+		"statement_timeout":                   "1min",
+		"idle_in_transaction_session_timeout": "1min",
+	} {
+		var got string
+		err := admin.QueryRowContext(c.Context(), "SHOW "+name).Scan(&got)
+		c.Assert(err, tc.ErrorIsNil)
+		c.Check(got, tc.Equals, want, tc.Commentf("%s", name))
+	}
+}
+
 func (s *schemaSuite) TestNewSchemaName(c *tc.C) {
 	_ = OpenAdmin(c)
 
