@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/juju/tc"
 
+	"github.com/juju/juju/core/database/dialect"
 	"github.com/juju/juju/internal/database/postgresql"
 	pgtesting "github.com/juju/juju/internal/database/postgresql/testing"
 	coretesting "github.com/juju/juju/internal/testing"
@@ -393,6 +394,69 @@ func (s *schemaSuite) TestDeleteSchemaConcurrentlyDeleted(c *tc.C) {
 	s.checkSchemaExists(c, admin, name, false)
 }
 
+func (s *schemaSuite) TestDeleteSchemaWaitsForSchemaChangeLock(c *tc.C) {
+	admin := s.openAdmin(c)
+
+	name := s.placement.SchemaName("schema-change-wait")
+	createJujuObjects(c, admin, name)
+	holder, holderPID := lockSchemaChanges(c, admin)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- postgresql.DeleteSchema(c.Context(), admin, name, time.Minute)
+	}()
+	pgtesting.WaitForBlocked(c, admin, holderPID)
+	s.checkSchemaExists(c, admin, name, true)
+
+	c.Assert(holder.Rollback(), tc.ErrorIsNil)
+	c.Check(<-done, tc.ErrorIsNil)
+	s.checkSchemaExists(c, admin, name, false)
+}
+
+func (s *schemaSuite) TestDeleteSchemaSchemaChangeLockTimeout(c *tc.C) {
+	admin := s.openAdmin(c)
+
+	name := s.placement.SchemaName("schema-change-timeout")
+	createJujuObjects(c, admin, name)
+	before := schemaObjects(c, admin, name)
+	holder, _ := lockSchemaChanges(c, admin)
+
+	err := postgresql.DeleteSchema(c.Context(), admin, name, 200*time.Millisecond)
+	c.Check(pgCode(err), tc.Equals, "55P03")
+	c.Check(err, tc.ErrorMatches, `.*beginning schema change.*`)
+	c.Check(schemaObjects(c, admin, name), tc.DeepEquals, before)
+
+	c.Assert(holder.Rollback(), tc.ErrorIsNil)
+	err = postgresql.DeleteSchema(c.Context(), admin, name, 200*time.Millisecond)
+	c.Assert(err, tc.ErrorIsNil)
+	s.checkSchemaExists(c, admin, name, false)
+}
+
+func (s *schemaSuite) TestDeleteSchemaHoldsSchemaChangeLock(c *tc.C) {
+	admin := s.openAdmin(c)
+
+	name := s.placement.SchemaName("schema-change-hold")
+	createJujuObjects(c, admin, name)
+
+	// The delete takes the schema change lock, then waits for the table.
+	blocker, blockerPID := lockTable(c, admin, name, "child")
+	done := make(chan error, 1)
+	go func() {
+		done <- postgresql.DeleteSchema(c.Context(), admin, name, time.Minute)
+	}()
+	pgtesting.WaitForBlocked(c, admin, blockerPID)
+
+	// Another schema change cannot take the lock while the delete runs.
+	c.Check(pgCode(tryLockSchemaChanges(c, admin)), tc.Equals, "55P03")
+
+	c.Assert(blocker.Rollback(), tc.ErrorIsNil)
+	c.Check(<-done, tc.ErrorIsNil)
+	s.checkSchemaExists(c, admin, name, false)
+
+	// The delete released the lock when it committed.
+	c.Check(tryLockSchemaChanges(c, admin), tc.ErrorIsNil)
+}
+
 func (s *schemaSuite) openAdmin(c *tc.C) *sql.DB {
 	admin, err := s.placement.OpenAdmin()
 	c.Assert(err, tc.ErrorIsNil)
@@ -490,6 +554,35 @@ func lockTable(c *tc.C, admin *sql.DB, schemaName, table string) (*sql.Tx, int) 
 		" IN ACCESS SHARE MODE")
 	c.Assert(err, tc.ErrorIsNil)
 	return tx, pid
+}
+
+// lockSchemaChanges starts a transaction holding the schema change lock,
+// which is rolled back when the test finishes, and returns it with its
+// backend PID.
+func lockSchemaChanges(c *tc.C, admin *sql.DB) (*sql.Tx, int) {
+	tx, err := admin.BeginTx(c.Context(), nil)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Cleanup(func() { _ = tx.Rollback() })
+
+	_, err = tx.ExecContext(c.Context(), dialect.PostgreSQL.BeginSchemaChangeSQL())
+	c.Assert(err, tc.ErrorIsNil)
+	var pid int
+	err = tx.QueryRowContext(c.Context(), "SELECT pg_backend_pid()").Scan(&pid)
+	c.Assert(err, tc.ErrorIsNil)
+	return tx, pid
+}
+
+// tryLockSchemaChanges takes the schema change lock in a transaction that it
+// then rolls back, waiting at most 100ms for it.
+func tryLockSchemaChanges(c *tc.C, admin *sql.DB) error {
+	tx, err := admin.BeginTx(c.Context(), nil)
+	c.Assert(err, tc.ErrorIsNil)
+	defer func() { _ = tx.Rollback() }()
+
+	_, err = tx.ExecContext(c.Context(), "SET LOCAL lock_timeout = 100")
+	c.Assert(err, tc.ErrorIsNil)
+	_, err = tx.ExecContext(c.Context(), dialect.PostgreSQL.BeginSchemaChangeSQL())
+	return err
 }
 
 func exec(c *tc.C, db *sql.DB, stmt string) {

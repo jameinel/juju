@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/juju/juju/core/database/dialect"
 )
 
 // DefaultSchemaPrefix is prepended to every Juju database namespace to name
@@ -128,7 +130,10 @@ func DropSchema(ctx context.Context, db Execer, name string) error {
 // then carries PostgreSQL's detail, which names the dependent objects.
 //
 // Each lock wait is bounded by lockTimeout, which must be at least a
-// millisecond. Deleting a schema that does not exist succeeds, as does
+// millisecond. The first is for the database's schema change lock
+// (dialect.Dialect.BeginSchemaChangeSQL), which the delete holds until it
+// ends, so it never runs alongside another Juju schema change on the
+// database. Deleting a schema that does not exist succeeds, as does
 // deleting one that another session deletes concurrently.
 func DeleteSchema(ctx context.Context, db *sql.DB, name string, lockTimeout time.Duration) error {
 	if lockTimeout < time.Millisecond {
@@ -202,6 +207,13 @@ func deleteSchema(ctx context.Context, tx *sql.Tx, name string, lockTimeout time
 		"SET LOCAL lock_timeout = "+strconv.FormatInt(lockTimeout.Milliseconds(), 10))
 	if err != nil {
 		return fmt.Errorf("setting lock timeout: %w", err)
+	}
+
+	// Wait for any other schema change on the database to finish, so that
+	// this delete's locks are not added to theirs in the shared lock table.
+	// This follows SET LOCAL, so that lockTimeout bounds the wait.
+	if _, err := tx.ExecContext(ctx, dialect.PostgreSQL.BeginSchemaChangeSQL()); err != nil {
+		return fmt.Errorf("beginning schema change: %w", err)
 	}
 
 	if exists, err := SchemaExists(ctx, tx, name); err != nil {

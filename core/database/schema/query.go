@@ -15,6 +15,18 @@ import (
 	"github.com/juju/juju/internal/errors"
 )
 
+// beginSchemaChange runs the dialect's statements that begin a schema change,
+// if it has any. They must run before any other statement in the
+// transaction.
+func beginSchemaChange(ctx context.Context, tx *sql.Tx, d dialect.Dialect) error {
+	stmt := d.BeginSchemaChangeSQL()
+	if stmt == "" {
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, stmt)
+	return errors.Capture(err)
+}
+
 // Create the schema table.
 func createSchemaTable(ctx context.Context, tx *sql.Tx, d dialect.Dialect) error {
 	_, err := tx.ExecContext(ctx, d.SchemaTableDDL())

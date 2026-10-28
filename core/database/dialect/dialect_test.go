@@ -4,6 +4,7 @@
 package dialect_test
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/juju/tc"
@@ -35,4 +36,9 @@ func (*dialectSuite) TestDialects(c *tc.C) {
 	c.Check(dialect.PostgreSQL.SchemaTableDDL(), tc.Contains, "CREATE TABLE IF NOT EXISTS schema")
 	c.Check(dialect.SQLite.InsertSchemaVersionSQL(), tc.Contains, "VALUES (?, ?,")
 	c.Check(dialect.PostgreSQL.InsertSchemaVersionSQL(), tc.Contains, "VALUES ($1, $2,")
+	c.Check(dialect.SQLite.BeginSchemaChangeSQL(), tc.Equals, "")
+	c.Check(dialect.PostgreSQL.BeginSchemaChangeSQL(), tc.Contains,
+		"SET TRANSACTION ISOLATION LEVEL READ COMMITTED;")
+	c.Check(dialect.PostgreSQL.BeginSchemaChangeSQL(), tc.Contains,
+		"SELECT pg_advisory_xact_lock("+strconv.FormatInt(0x6a756a755f64646c, 10)+");")
 }
