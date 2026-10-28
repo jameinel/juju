@@ -7,7 +7,7 @@
 package dialect
 
 // Dialect describes the SQL that differs between database backends when
-// managing the schema bookkeeping table.
+// managing the schema bookkeeping table and beginning schema changes.
 type Dialect interface {
 	// String returns the name of the dialect.
 	String() string
@@ -19,6 +19,12 @@ type Dialect interface {
 	// InsertSchemaVersionSQL returns the statement that records an applied
 	// schema version. It takes the version and the hash as arguments.
 	InsertSchemaVersionSQL() string
+
+	// BeginSchemaChangeSQL returns the statements that a transaction changing
+	// a database's schemas runs before any query. They may wait for other
+	// such transactions on the database to finish. It is empty if the
+	// dialect needs none.
+	BeginSchemaChangeSQL() string
 }
 
 var (
@@ -56,6 +62,12 @@ func (sqlite) InsertSchemaVersionSQL() string {
 	return `INSERT INTO schema (version, hash, updated_at) VALUES (?, ?, strftime("%s"));`
 }
 
+// BeginSchemaChangeSQL returns no statement: a dqlite database has one
+// writer, so its schema changes are already serialised.
+func (sqlite) BeginSchemaChangeSQL() string {
+	return ""
+}
+
 type postgresql struct{}
 
 // String returns the name of the dialect.
@@ -81,4 +93,32 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_schema_version ON schema (version);
 // schema version.
 func (postgresql) InsertSchemaVersionSQL() string {
 	return `INSERT INTO schema (version, hash, updated_at) VALUES ($1, $2, now());`
+}
+
+// BeginSchemaChangeSQL returns the statements that run the transaction at
+// READ COMMITTED and take the database's schema change advisory lock, which
+// is held until the transaction ends.
+//
+// Creating or deleting a model schema takes thousands of locks, and every
+// database on the server shares one lock table, so concurrent schema changes
+// can exhaust it. Every Juju transaction that changes schemas takes this lock
+// first, so that only one runs at a time on each database. A lock_timeout
+// set earlier in the transaction bounds the wait for it.
+//
+// A schema change can run for a second or more, and while a SERIALIZABLE
+// transaction runs, PostgreSQL keeps the predicate locks of every
+// SERIALIZABLE transaction that commits meanwhile. Those locks share another
+// server-wide table, which a long schema change can exhaust. READ COMMITTED
+// takes no predicate locks and pins none. It also gives each statement a
+// fresh snapshot, so a transaction that waited for the lock sees the changes
+// of the transaction it waited for.
+//
+// The isolation level can be changed only before the transaction's first
+// query, so these statements must run before it.
+func (postgresql) BeginSchemaChangeSQL() string {
+	// The key is the bytes of "juju_ddl" as a big-endian integer.
+	return `
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+SELECT pg_advisory_xact_lock(7671154592639640684);
+`
 }

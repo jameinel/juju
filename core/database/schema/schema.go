@@ -108,6 +108,9 @@ type ChangeSet struct {
 //
 // All updates are applied transactionally. If an error occurs, the
 // transaction will be rolled back and the database will remain unchanged.
+// The transaction first runs the dialect's statements that begin a schema
+// change, if it has any, which may wait for other schema changes on the
+// database to finish.
 //
 // An update will be applied only if it hasn't been current (currently applied
 // updates are tracked in the 'schema' table, which gets automatically
@@ -132,6 +135,10 @@ func (s *Schema) Ensure(ctx context.Context, runner database.TxnRunner) (ChangeS
 	hashes := computeHashes(toApply)
 
 	err := runner.StdTxn(ctx, func(ctx context.Context, t *sql.Tx) error {
+		if err := beginSchemaChange(ctx, t, s.dialect); err != nil {
+			return errors.Errorf("beginning schema change: %w", err)
+		}
+
 		if err := createSchemaTable(ctx, t, s.dialect); err != nil {
 			return errors.Capture(err)
 		}
