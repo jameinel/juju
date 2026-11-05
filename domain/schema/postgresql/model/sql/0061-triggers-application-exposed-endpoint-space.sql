@@ -24,7 +24,7 @@ CREATE FUNCTION trg_log_application_exposed_endpoint_space_update() RETURNS trig
 LANGUAGE plpgsql AS $$
 BEGIN
     IF NEW.application_uuid != OLD.application_uuid OR
-	(NEW.application_endpoint_uuid != OLD.application_endpoint_uuid OR (NEW.application_endpoint_uuid IS NOT NULL AND OLD.application_endpoint_uuid IS NULL) OR (NEW.application_endpoint_uuid IS NULL AND OLD.application_endpoint_uuid IS NOT NULL)) OR
+	NEW.application_endpoint_uuid != OLD.application_endpoint_uuid OR
 	NEW.space_uuid != OLD.space_uuid THEN
         INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at)
         VALUES (2, 10021, OLD.application_uuid, now());

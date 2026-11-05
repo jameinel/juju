@@ -2,25 +2,58 @@
 -- To change this file, edit the dqlite schema or add an override; see
 -- domain/schema/AGENTS.md.
 
--- insert namespace for storage filesystem attachment
+-- insert namespace for storage attachment entity change.
 INSERT INTO change_log_namespace
-VALUES (9,
-		'custom_filesystem_attachment_provider_id_model_provisioning',
-		'changes for filesystem attachment provider IDs that are model provisioned');
+VALUES (7,
+	'storage_filesystem_attachment_life_machine_provisioning',
+	'lifecycle changes for storage filesystem_attachment, that are machined provisioned');
 
--- update trigger for storage filesystem attachment.
-CREATE FUNCTION trg_log_custom_filesystem_attachment_provider_id_model_3b96dfbb() RETURNS trigger
+-- insert trigger for storage attachment entity.
+CREATE FUNCTION trg_log_storage_filesystem_attachment_insert_life_mach_17f9f481() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-    IF NEW.provision_scope_id = 0 AND
-         (NEW.provider_id <> OLD.provider_id OR (NEW.provider_id IS NOT NULL AND OLD.provider_id IS NULL) OR (NEW.provider_id IS NULL AND OLD.provider_id IS NOT NULL)) THEN
+    IF NEW.provision_scope_id = 1 THEN
         INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at)
-        VALUES (2, 9, NEW.uuid, now());
+        VALUES (1, 7, NEW.net_node_uuid, now());
     END IF;
     RETURN NULL;
 END;
 $$;
 
-CREATE TRIGGER trg_log_custom_filesystem_attachment_provider_id_model_3b96dfbb
+CREATE TRIGGER trg_log_storage_filesystem_attachment_insert_life_mach_17f9f481
+AFTER INSERT ON storage_filesystem_attachment
+FOR EACH ROW EXECUTE FUNCTION trg_log_storage_filesystem_attachment_insert_life_mach_17f9f481();
+
+-- update trigger for storage attachment entity.
+CREATE FUNCTION trg_log_storage_filesystem_attachment_update_life_mach_5344b963() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.provision_scope_id = 1
+	AND NEW.life_id <> OLD.life_id THEN
+        INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at)
+        VALUES (2, 7, NEW.net_node_uuid, now());
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER trg_log_storage_filesystem_attachment_update_life_mach_5344b963
 AFTER UPDATE ON storage_filesystem_attachment
-FOR EACH ROW EXECUTE FUNCTION trg_log_custom_filesystem_attachment_provider_id_model_3b96dfbb();
+FOR EACH ROW EXECUTE FUNCTION trg_log_storage_filesystem_attachment_update_life_mach_5344b963();
+
+-- delete trigger for storage attachment entity. Note the use of the OLD value
+-- in the trigger.
+CREATE FUNCTION trg_log_storage_filesystem_attachment_delete_life_mach_7b8bb6ec() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD.provision_scope_id = 1 THEN
+        INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at)
+        VALUES (4, 7, OLD.net_node_uuid, now());
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER trg_log_storage_filesystem_attachment_delete_life_mach_7b8bb6ec
+AFTER DELETE ON storage_filesystem_attachment
+FOR EACH ROW EXECUTE FUNCTION trg_log_storage_filesystem_attachment_delete_life_mach_7b8bb6ec();
