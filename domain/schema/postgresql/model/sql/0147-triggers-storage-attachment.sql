@@ -12,7 +12,7 @@ VALUES (20,
 CREATE FUNCTION trg_log_custom_storage_attachment_lifecycle_update() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-    IF NEW.life_id != OLD.life_id THEN
+    IF NEW.life_id <> OLD.life_id THEN
         INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at)
         VALUES (2, 20, NEW.uuid, now());
     END IF;

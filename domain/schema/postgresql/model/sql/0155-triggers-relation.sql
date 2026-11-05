@@ -12,8 +12,8 @@ VALUES (29,
 CREATE FUNCTION trg_log_custom_relation_life_suspended_update() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-    IF NEW.life_id != OLD.life_id OR
-    NEW.suspended != OLD.suspended THEN
+    IF NEW.life_id <> OLD.life_id OR
+    NEW.suspended <> OLD.suspended THEN
         INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at)
         VALUES (1, 29, NEW.uuid, now());
     END IF;

@@ -29,7 +29,7 @@ CREATE FUNCTION trg_log_storage_filesystem_attachment_update_life_mode_56bf9f24(
 LANGUAGE plpgsql AS $$
 BEGIN
     IF NEW.provision_scope_id = 0
-	AND NEW.life_id != OLD.life_id THEN
+	AND NEW.life_id <> OLD.life_id THEN
         INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at)
         VALUES (2, 8, NEW.uuid, now());
     END IF;

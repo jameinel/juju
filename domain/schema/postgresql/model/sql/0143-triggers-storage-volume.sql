@@ -29,7 +29,7 @@ CREATE FUNCTION trg_log_storage_volume_update_life_model_provisioning() RETURNS 
 LANGUAGE plpgsql AS $$
 BEGIN
     IF NEW.provision_scope_id = 0
-	AND NEW.life_id != OLD.life_id THEN
+	AND NEW.life_id <> OLD.life_id THEN
         INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at)
         VALUES (2, 11, NEW.volume_id, now());
     END IF;
