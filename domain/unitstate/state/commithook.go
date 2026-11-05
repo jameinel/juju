@@ -328,12 +328,16 @@ SELECT sm.secret_id AS &secretInfo.secret_id,
        sm.latest_revision_checksum AS &secretInfo.latest_revision_checksum,
        sm.create_time AS &secretInfo.create_time,
        sm.update_time AS &secretInfo.update_time,
-       MAX(sr.revision) AS &secretInfo.latest_revision,
-	   sr.uuid AS &secretInfo.latest_revision_uuid
+       sr.revision AS &secretInfo.latest_revision,
+       sr.uuid AS &secretInfo.latest_revision_uuid
 FROM   secret_metadata sm
-	   JOIN secret_revision sr ON sr.secret_id = sm.secret_id
+       JOIN secret_revision sr ON sr.secret_id = sm.secret_id
 WHERE  sm.secret_id = $secretID.secret_id
-GROUP BY sm.secret_id`
+AND    sr.revision = (
+           SELECT MAX(rev.revision)
+           FROM   secret_revision rev
+           WHERE  rev.secret_id = sm.secret_id
+       )`
 	existingStmt, err := st.Prepare(existingQuery, secretID{}, secretInfo{})
 	if err != nil {
 		return errors.Capture(err)

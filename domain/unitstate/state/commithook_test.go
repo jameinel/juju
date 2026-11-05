@@ -2082,6 +2082,56 @@ func (s *commitHookSuite) TestUpdateSecretsWithExpireTimeOnly(c *tc.C) {
 	c.Check(gotExpire.UTC(), tc.Equals, expireTime.UTC())
 }
 
+// TestUpdateSecretsWithExpireTimeOnlyLatestRevision verifies that an
+// expiry-only update of a secret with several revisions applies the expiry
+// to the latest revision.
+func (s *commitHookSuite) TestUpdateSecretsWithExpireTimeOnlyLatestRevision(c *tc.C) {
+	ctx := c.Context()
+	secretID := "update-test-expire-latest"
+	s.addSecretWithOwner(c, secretID, s.unitUUID, "unit")
+	s.addSecretRevision(c, secretID, 1)
+	rev3UUID := s.addSecretRevision(c, secretID, 3)
+	s.addSecretRevision(c, secretID, 2)
+
+	expireTime := time.Now().UTC().Truncate(time.Second).Add(48 * time.Hour)
+	arg := internal.CommitHookChangesArg{
+		UnitUUID: s.unitUUID,
+		SecretUpdates: []internal.UpdateSecretArg{{
+			SecretID:   secretID,
+			ExpireTime: &expireTime,
+			Checksum:   "checksum-expire-latest",
+			OwnerKind:  secret.UnitCharmSecretOwner,
+		}},
+	}
+
+	c.Assert(s.state.CommitHookChanges(ctx, arg), tc.ErrorIsNil)
+
+	expiries := make(map[string]time.Time)
+	err := s.TxnRunner().StdTxn(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx,
+			"SELECT revision_uuid, expire_time FROM secret_revision_expire")
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var (
+				revUUID string
+				expire  time.Time
+			)
+			if err := rows.Scan(&revUUID, &expire); err != nil {
+				return err
+			}
+			expiries[revUUID] = expire.UTC()
+		}
+		return rows.Err()
+	})
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(expiries, tc.DeepEquals, map[string]time.Time{
+		rev3UUID: expireTime,
+	})
+}
+
 // TestUpdateSecretsWithExpireTimeAndNewData verifies that updating a secret
 // with both ExpireTime and new data creates a new revision and applies the
 // expiry to that new revision (regression guard).
