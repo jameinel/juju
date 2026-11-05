@@ -846,7 +846,7 @@ SELECT
        description AS &secretInfo.description,
        auto_prune AS &secretInfo.auto_prune,
        rp.policy AS &secretInfo.policy,
-       MAX(sr.revision) AS &secretInfo.latest_revision,
+       sr.revision AS &secretInfo.latest_revision,
        sm.latest_revision_checksum AS &secretInfo.latest_revision_checksum,
        sr.uuid AS &secretInfo.latest_revision_uuid,
        (so.*) AS (&secretOwner.*)
@@ -855,7 +855,10 @@ FROM   secret_metadata sm
        LEFT JOIN secret_rotate_policy rp ON rp.id = sm.rotate_policy_id
        LEFT JOIN v_secret_owner AS so ON so.secret_id = sm.secret_id
 WHERE  sm.secret_id = $secretID.id
-GROUP BY sm.secret_id`
+AND    sr.revision = (
+           SELECT MAX(rev.revision) FROM secret_revision rev
+           WHERE  rev.secret_id = sm.secret_id
+       )`
 
 	existingSecretStmt, err := st.Prepare(existingSecretQuery, secretID{}, secretInfo{}, secretOwner{})
 	if err != nil {
@@ -1704,14 +1707,17 @@ func (st State) GetRotationExpiryInfo(ctx context.Context, uri *coresecrets.URI)
 SELECT   sp.policy AS &secretInfo.policy,
          sro.next_rotation_time AS &secretInfo.next_rotation_time,
          sre.expire_time AS &secretInfo.latest_expire_time,
-         MAX(sr.revision) AS &secretInfo.latest_revision
+         sr.revision AS &secretInfo.latest_revision
 FROM     secret_metadata sm
          JOIN secret_revision sr ON sm.secret_id = sr.secret_id
          JOIN secret_rotate_policy sp ON sp.id = sm.rotate_policy_id
          LEFT JOIN secret_rotation sro ON sro.secret_id = sm.secret_id
          LEFT JOIN secret_revision_expire sre ON sre.revision_uuid = sr.uuid
 WHERE    sm.secret_id = $secretID.id
-GROUP BY sr.secret_id`, input, result)
+AND      sr.revision = (
+             SELECT MAX(rev.revision) FROM secret_revision rev
+             WHERE  rev.secret_id = sm.secret_id
+         )`, input, result)
 
 	if err != nil {
 		return nil, errors.Capture(err)
@@ -1747,7 +1753,7 @@ func (st State) getSecretBySecretID(
 	ctx context.Context, tx *sqlair.TX, uri coresecrets.URI,
 ) (*coresecrets.SecretMetadata, error) {
 	selectBySecretID := func(query string, types, params []any) (newQuery string, newTypes, newParams []any) {
-		return query + "\nWHERE secret_id = $secretID.id",
+		return query + "\nAND secret_id = $secretID.id",
 			append(types, secretID{}),
 			append(params, secretID{ID: uri.ID})
 	}
@@ -1772,7 +1778,7 @@ func (st State) listSecretsBySecretLabels(
 ) ([]*coresecrets.SecretMetadata, error) {
 	selectByLabels := func(query string, types, params []any) (newQuery string, newTypes, newParams []any) {
 		type labelList []string
-		return query + "\nWHERE label IN ($labelList[:])",
+		return query + "\nAND label IN ($labelList[:])",
 			append(types, labelList{}),
 			append(params, labelList(labels))
 	}
@@ -1798,12 +1804,16 @@ SELECT
     &secretInfo.policy,
     &secretInfo.next_rotation_time,
     expire_time AS &secretInfo.latest_expire_time,
-    MAX(revision) AS &secretInfo.latest_revision,
+    revision AS &secretInfo.latest_revision,
     &secretOwner.owner_kind,
     &secretOwner.owner_name,
 	&secretOwner.owner_uuid,
     &secretOwner.label
-FROM v_secret_metadata`
+FROM v_secret_metadata AS vsm
+WHERE revision = (
+    SELECT MAX(rev.revision) FROM secret_revision rev
+    WHERE  rev.secret_id = vsm.secret_id
+)`
 
 	queryTypes := []any{
 		secretInfo{},
@@ -1819,9 +1829,6 @@ FROM v_secret_metadata`
 		// Apply modifier to the query.
 		query, queryTypes, queryParams = update(query, queryTypes, queryParams)
 	}
-
-	// Finish by a GROUP BY clause to make the MAX(sr.revision) works.
-	query += "\nGROUP BY secret_id"
 
 	queryStmt, err := st.Prepare(query, queryTypes...)
 	if err != nil {
@@ -1916,12 +1923,16 @@ SELECT sm.secret_id AS &secretInfo.secret_id,
        sm.latest_revision_checksum AS &secretInfo.latest_revision_checksum,
        sm.create_time AS &secretInfo.create_time,
        sm.update_time AS &secretInfo.update_time,
-       MAX(sr.revision) AS &secretInfo.latest_revision,
+       sr.revision AS &secretInfo.latest_revision,
        (so.owner_kind,
        so.owner_name,
        so.label) AS (&secretOwner.*)
 FROM   secret_metadata sm
        JOIN secret_revision sr ON sr.secret_id = sm.secret_id
+            AND sr.revision = (
+                SELECT MAX(rev.revision) FROM secret_revision rev
+                WHERE  rev.secret_id = sm.secret_id
+            )
        LEFT JOIN secret_revision_expire sre ON sre.revision_uuid = sr.uuid
        LEFT JOIN secret_rotate_policy rp ON rp.id = sm.rotate_policy_id
        LEFT JOIN secret_rotation sro ON sro.secret_id = sm.secret_id`
@@ -1952,7 +1963,7 @@ FROM   secret_metadata sm
     ) so ON so.secret_id = sm.secret_id
 `[1:], strings.Join(ownerParts, "\nUNION\n"))
 
-	queryParts = append(queryParts, ownerJoin, `GROUP BY sm.secret_id`)
+	queryParts = append(queryParts, ownerJoin)
 	queryStmt, err := st.Prepare(strings.Join(queryParts, "\n"), queryTypes...)
 	if err != nil {
 		return nil, errors.Capture(err)
@@ -3927,17 +3938,28 @@ SELECT
        sr.secret_id AS &secretRevisionExpireChange.secret_id,
        sre.revision_uuid AS &secretRevisionExpireChange.revision_uuid,
        sre.expire_time AS &secretRevisionExpireChange.expire_time,
-       MAX(sr.revision) AS &secretRevisionExpireChange.revision
+       sr.revision AS &secretRevisionExpireChange.revision
 FROM   secret_revision_expire sre
 JOIN   secret_revision sr ON sr.uuid = sre.revision_uuid`
 
+	// Each secret reports only its latest revision with an expiry, among
+	// the requested revisions if any. Owners are per secret, so they need
+	// not be applied when selecting the latest revision.
+	latestRevisionFilter := ""
 	var queryParams []any
 	var joins []string
 	conditions := []string{}
 	if len(revisionIDs) > 0 {
 		queryParams = append(queryParams, revisionUUIDs(revisionIDs))
 		conditions = append(conditions, "sre.revision_uuid IN ($revisionUUIDs[:])")
+		latestRevisionFilter = "\n    AND    lsre.revision_uuid IN ($revisionUUIDs[:])"
 	}
+	conditions = append(conditions, `sr.revision = (
+    SELECT MAX(lsr.revision)
+    FROM   secret_revision_expire lsre
+    JOIN   secret_revision lsr ON lsr.uuid = lsre.revision_uuid
+    WHERE  lsr.secret_id = sr.secret_id`+latestRevisionFilter+`
+)`)
 	if len(appOwners) > 0 && len(unitOwners) > 0 {
 		queryParams = append(queryParams, appOwners, unitOwners)
 		joins = append(joins, `
@@ -3968,11 +3990,7 @@ JOIN   secret_revision sr ON sr.uuid = sre.revision_uuid`
 	if len(joins) > 0 {
 		q += fmt.Sprintf("\n%s", strings.Join(joins, "\n"))
 	}
-	if len(conditions) > 0 {
-		q += fmt.Sprintf("\nWHERE %s", strings.Join(conditions, "\nAND "))
-	}
-	q += `
-GROUP BY sr.secret_id`
+	q += fmt.Sprintf("\nWHERE %s", strings.Join(conditions, "\nAND "))
 	st.logger.Tracef(ctx,
 		"revisionIDs %+v, appOwners: %+v, unitOwners: %+v, query: \n%s",
 		revisionIDs, appOwners, unitOwners, q,
