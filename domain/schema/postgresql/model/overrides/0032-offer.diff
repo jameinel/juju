@@ -1,5 +1,0 @@
---- 0032-offer-auto.sql
-+++ 0032-offer.sql
-@@ -1,1 +1,1 @@
--    JOIN relation_status AS rs ON oc.remote_relation_uuid = rs.relation_uuid AND rs.relation_status_type_id = 1
-+    JOIN relation_status AS rs ON oc.remote_relation_uuid = rs.relation_uuid AND rs.relation_status_type_id = '1'
