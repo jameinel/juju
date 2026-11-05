@@ -2228,6 +2228,7 @@ WHERE  secret_id = $secretRevision.secret_id
 		query = query + "\nAND revision = $secretRevision.revision"
 		want.Revision = *revision
 	}
+	query = query + "\nORDER BY sr.revision"
 
 	queryStmt, err := st.Prepare(query, secretRevision{}, secretRevisionExpire{}, secretValueRef{})
 	if err != nil {
