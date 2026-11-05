@@ -202,9 +202,25 @@ func (s *schemaSuite) TestEnsureHashBreaks(c *tc.C) {
 }
 
 // TestEnsureRecordsUpdatedAt tests that each applied patch is recorded with
-// the time it was applied, stored as an integer Unix timestamp in seconds.
+// the time it was applied. SQLite stores it as an integer Unix timestamp in
+// seconds and PostgreSQL as a timestamp with time zone.
 func (s *schemaSuite) TestEnsureRecordsUpdatedAt(c *tc.C) {
-	schema := New(
+	// The cast stops the driver from converting the DATETIME column.
+	query := `
+SELECT version, typeof(updated_at), CAST(updated_at AS INTEGER)
+FROM   schema
+ORDER BY version`
+	wantType := "integer"
+	if s.SchemaDialect() == dialect.PostgreSQL {
+		query = `
+SELECT version, pg_typeof(updated_at)::text,
+       CAST(FLOOR(EXTRACT(EPOCH FROM updated_at)) AS BIGINT)
+FROM   schema
+ORDER BY version`
+		wantType = "timestamp with time zone"
+	}
+
+	schema := NewForDialect(s.SchemaDialect(),
 		MakePatch("CREATE TEMP TABLE foo (id INTEGER PRIMARY KEY);"),
 		MakePatch("CREATE TEMP TABLE bar (id INTEGER PRIMARY KEY);"),
 	)
@@ -221,11 +237,7 @@ func (s *schemaSuite) TestEnsureRecordsUpdatedAt(c *tc.C) {
 	var rows []versionRow
 	err = s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		rows = nil
-		// The cast stops the driver from converting the DATETIME column.
-		rs, err := tx.QueryContext(ctx, `
-SELECT version, typeof(updated_at), CAST(updated_at AS INTEGER)
-FROM   schema
-ORDER BY version`)
+		rs, err := tx.QueryContext(ctx, query)
 		if err != nil {
 			return err
 		}
@@ -243,7 +255,7 @@ ORDER BY version`)
 	c.Assert(rows, tc.HasLen, 2)
 	for i, r := range rows {
 		c.Check(r.version, tc.Equals, i+1)
-		c.Check(r.valueType, tc.Equals, "integer")
+		c.Check(r.valueType, tc.Equals, wantType)
 		c.Check(r.updatedAt >= before, tc.IsTrue, tc.Commentf("updated_at %d before %d", r.updatedAt, before))
 		c.Check(r.updatedAt <= after, tc.IsTrue, tc.Commentf("updated_at %d after %d", r.updatedAt, after))
 	}
