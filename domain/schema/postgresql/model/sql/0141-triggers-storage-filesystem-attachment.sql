@@ -13,7 +13,7 @@ CREATE FUNCTION trg_log_custom_filesystem_attachment_provider_id_model_3b96dfbb(
 LANGUAGE plpgsql AS $$
 BEGIN
     IF NEW.provision_scope_id = 0 AND
-         (NEW.provider_id != OLD.provider_id OR (NEW.provider_id IS NOT NULL AND OLD.provider_id IS NULL) OR (NEW.provider_id IS NULL AND OLD.provider_id IS NOT NULL)) THEN
+         (NEW.provider_id <> OLD.provider_id OR (NEW.provider_id IS NOT NULL AND OLD.provider_id IS NULL) OR (NEW.provider_id IS NULL AND OLD.provider_id IS NOT NULL)) THEN
         INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at)
         VALUES (2, 9, NEW.uuid, now());
     END IF;

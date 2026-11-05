@@ -20,8 +20,8 @@ BEGIN
            now()
     FROM   storage_volume s
     WHERE  1 = (SELECT COUNT(*)
-                 FROM   storage_volume_attachment
-                 WHERE  storage_volume_uuid = NEW.storage_volume_uuid)
+                FROM   storage_volume_attachment
+                WHERE  storage_volume_uuid = NEW.storage_volume_uuid)
     AND    s.uuid = NEW.storage_volume_uuid
     AND    s.provision_scope_id = 1;
     RETURN NULL;
@@ -37,7 +37,7 @@ CREATE FUNCTION trg_log_storage_volume_update_life_machine_provisioning() RETURN
 LANGUAGE plpgsql AS $$
 BEGIN
     IF NEW.provision_scope_id = 1
-	AND  NEW.life_id != OLD.life_id THEN
+	AND  NEW.life_id <> OLD.life_id THEN
         INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at)
         SELECT DISTINCT 2,
                            10,
@@ -66,8 +66,8 @@ BEGIN
                        now()
     FROM   storage_volume s
     WHERE  0 = (SELECT COUNT(*)
-                 FROM   storage_volume_attachment
-                 WHERE  storage_volume_uuid = OLD.storage_volume_uuid)
+                FROM   storage_volume_attachment
+                WHERE  storage_volume_uuid = OLD.storage_volume_uuid)
     AND    s.uuid = OLD.storage_volume_uuid
     AND    s.provision_scope_id = 1;
     RETURN NULL;

@@ -20,8 +20,8 @@ BEGIN
            now()
     FROM   storage_filesystem s
     WHERE  1 = (SELECT COUNT(*)
-                 FROM   storage_filesystem_attachment
-                 WHERE  storage_filesystem_uuid = NEW.storage_filesystem_uuid)
+                FROM   storage_filesystem_attachment
+                WHERE  storage_filesystem_uuid = NEW.storage_filesystem_uuid)
     AND    s.uuid = NEW.storage_filesystem_uuid
     AND    s.provision_scope_id = 1;
     RETURN NULL;
@@ -37,7 +37,7 @@ CREATE FUNCTION trg_log_storage_filesystem_update_life_machine_provisioning() RE
 LANGUAGE plpgsql AS $$
 BEGIN
     IF NEW.provision_scope_id = 1
-	AND  NEW.life_id != OLD.life_id THEN
+	AND  NEW.life_id <> OLD.life_id THEN
         INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at)
         SELECT DISTINCT 2,
                            4,
@@ -66,8 +66,8 @@ BEGIN
                        now()
     FROM   storage_filesystem s
     WHERE  0 = (SELECT COUNT(*)
-                 FROM   storage_filesystem_attachment
-                 WHERE  storage_filesystem_uuid = OLD.storage_filesystem_uuid)
+                FROM   storage_filesystem_attachment
+                WHERE  storage_filesystem_uuid = OLD.storage_filesystem_uuid)
     AND    s.uuid = OLD.storage_filesystem_uuid
     AND    s.provision_scope_id = 1;
     RETURN NULL;

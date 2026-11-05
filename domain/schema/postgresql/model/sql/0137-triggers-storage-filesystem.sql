@@ -29,7 +29,7 @@ CREATE FUNCTION trg_log_storage_filesystem_update_life_model_provisioning() RETU
 LANGUAGE plpgsql AS $$
 BEGIN
     IF NEW.provision_scope_id = 0
-	AND NEW.life_id != OLD.life_id THEN
+	AND NEW.life_id <> OLD.life_id THEN
         INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at)
         VALUES (2, 5, NEW.filesystem_id, now());
     END IF;
