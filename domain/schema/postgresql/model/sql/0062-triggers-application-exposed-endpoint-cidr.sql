@@ -24,7 +24,7 @@ CREATE FUNCTION trg_log_application_exposed_endpoint_cidr_update() RETURNS trigg
 LANGUAGE plpgsql AS $$
 BEGIN
     IF NEW.application_uuid != OLD.application_uuid OR
-	(NEW.application_endpoint_uuid != OLD.application_endpoint_uuid OR (NEW.application_endpoint_uuid IS NOT NULL AND OLD.application_endpoint_uuid IS NULL) OR (NEW.application_endpoint_uuid IS NULL AND OLD.application_endpoint_uuid IS NOT NULL)) OR
+	NEW.application_endpoint_uuid != OLD.application_endpoint_uuid OR
 	NEW.cidr != OLD.cidr THEN
         INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at)
         VALUES (2, 10022, OLD.application_uuid, now());
