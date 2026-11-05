@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/juju/tc"
 
@@ -36,7 +37,7 @@ func (s *migrationSuite) TestGetApplicationLeadershipForModel(c *tc.C) {
 
 	state := NewMigrationState(s.TxnRunnerFactory())
 
-	s.insertLease(c, "1", 1, modelUUID, "foo", "unit", "-1 hour", "+1 day")
+	s.insertLease(c, "1", 1, modelUUID, "foo", "unit", -time.Hour, day)
 
 	leases, err := state.GetApplicationLeadershipForModel(c.Context(), modelUUID)
 	c.Assert(err, tc.ErrorIsNil)
@@ -50,8 +51,8 @@ func (s *migrationSuite) TestGetApplicationLeadershipForModelSingularControllerT
 
 	state := NewMigrationState(s.TxnRunnerFactory())
 
-	s.insertLease(c, "1", 1, modelUUID, "foo", "unit", "-1 hour", "+1 day")
-	s.insertLease(c, "2", 0, modelUUID, "controller", "abc", "-1 hour", "+1 day")
+	s.insertLease(c, "1", 1, modelUUID, "foo", "unit", -time.Hour, day)
+	s.insertLease(c, "2", 0, modelUUID, "controller", "abc", -time.Hour, day)
 
 	leases, err := state.GetApplicationLeadershipForModel(c.Context(), modelUUID)
 	c.Assert(err, tc.ErrorIsNil)
@@ -65,7 +66,7 @@ func (s *migrationSuite) TestGetApplicationLeadershipForModelExpired(c *tc.C) {
 
 	state := NewMigrationState(s.TxnRunnerFactory())
 
-	s.insertLease(c, "1", 1, modelUUID, "foo", "unit", "-2 day", "-1 day")
+	s.insertLease(c, "1", 1, modelUUID, "foo", "unit", -2*day, -day)
 
 	leases, err := state.GetApplicationLeadershipForModel(c.Context(), modelUUID)
 	c.Assert(err, tc.ErrorIsNil)
@@ -78,9 +79,9 @@ func (s *migrationSuite) TestGetApplicationLeadershipForModelHeldAndExpired(c *t
 
 	state := NewMigrationState(s.TxnRunnerFactory())
 
-	s.insertLease(c, "1", 1, modelUUID, "held", "held/0", "-1 hour", "+1 day")
-	s.insertLease(c, "2", 1, modelUUID, "expired", "expired/0", "-2 day", "-1 day")
-	s.insertLease(c, "3", 1, otherUUID, "other", "other/0", "-1 hour", "+1 day")
+	s.insertLease(c, "1", 1, modelUUID, "held", "held/0", -time.Hour, day)
+	s.insertLease(c, "2", 1, modelUUID, "expired", "expired/0", -2*day, -day)
+	s.insertLease(c, "3", 1, otherUUID, "other", "other/0", -time.Hour, day)
 
 	leases, err := state.GetApplicationLeadershipForModel(c.Context(), modelUUID)
 	c.Assert(err, tc.ErrorIsNil)
@@ -89,20 +90,26 @@ func (s *migrationSuite) TestGetApplicationLeadershipForModelHeldAndExpired(c *t
 	})
 }
 
-// insertLease inserts a lease, with start and expiry given as SQLite
-// datetime modifiers relative to now.
+const day = 24 * time.Hour
+
+// insertLease inserts a lease, with start and expiry given as offsets
+// relative to now.
 func (s *migrationSuite) insertLease(
 	c *tc.C,
 	uuid string,
 	leaseType int,
 	modelUUID coremodel.UUID,
-	name, holder, startOffset, expiryOffset string,
+	name, holder string,
+	startOffset, expiryOffset time.Duration,
 ) {
+	now := time.Now()
+	start := formatTimestamp(now.Add(startOffset))
+	expiry := formatTimestamp(now.Add(expiryOffset))
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
 INSERT INTO lease (uuid, lease_type_id, model_uuid, name, holder, start, expiry)
-VALUES (?, ?, ?, ?, ?, datetime('now', ?), datetime('now', ?))
-`, uuid, leaseType, modelUUID, name, holder, startOffset, expiryOffset)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+`, uuid, leaseType, modelUUID, name, holder, start, expiry)
 		return err
 	})
 	c.Assert(err, tc.ErrorIsNil)
