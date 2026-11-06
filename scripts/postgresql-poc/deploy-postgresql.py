@@ -6,7 +6,9 @@
 
 Deploys postgresql (16/stable) and data-integrator (database-name=juju) into
 a model on a Juju 3.6 controller, creating the model if needed, then prints a
-PostgreSQL URL for the scoped data-integrator user. Re-running is safe.
+PostgreSQL URL for the scoped data-integrator user. Re-running is safe. A new
+data-integrator is placed on the postgresql machine, as it only brokers
+credentials.
 
 With --tls-ca-file, self-signed-certificates is related to
 postgresql:client-certificates, the CA certificate is written to the given
@@ -15,29 +17,42 @@ absolute path. Otherwise the URL uses sslmode=disable. Once TLS is enabled the
 server rejects unencrypted connections, so compare plain and TLS using
 separate models.
 
---profile selects how much durability to trade for speed and disk:
+--profile selects what the server is for:
 
-  production  charm defaults and charm-managed storage: pgaudit and connection
-              logging on, 4 GB of kept WAL, fsync on.
-  testing     (default) for Juju development and test suites on a server whose
-              data matters for a few days. Disk use is kept down: pgaudit,
-              connection logging and disconnection logging are off, and
-              wal_keep_size is 128 MB, Patroni's default. fsync stays on, so
-              this does not speed up schema setup. All charm storage is on the
-              root filesystem.
-  disposable  testing plus fsync=off and full_page_writes=off, the equivalent
-              of running under libeatmydata. Schema setup is about four times
-              faster, but a crash or power loss can corrupt the whole cluster,
-              so use it only where all content is reproducible.
+  production      a robust server: charm defaults and charm-managed storage,
+                  pgaudit and connection logging on, 4 GB of kept WAL, fsync
+                  on.
+  dev-controller  (default) relatively throwaway Juju controllers, whose data
+                  matters for a few days. Disk use is kept down: pgaudit,
+                  connection logging and disconnection logging are off, and
+                  wal_keep_size is 128 MB, Patroni's default. fsync stays on.
+                  All charm storage is on the root filesystem.
+  unit-test       the Juju unit test suite (JUJU_POSTGRESQL_TEST_URL), whose
+                  content is all reproducible. dev-controller plus fsync=off
+                  and full_page_writes=off, the equivalent of running under
+                  libeatmydata, so schema setup is about four times faster,
+                  but a crash or power loss can corrupt the whole cluster.
+                  max_locks_per_transaction is 512, not 64, so that test
+                  packages can create and drop schemas in parallel.
 
 The charm hard-codes log_statement=ddl, so DDL is always logged. The charm
 cannot set fsync or full_page_writes, so they go in Patroni's dynamic
 configuration, which the charm only merges its own keys into; they reload
-without a restart. synchronous_commit cannot be turned off server-wide: the
-charm accepts only on, remote_write and remote_apply, and pins its value in
-the local Patroni file. A client can still set it per connection. Re-running with another profile switches the
-Patroni and charm settings, but cannot change the model's constraints or
-storage; --root-disk and --root-disk-source apply to the first deployment.
+without a restart. max_locks_per_transaction goes there too: the charm's
+instance-max-locks-per-transaction option only reaches the local Patroni file,
+which Patroni ignores for this parameter. Changing it needs a restart, which
+the script asks Patroni for. Every server process shares one lock table of
+max_locks_per_transaction * (max_connections + max_prepared_transactions)
+entries, 8,768 at the default. Creating a model schema takes about 3,600 locks
+and dropping one about 4,400, so a few test packages running in parallel
+exhaust it (SQLSTATE 53200).
+
+synchronous_commit cannot be turned off server-wide: the charm accepts only
+on, remote_write and remote_apply, and pins its value in the local Patroni
+file. A client can still set it per connection. Re-running with another
+profile switches the Patroni and charm settings, but cannot change the
+model's constraints or storage; --root-disk and --root-disk-source apply to
+the first deployment.
 
 Status messages go to stderr. The URL goes to stdout, or to --output (mode
 0600). See docs/implementation-plans/postgresql/PLAN.md (Stage 1).
@@ -66,16 +81,31 @@ PG_SETTINGS = {
     # 128 and its minimum 16; the charm's default is 4096.
     "durability-wal-keep-size": "128",
 }
-PROFILES = ("production", "testing", "disposable")
-DEFAULT_PROFILE = "testing"
+PROFILES = ("production", "dev-controller", "unit-test")
+DEFAULT_PROFILE = "dev-controller"
 # Parameters set through Patroni's dynamic configuration. Every profile sets
 # all of them, so re-running with another profile restores the values.
 PATRONI_PARAMETERS = {
-    "production": {"fsync": "on", "full_page_writes": "on"},
-    "testing": {"fsync": "on", "full_page_writes": "on"},
-    "disposable": {"fsync": "off", "full_page_writes": "off"},
+    "production": {
+        "fsync": "on",
+        "full_page_writes": "on",
+        "max_locks_per_transaction": "64",
+    },
+    "dev-controller": {
+        "fsync": "on",
+        "full_page_writes": "on",
+        "max_locks_per_transaction": "64",
+    },
+    "unit-test": {
+        "fsync": "off",
+        "full_page_writes": "off",
+        "max_locks_per_transaction": "512",
+    },
 }
 PATRONI_CONFIG = "/var/snap/charmed-postgresql/current/etc/patroni/patroni.yaml"
+# Patroni notices a parameter that needs a restart within its loop_wait,
+# which defaults to 10 seconds.
+PENDING_RESTART_TIMEOUT = 30
 
 
 def charm_config(profile):
@@ -125,7 +155,7 @@ def main(argv=None):
     try:
         deploy(juju, args.profile, tls=ca_file is not None, constraints=constraints)
         wait_settled(juju, args.timeout)
-        set_patroni_parameters(juju, args.profile)
+        set_patroni_parameters(juju, args.profile, args.timeout)
         if ca_file:
             creds = wait_tls_credentials(juju, args.timeout)
             ca_file.write_text(creds["tls-ca"].rstrip("\n") + "\n")
@@ -203,7 +233,9 @@ class Juju:
     def status(self):
         return json.loads(self._run("status", "-m", self.target, "--format=json"))
 
-    def deploy(self, app, channel, config=None, constraints=None, storage=None):
+    def deploy(
+        self, app, channel, config=None, constraints=None, storage=None, to=None
+    ):
         args = ["deploy", "-m", self.target, app, "--channel", channel]
         for key, value in (config or {}).items():
             args += ["--config", f"{key}={value}"]
@@ -211,6 +243,8 @@ class Juju:
             args += ["--constraints", constraints]
         for name, directive in (storage or {}).items():
             args += ["--storage", f"{name}={directive}"]
+        if to:
+            args += ["--to", to]
         self._run(*args)
 
     def integrate(self, endpoint, remote):
@@ -270,6 +304,10 @@ def deploy(juju, profile, tls, constraints):
     else:
         log(f"Deploying {PG_APP} ({PG_CHANNEL}), profile {profile}")
         juju.deploy(PG_APP, PG_CHANNEL, config, constraints, charm_storage(profile))
+        status = juju.status()
+    # The other applications only broker credentials and certificates, so
+    # they share the postgresql machine rather than each taking one.
+    to = pg_machine(status)
     if has_app(status, DI_APP):
         configured = juju.config_get(DI_APP, "database-name")
         if configured != DATABASE:
@@ -278,11 +316,13 @@ def deploy(juju, profile, tls, constraints):
             )
         log(f"Using existing application {DI_APP}")
     else:
-        ensure_app(juju, status, DI_APP, DI_CHANNEL, config={"database-name": DATABASE})
+        ensure_app(
+            juju, status, DI_APP, DI_CHANNEL, config={"database-name": DATABASE}, to=to
+        )
     ensure_relation(juju, status, PG_APP, "database", DI_APP, "postgresql")
 
     if tls:
-        ensure_app(juju, status, TLS_APP, TLS_CHANNEL)
+        ensure_app(juju, status, TLS_APP, TLS_CHANNEL, to=to)
         ensure_relation(
             juju, status, PG_APP, "client-certificates", TLS_APP, "certificates"
         )
@@ -290,12 +330,22 @@ def deploy(juju, profile, tls, constraints):
         raise DeployError(f"{PG_APP} has TLS enabled; re-run with --tls-ca-file")
 
 
-def ensure_app(juju, status, app, channel, config=None):
+def pg_machine(status):
+    """Returns the machine of the first postgresql unit."""
+    units = status.get("applications", {}).get(PG_APP, {}).get("units") or {}
+    for name in sorted(units):
+        machine = units[name].get("machine")
+        if machine:
+            return machine
+    raise DeployError(f"{PG_APP} has no unit with a machine")
+
+
+def ensure_app(juju, status, app, channel, config=None, to=None):
     if has_app(status, app):
         log(f"Using existing application {app}")
         return
     log(f"Deploying {app} ({channel})")
-    juju.deploy(app, channel, config)
+    juju.deploy(app, channel, config, to=to)
 
 
 def ensure_relation(juju, status, app, endpoint, remote_app, remote_endpoint):
@@ -350,21 +400,63 @@ def pending_units(status):
     return pending
 
 
-def set_patroni_parameters(juju, profile):
+def set_patroni_parameters(juju, profile, timeout):
     values = PATRONI_PARAMETERS[profile]
     log(f"Setting {', '.join(f'{k}={v}' for k, v in values.items())}")
-    patronictl = ["snap", "run", "charmed-postgresql.patronictl", "-c", PATRONI_CONFIG]
     sets = []
     for name, value in values.items():
         sets += ["-s", f"postgresql.parameters.{name}={value}"]
     unit = f"{PG_APP}/leader"
-    juju.exec(unit, *patronictl, "edit-config", "--force", *sets)
-    shown = juju.exec(unit, *patronictl, "show-config")
+    shown = patronictl(juju, unit, "show-config")
+    changed = not all(shows_parameter(shown, k, v) for k, v in values.items())
+    patronictl(juju, unit, "edit-config", "--force", *sets)
+    shown = patronictl(juju, unit, "show-config")
     for name, value in values.items():
-        # Patroni shows "on" as the YAML boolean true.
-        wanted = {"on": "(true|'on')", "off": "(false|'off')"}[value]
-        if not re.search(rf"^\s+{name}: {wanted}\s*$", shown, re.MULTILINE):
+        if not shows_parameter(shown, name, value):
             raise DeployError(f"patroni did not apply {name}={value}")
+    # An earlier run may have changed a parameter without restarting.
+    restart_if_pending(juju, unit, PENDING_RESTART_TIMEOUT if changed else 0, timeout)
+
+
+def shows_parameter(shown, name, value):
+    """Reports whether patronictl show-config output sets name to value."""
+    # Patroni shows "on" as the YAML boolean true.
+    wanted = {"on": "(true|'on')", "off": "(false|'off')"}.get(value, re.escape(value))
+    return re.search(rf"^\s+{name}: {wanted}\s*$", shown, re.MULTILINE) is not None
+
+
+def restart_if_pending(juju, unit, notice_timeout, timeout):
+    """Restarts PostgreSQL if Patroni reports that a parameter needs it.
+
+    It waits up to notice_timeout seconds for Patroni to notice a change.
+    """
+    deadline = time.monotonic() + notice_timeout
+    while not pending_restart(juju, unit):
+        if time.monotonic() >= deadline:
+            return
+        time.sleep(POLL_INTERVAL)
+    log("Restarting PostgreSQL to apply the parameters")
+    patronictl(juju, unit, "restart", "postgresql", "--pending", "--force")
+    deadline = time.monotonic() + timeout
+    while pending_restart(juju, unit):
+        if time.monotonic() >= deadline:
+            raise DeployError("timed out waiting for PostgreSQL to restart")
+        time.sleep(POLL_INTERVAL)
+
+
+def pending_restart(juju, unit):
+    """Reports whether any member is pending a restart or not running."""
+    members = json.loads(patronictl(juju, unit, "list", "-e", "-f", "json"))
+    return any(
+        m.get("Pending restart") or m.get("State") not in ("running", "streaming")
+        for m in members
+    )
+
+
+def patronictl(juju, unit, *args):
+    return juju.exec(
+        unit, "snap", "run", "charmed-postgresql.patronictl", "-c", PATRONI_CONFIG, *args
+    )
 
 
 def get_credentials(juju):
