@@ -199,6 +199,46 @@ func (s *instanceSuite) TestStorageInstanceInfoFilesystemUnitAttach(c *tc.C) {
 	})
 }
 
+// TestStorageInstanceInfoFilesystemDuplicateNodeAttachments tests that
+// [State.GetStorageInstanceInfo] returns one attachment per storage attachment
+// when two filesystem attachments exist for the same filesystem and net node,
+// using the filesystem attachment with the lowest UUID.
+func (s *instanceSuite) TestStorageInstanceInfoFilesystemDuplicateNodeAttachments(c *tc.C) {
+	poolUUID := s.newStoragePool(c, "mypool", "myprovider", nil)
+	appUUID, charmUUID := s.newApplication(c, "app1")
+	siUUID, _ := s.newFilesystemStorageInstanceForCharmWithPool(
+		c, charmUUID, poolUUID, "storage1",
+	)
+	unitUUID, unitName, unitNetNodeUUID := s.newUnitForApplication(c, appUUID)
+	saUUID := s.newStorageAttachment(c, siUUID, unitUUID)
+	fsUUID := s.newModelFilesystem(c, siUUID)
+	fsaUUID1 := s.newModelFilesystemAttachmentWithMountPoint(
+		c, fsUUID, unitNetNodeUUID, "/mnt/fs1",
+	)
+	fsaUUID2 := s.newModelFilesystemAttachmentWithMountPoint(
+		c, fsUUID, unitNetNodeUUID, "/mnt/fs2",
+	)
+	wantMountPoint := "/mnt/fs1"
+	if fsaUUID2.String() < fsaUUID1.String() {
+		wantMountPoint = "/mnt/fs2"
+	}
+
+	st := NewState(s.TxnRunnerFactory())
+	info, err := st.GetStorageInstanceInfo(c.Context(), siUUID)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(info.Attachments, tc.DeepEquals, []internal.StorageInstanceInfoAttachment{
+		{
+			Filesystem: &internal.StorageInstanceInfoAttachmentFilesystem{
+				MountPoint: wantMountPoint,
+			},
+			Life:     domainlife.Alive,
+			UnitName: unitName,
+			UnitUUID: unitUUID,
+			UUID:     saUUID,
+		},
+	})
+}
+
 // TestStorageInstanceInfoFilesysteamVolumeBackedUnitAttached tests that
 // [State.GetStorageInstanceInfo] correctly returns storage instance information
 // for a filesystem-backed storage instance that is also backed by a volume and
