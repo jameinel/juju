@@ -10,6 +10,7 @@ import (
 	"github.com/juju/tc"
 
 	"github.com/juju/juju/core/database"
+	"github.com/juju/juju/core/database/dialect"
 	"github.com/juju/juju/core/database/schema"
 	domainschema "github.com/juju/juju/domain/schema"
 	pgtesting "github.com/juju/juju/internal/database/postgresql/testing"
@@ -29,18 +30,24 @@ type SchemaApplier struct {
 	Verbose bool
 }
 
-// Apply applies the schema to the database.
+// Apply applies the schema to the database. A PostgreSQL schema is applied
+// with [pgtesting.Dialect], so that test packages running in parallel do not
+// wait for each other's schema changes.
 func (s *SchemaApplier) Apply(c *tc.C, ctx context.Context, runner database.TxnRunner) {
+	sch := s.Schema
+	if sch.Dialect() == dialect.PostgreSQL {
+		sch = schema.NewForDialect(pgtesting.Dialect, sch.Patches()...)
+	}
 	if s.Verbose {
-		s.Schema.Hook(func(i int, statement string) (string, error) {
+		sch.Hook(func(i int, statement string) (string, error) {
 			c.Logf("-- Applying schema change %d\n%s\n", i, statement)
 			return statement, nil
 		})
 	}
 
-	changeSet, err := s.Schema.Ensure(ctx, runner)
+	changeSet, err := sch.Ensure(ctx, runner)
 	c.Assert(err, tc.IsNil)
-	c.Check(changeSet.Post, tc.Equals, s.Schema.Len())
+	c.Check(changeSet.Post, tc.Equals, sch.Len())
 }
 
 // DumpChangeLogState dumps the change log to the test log.
