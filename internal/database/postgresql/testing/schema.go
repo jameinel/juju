@@ -77,9 +77,11 @@ var sessionTimeouts = []struct{ name, value string }{
 }
 
 // URL returns the PostgreSQL URL for tests, or "" when tests should not use
-// PostgreSQL. It adds each of sessionTimeouts that the URL does not set.
+// PostgreSQL. The URL comes from the pool named by PoolEnvVar if it is set,
+// otherwise from URLEnvVar. It adds each of sessionTimeouts that the URL
+// does not set.
 func URL() string {
-	return withSessionTimeouts(os.Getenv(URLEnvVar))
+	return withSessionTimeouts(baseURL())
 }
 
 // withSessionTimeouts appends the missing sessionTimeouts to a connection

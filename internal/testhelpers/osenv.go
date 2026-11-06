@@ -66,6 +66,7 @@ var windowsVariables = []string{
 var testingVariables = []string{
 	"JUJU_MONGOD",
 	"JUJU_POSTGRESQL_TEST_URL",
+	"JUJU_POSTGRESQL_TEST_URL_POOL",
 	"JUJU_TEST_VERBOSE",
 	"JUJU_SQL_OUTPUT",
 }
