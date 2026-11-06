@@ -37,7 +37,8 @@ import (
 // because this better reflects established conventions.
 // Types are located in this file for ease of transplant when that activity is
 // undertaken.
-// Tests for this functionality are not duplicated from secretbackend.
+// Tests for this functionality are not duplicated from secretbackend, except
+// where the queries here differ.
 
 // GetActiveModelSecretBackend returns the active secret backend ID and config
 // for the given model.
@@ -153,7 +154,7 @@ func (st *State) getK8sSecretBackendForModel(
 	modelUUID := entityUUID{UUID: mUUID}
 
 	q := `
-SELECT
+SELECT DISTINCT
     vc.uuid       AS &secretBackendForK8sModelRow.cloud_uuid,
     vcca.uuid     AS &secretBackendForK8sModelRow.cloud_credential_uuid,
     vm.name       AS &modelDetails.name,
@@ -174,8 +175,7 @@ FROM v_model vm
     JOIN v_cloud_auth vc ON vm.cloud_uuid = vc.uuid
     JOIN cloud_ca_cert ccc ON vc.uuid = ccc.cloud_uuid
     JOIN v_cloud_credential_attribute vcca ON vm.cloud_credential_uuid = vcca.uuid
-WHERE vm.uuid = $entityUUID.uuid
-GROUP BY vm.name, vcca.attribute_key`
+WHERE vm.uuid = $entityUUID.uuid`
 
 	stmt, err := st.Prepare(
 		q, modelUUID, modelDetails{}, secretBackendForK8sModelRow{}, cloudRow{}, cloudCredentialRow{})
