@@ -185,7 +185,7 @@ func (s *applicationStorageSuite) TestGetApplicationStorageDirectives(c *tc.C) {
 
 	directives, err := st.GetApplicationStorageDirectives(c.Context(), appUUID)
 	c.Check(err, tc.ErrorIsNil)
-	c.Check(directives, tc.DeepEquals, expected)
+	c.Check(directives, tc.SameContents, expected)
 }
 
 // TestGetApplicationStorageDirectivesEmpty tests that when an application has
