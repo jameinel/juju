@@ -396,23 +396,36 @@ func (s *unitStateSuite) TestUpdateCAASUnitSetsFQDN(c *tc.C) {
 	c.Assert(err, tc.ErrorIsNil)
 
 	assertFQDN := func() {
-		var (
-			gotAddress string
-			gotScopeID int
-			gotCount   int
-		)
+		type address struct {
+			value string
+			scope int
+		}
+		var addresses []address
 		err = s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-			return tx.QueryRowContext(ctx, `
-SELECT fa.address, fa.scope_id, count(*)
+			addresses = nil
+			rows, err := tx.QueryContext(ctx, `
+SELECT fa.address, fa.scope_id
 FROM   fqdn_address AS fa
 JOIN   net_node_fqdn_address AS nnfa ON nnfa.address_uuid = fa.uuid
 JOIN   unit AS un ON un.net_node_uuid = nnfa.net_node_uuid
-WHERE  un.name = ?`, unitNames[0].String()).Scan(&gotAddress, &gotScopeID, &gotCount)
+WHERE  un.name = ?`, unitNames[0].String())
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var a address
+				if err := rows.Scan(&a.value, &a.scope); err != nil {
+					return err
+				}
+				addresses = append(addresses, a)
+			}
+			return rows.Err()
 		})
 		c.Assert(err, tc.ErrorIsNil)
-		c.Check(gotAddress, tc.Equals, fqdn)
-		c.Check(gotScopeID, tc.Equals, 1)
-		c.Check(gotCount, tc.Equals, 1)
+		c.Assert(addresses, tc.HasLen, 1)
+		c.Check(addresses[0].value, tc.Equals, fqdn)
+		c.Check(addresses[0].scope, tc.Equals, 1)
 	}
 	assertFQDN()
 
