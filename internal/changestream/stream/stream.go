@@ -312,7 +312,7 @@ OUTER:
 				// the worker is dying, or if the context was canceled because
 				// the db was slow. In any case, continue and let the worker
 				// die if it's dying.
-				if errors.Is(errors.Cause(err), context.Canceled) {
+				if errors.Is(err, context.Canceled) {
 					continue OUTER
 				}
 				// If we get an error attempting to read the changes, the Txn

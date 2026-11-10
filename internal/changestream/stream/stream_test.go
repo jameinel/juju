@@ -15,11 +15,13 @@ import (
 	"time"
 
 	gomock "github.com/canonical/gomock/gomock"
+	"github.com/juju/errors"
 	"github.com/juju/tc"
 	"github.com/juju/worker/v5/workertest"
 
 	"github.com/juju/juju/core/changestream"
 	changestreamtesting "github.com/juju/juju/core/changestream/testing"
+	coredatabase "github.com/juju/juju/core/database"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
 	"github.com/juju/juju/internal/testhelpers"
 	"github.com/juju/juju/internal/uuid"
@@ -41,6 +43,53 @@ func TestStreamSuite(t *stdtesting.T) {
 	testhelpers.PrintGoroutineLeaks(t, func(t *stdtesting.T) {
 		tc.Run(t, &streamSuite{})
 	})
+}
+
+func (s *streamSuite) TestReadChangesCanceledOnShutdown(c *tc.C) {
+	s.testReadChangesCanceledOnShutdown(c, context.Canceled)
+}
+
+func (s *streamSuite) TestReadChangesWrappedCancellationOnShutdown(c *tc.C) {
+	s.testReadChangesCanceledOnShutdown(c, errors.Wrap(
+		context.Canceled, errors.New("retry stopped"),
+	))
+}
+
+func (s *streamSuite) testReadChangesCanceledOnShutdown(c *tc.C, readErr error) {
+	defer s.setupMocks(c).Finish()
+
+	s.expectFileNotifyWatcher()
+	s.expectTimer()
+	s.expectClock()
+	s.expectMetrics()
+
+	db := &shutdownTxnRunner{
+		TxnRunner:   s.TxnRunner(),
+		readStarted: make(chan struct{}),
+		readErr:     readErr,
+	}
+	stream := New(uuid.MustNewUUID().String(), db, s.FileNotifier, s.clock, s.metrics, loggertesting.WrapCheckLog(c))
+	defer workertest.DirtyKill(c, stream)
+
+	<-db.readStarted
+	workertest.CleanKill(c, stream)
+}
+
+type shutdownTxnRunner struct {
+	coredatabase.TxnRunner
+	watermarkCreated bool
+	readStarted      chan struct{}
+	readErr          error
+}
+
+func (r *shutdownTxnRunner) StdTxn(ctx context.Context, fn func(context.Context, *sql.Tx) error) error {
+	if !r.watermarkCreated {
+		r.watermarkCreated = true
+		return r.TxnRunner.StdTxn(ctx, fn)
+	}
+	close(r.readStarted)
+	<-ctx.Done()
+	return r.readErr
 }
 
 func (s *streamSuite) TestWithNoNamespace(c *tc.C) {
