@@ -132,7 +132,7 @@ func (s *migrationSuite) TestGetMachineInstanceIDs(c *tc.C) {
 	c.Assert(err, tc.ErrorIsNil)
 
 	// Add a reference AZ.
-	_, err = db.ExecContext(c.Context(), fmt.Sprintf("INSERT INTO availability_zone VALUES(%q, 'az-1')", machineUUID0.String()))
+	_, err = db.ExecContext(c.Context(), "INSERT INTO availability_zone VALUES(?, 'az-1')", machineUUID0.String())
 	c.Assert(err, tc.ErrorIsNil)
 	arch := "arm64"
 	err = machineState.SetMachineCloudInstance(
