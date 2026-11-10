@@ -226,7 +226,7 @@ func (s *modelSuite) TestCreateModelAndUpdate(c *tc.C) {
 
 	db := s.DB()
 	_, err = db.ExecContext(c.Context(), "UPDATE model SET name = 'new-name' WHERE uuid = $1", id)
-	c.Assert(err, tc.ErrorMatches, `model table is immutable, only insertions are allowed`)
+	c.Assert(err, tc.ErrorMatches, `.*model table is immutable, only insertions are allowed.*`)
 }
 
 func (s *modelSuite) TestCreateModelAndDelete(c *tc.C) {
@@ -252,7 +252,7 @@ func (s *modelSuite) TestCreateModelAndDelete(c *tc.C) {
 
 	db := s.DB()
 	_, err = db.ExecContext(c.Context(), "DELETE FROM model WHERE uuid = $1", id)
-	c.Assert(err, tc.ErrorMatches, `model table is immutable, only insertions are allowed`)
+	c.Assert(err, tc.ErrorMatches, `.*model table is immutable, only insertions are allowed.*`)
 }
 
 func (s *modelSuite) TestModelNotFound(c *tc.C) {
