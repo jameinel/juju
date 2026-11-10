@@ -15,6 +15,7 @@ import (
 	"github.com/juju/tc"
 	"github.com/juju/worker/v5/workertest"
 
+	databasetesting "github.com/juju/juju/internal/database/testing"
 	"github.com/juju/juju/internal/testhelpers"
 	"github.com/juju/juju/internal/testing"
 )
@@ -29,6 +30,11 @@ func TestTrackedDBReplWorkerSuite(t *stdtesting.T) {
 	testhelpers.PrintGoroutineLeaks(t, func(t *stdtesting.T) {
 		tc.Run(t, &trackedDBReplWorkerSuite{})
 	})
+}
+
+func (s *trackedDBReplWorkerSuite) SetUpTest(c *tc.C) {
+	databasetesting.SkipOnPostgreSQL(c, "the tracked dbrepl worker sets SQLite pragmas")
+	s.dbBaseSuite.SetUpTest(c)
 }
 
 func (s *trackedDBReplWorkerSuite) TestWorkerStartup(c *tc.C) {
