@@ -92,10 +92,10 @@ VALUES (?, ?, ?, ?, ?, ?)`
 	jID2, _ := removal.NewUUID()
 	now := time.Now().UTC()
 
-	_, err := s.DB().Exec(ins, jID1, 0, "rel-1", 0, now, nil)
+	_, err := s.DB().Exec(ins, jID1, 0, "rel-1", false, now, nil)
 	c.Assert(err, tc.ErrorIsNil)
 
-	_, err = s.DB().Exec(ins, jID2, 0, "rel-2", 1, now, `{"special-key":"special-value"}`)
+	_, err = s.DB().Exec(ins, jID2, 0, "rel-2", true, now, `{"special-key":"special-value"}`)
 	c.Assert(err, tc.ErrorIsNil)
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
@@ -131,7 +131,7 @@ VALUES (?, ?, ?, ?, ?, ?)`
 
 	jID1, _ := removal.NewUUID()
 	now := time.Now().UTC()
-	_, err := s.DB().Exec(ins, jID1, 0, "rel-1", 0, now, nil)
+	_, err := s.DB().Exec(ins, jID1, 0, "rel-1", false, now, nil)
 	c.Assert(err, tc.ErrorIsNil)
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
