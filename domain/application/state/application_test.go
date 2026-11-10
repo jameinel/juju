@@ -45,6 +45,7 @@ import (
 	"github.com/juju/juju/domain/resource"
 	"github.com/juju/juju/domain/status"
 	statusstate "github.com/juju/juju/domain/status/state/model"
+	internaldatabase "github.com/juju/juju/internal/database"
 	"github.com/juju/juju/internal/errors"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
 	"github.com/juju/juju/internal/uuid"
@@ -1303,7 +1304,7 @@ WHERE ks.application_uuid = ?`, appUUID).Scan(
 	err = s.upsertK8sService(c, "foo", "bar-provider-id", network.ProviderAddresses{
 		{MachineAddress: network.NewMachineAddress("10.0.0.3")},
 	})
-	c.Check(err, tc.ErrorMatches, `updating cloud service provider ID: .*UNIQUE constraint failed: k8s_service.provider_id.*`)
+	c.Check(err, tc.ErrorMatches, `(?s).*updating cloud service provider ID: .*(UNIQUE constraint failed: k8s_service.provider_id|duplicate key value violates unique constraint "idx_k8s_service_provider").*`)
 	c.Check(readService(appUUID), tc.Equals, serviceBefore)
 	c.Check(readService(otherAppUUID), tc.Equals, otherServiceBefore)
 }
@@ -1320,7 +1321,8 @@ func (s *applicationStateSuite) TestK8sServiceUniqueApplication(c *tc.C) {
 	_, err = s.DB().ExecContext(c.Context(), `
 INSERT INTO k8s_service (uuid, application_uuid, net_node_uuid, provider_id)
 VALUES (?, ?, ?, ?)`, tc.Must(c, uuid.NewUUID).String(), appUUID, nodeUUID, "another-provider-id")
-	c.Check(err, tc.ErrorMatches, ".*UNIQUE constraint failed: k8s_service.application_uuid.*")
+	c.Assert(internaldatabase.IsErrConstraintUnique(err), tc.IsTrue)
+	c.Check(err, tc.ErrorMatches, `(?s).*(UNIQUE constraint failed: k8s_service.application_uuid|idx_k8s_service_application).*`)
 }
 
 // TestUpsertAnotherK8sServiceNotWipingIpAddresses is a regression test where
