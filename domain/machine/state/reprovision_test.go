@@ -392,13 +392,28 @@ func (s *stateSuite) TestDetachLostMachineCloudInstanceErrorsWhenUnitDisappearsB
 	netNodeUUID := s.machineNetNodeUUID(c, machineUUID.String())
 	s.addReprovisionUnit(c, netNodeUUID)
 	s.addReprovisionRelationScope(c)
-	s.runQuery(c, `
+	if schematesting.BackendForTest() == schema.BackendPostgreSQL {
+		s.runQuery(c, `
+CREATE FUNCTION delete_reprovision_unit() RETURNS trigger LANGUAGE plpgsql AS $fn$
+BEGIN
+    DELETE FROM unit WHERE uuid = OLD.unit_uuid;
+    RETURN OLD;
+END
+$fn$;
+CREATE TRIGGER delete_reprovision_unit
+AFTER DELETE ON relation_unit
+FOR EACH ROW
+WHEN (OLD.unit_uuid = 'reprovision-unit')
+EXECUTE FUNCTION delete_reprovision_unit();`)
+	} else {
+		s.runQuery(c, `
 CREATE TRIGGER delete_reprovision_unit
 AFTER DELETE ON relation_unit
 WHEN OLD.unit_uuid = 'reprovision-unit'
 BEGIN
     DELETE FROM unit WHERE uuid = OLD.unit_uuid;
 END`)
+	}
 
 	err := s.state.DetachLostMachineCloudInstance(
 		c.Context(), machineName.String(), "123", "reprovisioning requested", nil, time.Now(), pendingReprovisionStatusIDs(c),
