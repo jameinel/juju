@@ -72,9 +72,16 @@ CREATE TABLE charm (
     -- name than the charm name in the metadata.yaml file.
     reference_name TEXT NOT NULL,
 
-    -- create_time is purely used for ordering a charm by time, as we can't
-    -- use the revision number to determine the order of the charm.
-    create_time TIMESTAMPTZ NOT NULL DEFAULT (now()),
+    -- create_time records when the charm was added. It is too coarse to
+    -- order charms added close together.
+    create_time TIMESTAMPTZ NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+
+    -- insertion_order orders charms by when they were added, as we can't
+    -- use the revision number to determine the order of the charm. Values
+    -- are allocated from the model sequence table and are not unique: rows
+    -- added without allocating one, such as charms imported from older
+    -- payloads, keep the default of 0.
+    insertion_order BIGINT NOT NULL DEFAULT 0,
 
     CONSTRAINT fk_charm_source_source
     FOREIGN KEY (source_id)

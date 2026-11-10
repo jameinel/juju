@@ -37,7 +37,7 @@ CREATE TABLE removal (
     force BOOLEAN NOT NULL DEFAULT FALSE,
     -- Indicates when the job should be actioned by the worker,
     -- allowing us to schedule removals in the future.
-    scheduled_for DATETIME NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW', 'utc')),
+    scheduled_for DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP),
     -- JSON for free-form job argumentation.
     arg TEXT,
     CONSTRAINT fk_removal_type

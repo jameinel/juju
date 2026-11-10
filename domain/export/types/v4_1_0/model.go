@@ -317,6 +317,7 @@ type Charm struct {
 	ArchitectureID  *int64    `db:"architecture_id" json:"architecture_id" yaml:"architecture_id"`
 	ReferenceName   string    `db:"reference_name" json:"reference_name" yaml:"reference_name"`
 	CreateTime      time.Time `db:"create_time" json:"create_time" yaml:"create_time"`
+	InsertionOrder  int64     `db:"insertion_order" json:"insertion_order" yaml:"insertion_order"`
 }
 
 type CharmAction struct {

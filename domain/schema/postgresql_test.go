@@ -155,6 +155,8 @@ WHERE k.contype = 'f' AND n.nspname = current_schema() AND t.relname = $1`, tabl
 			}
 		}
 	}
+	checkCurrentTimestampDefaults(c, sq, namespace, true)
+	checkCurrentTimestampDefaults(c, pg, namespace, false)
 	if namespace == "controller" {
 		s.checkChangeLog(c, pg)
 		s.checkChangeLogCommitOrder(c, pg)

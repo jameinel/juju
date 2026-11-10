@@ -475,7 +475,7 @@ func significantIndexes(toks []token) []int {
 // patch using one needs an override.
 var unsupportedFunctions = []string{
 	"GROUP_CONCAT", "JULIANDAY", "UNIXEPOCH", "TYPEOF", "PRINTF", "INSTR",
-	"JSON", "JSON_EXTRACT", "JSON_EACH", "GLOB", "DATE", "TIME",
+	"JSON", "JSON_EXTRACT", "JSON_EACH", "GLOB", "DATE", "TIME", "STRFTIME",
 }
 
 // rewriteExpr applies the dialect rewrites that are valid anywhere in a
@@ -510,12 +510,12 @@ func rewriteExpr(toks []token) ([]token, error) {
 		switch {
 		case t.is("user") && !qualified:
 			out = append(out, token{kind: tokQuotedIdent, text: `"user"`})
-		case isCall && (t.is("DATETIME") || t.is("STRFTIME")):
+		case isCall && t.is("DATETIME"):
 			closeIdx, err := matchParen(toks, next)
 			if err != nil {
 				return nil, err
 			}
-			if !callsNow(t.text, toks[next+1:closeIdx]) {
+			if !callsNow(toks[next+1 : closeIdx]) {
 				return nil, fmt.Errorf("unsupported %s call", t.text)
 			}
 			out = append(out, token{kind: tokIdent, text: "now"},
@@ -555,15 +555,8 @@ func rewriteExpr(toks []token) ([]token, error) {
 	return out, nil
 }
 
-func callsNow(fn string, args []token) bool {
+func callsNow(args []token) bool {
 	parts := splitTopLevel(args)
-	if strings.EqualFold(fn, "STRFTIME") {
-		format := trimTrivia(parts[0])
-		if len(format) != 1 || format[0].text != "'%Y-%m-%d %H:%M:%f'" {
-			return false
-		}
-		parts = parts[1:]
-	}
 	if len(parts) < 1 || len(parts) > 2 {
 		return false
 	}

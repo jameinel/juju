@@ -359,6 +359,7 @@ type setCharmState struct {
 	SourceID        int             `db:"source_id"`
 	ArchitectureID  sql.Null[int64] `db:"architecture_id"`
 	Version         string          `db:"version"`
+	InsertionOrder  uint64          `db:"insertion_order"`
 }
 
 // resolveCharmState is used to resolve the charm state. This will make the

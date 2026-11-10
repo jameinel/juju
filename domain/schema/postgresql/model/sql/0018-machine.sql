@@ -170,7 +170,7 @@ ON machine_filesystem (filesystem_uuid, machine_uuid);
 
 CREATE TABLE machine_requires_reboot (
     machine_uuid TEXT NOT NULL PRIMARY KEY,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT (now()),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT (CURRENT_TIMESTAMP),
     CONSTRAINT fk_machine_requires_reboot_machine
     FOREIGN KEY (machine_uuid)
     REFERENCES machine (uuid)

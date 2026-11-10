@@ -86,6 +86,29 @@ func (d deltas) Removal(_ context.Context, src []v4_0_12.Removal, _ *v4_0_12.Mod
 	return result, nil
 }
 
+// Charm copies all v4_0_12 fields and leaves InsertionOrder at 0. A 4.0.12
+// model has no charm insertion order sequence, so the first charm added after
+// import is also given 0, and create_time orders charms with equal values.
+func (d deltas) Charm(_ context.Context, src []v4_0_12.Charm, _ *v4_0_12.ModelExport) ([]v4_1_0.Charm, error) {
+	result := make([]v4_1_0.Charm, len(src))
+	for i, ch := range src {
+		result[i] = v4_1_0.Charm{
+			UUID:            ch.UUID,
+			ArchivePath:     ch.ArchivePath,
+			ObjectStoreUUID: ch.ObjectStoreUUID,
+			Available:       ch.Available,
+			Version:         ch.Version,
+			LxdProfile:      ch.LxdProfile,
+			SourceID:        ch.SourceID,
+			Revision:        ch.Revision,
+			ArchitectureID:  ch.ArchitectureID,
+			ReferenceName:   ch.ReferenceName,
+			CreateTime:      ch.CreateTime,
+		}
+	}
+	return result, nil
+}
+
 // Constraint copies all v4_0_12 fields and leaves IpFamily nil. Constraints
 // exported from a 4.0.12 model carry no IP family information.
 func (d deltas) Constraint(_ context.Context, src []v4_0_12.Constraint, _ *v4_0_12.ModelExport) ([]v4_1_0.Constraint, error) {

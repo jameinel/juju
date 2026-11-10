@@ -520,7 +520,7 @@ func (st *State) LoadModelDump(ctx context.Context, dump *recovery.ModelDump, no
 		tables = append(tables, replayTable{
 			name:      "charm",
 			deleteSQL: `DELETE FROM "charm" AS t`,
-			insertSQL: `INSERT INTO "charm" ("uuid", "archive_path", "object_store_uuid", "available", "version", "lxd_profile", "source_id", "revision", "architecture_id", "reference_name", "create_time") SELECT $M.uuid AS "uuid", $M.archive_path AS "archive_path", $M.object_store_uuid AS "object_store_uuid", $M.available AS "available", $M.version AS "version", $M.lxd_profile AS "lxd_profile", $M.source_id AS "source_id", $M.revision AS "revision", $M.architecture_id AS "architecture_id", $M.reference_name AS "reference_name", $M.create_time AS "create_time"`,
+			insertSQL: `INSERT INTO "charm" ("uuid", "archive_path", "object_store_uuid", "available", "version", "lxd_profile", "source_id", "revision", "architecture_id", "reference_name", "create_time", "insertion_order") SELECT $M.uuid AS "uuid", $M.archive_path AS "archive_path", $M.object_store_uuid AS "object_store_uuid", $M.available AS "available", $M.version AS "version", $M.lxd_profile AS "lxd_profile", $M.source_id AS "source_id", $M.revision AS "revision", $M.architecture_id AS "architecture_id", $M.reference_name AS "reference_name", $M.create_time AS "create_time", $M.insertion_order AS "insertion_order"`,
 			sample:    sqlair.M{},
 			insertRows: func(ctx context.Context, tx *sqlair.TX, stmt *sqlair.Statement) error {
 				return insertRows(ctx, tx, stmt, dump.Charm, func(row exporttypes.Charm) any {
@@ -536,6 +536,7 @@ func (st *State) LoadModelDump(ctx context.Context, dump *recovery.ModelDump, no
 						"architecture_id":   row.ArchitectureID,
 						"reference_name":    row.ReferenceName,
 						"create_time":       row.CreateTime,
+						"insertion_order":   row.InsertionOrder,
 					}
 				})
 			},

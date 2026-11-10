@@ -17,10 +17,12 @@ import (
 	"github.com/juju/juju/core/model"
 	"github.com/juju/juju/core/objectstore"
 	"github.com/juju/juju/domain"
+	domainapplication "github.com/juju/juju/domain/application"
 	"github.com/juju/juju/domain/application/architecture"
 	"github.com/juju/juju/domain/application/charm"
 	applicationerrors "github.com/juju/juju/domain/application/errors"
 	domainlife "github.com/juju/juju/domain/life"
+	sequencestate "github.com/juju/juju/domain/sequence/state"
 	internaldatabase "github.com/juju/juju/internal/database"
 	"github.com/juju/juju/internal/errors"
 )
@@ -216,6 +218,13 @@ func (s *State) addCharmState(
 		}
 	}
 
+	insertionOrder, err := sequencestate.NextValue(
+		ctx, s, tx, domainapplication.CharmInsertionOrderSequenceNamespace,
+	)
+	if err != nil {
+		return errors.Errorf("getting charm insertion order: %w", err)
+	}
+
 	chState := setCharmState{
 		UUID:            id.String(),
 		ReferenceName:   ch.ReferenceName,
@@ -226,6 +235,7 @@ func (s *State) addCharmState(
 		Version:         ch.Version,
 		SourceID:        sourceID,
 		ArchitectureID:  nullableArchitectureID,
+		InsertionOrder:  insertionOrder,
 	}
 
 	charmQuery := `INSERT INTO charm (*) VALUES ($setCharmState.*);`

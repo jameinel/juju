@@ -33,7 +33,8 @@ BEGIN
 	NEW.revision != OLD.revision OR
 	(NEW.architecture_id != OLD.architecture_id OR (NEW.architecture_id IS NOT NULL AND OLD.architecture_id IS NULL) OR (NEW.architecture_id IS NULL AND OLD.architecture_id IS NOT NULL)) OR
 	NEW.reference_name != OLD.reference_name OR
-	NEW.create_time != OLD.create_time THEN
+	NEW.create_time != OLD.create_time OR
+	NEW.insertion_order != OLD.insertion_order THEN
         INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at)
         VALUES (2, 10015, OLD.uuid, now());
     END IF;

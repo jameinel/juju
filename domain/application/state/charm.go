@@ -1024,8 +1024,8 @@ WHERE c.uuid = $entityUUID.uuid;
 // GetLatestPendingCharmhubCharm returns the latest charm that is pending from
 // the charmhub store. If there are no charms, returns is not found, as
 // [applicationerrors.CharmNotFound].
-// If there are multiple charms, then the latest created at date is returned
-// first.
+// If there are multiple charms, then the most recently added charm is
+// returned.
 func (s *State) GetLatestPendingCharmhubCharm(ctx context.Context, name string, arch architecture.Architecture) (charm.CharmLocator, error) {
 	db, err := s.DB(ctx)
 	if err != nil {
@@ -1056,7 +1056,7 @@ WHERE
     AND c.reference_name = $charmNameAndArchitecture.name
     AND c.architecture_id = $charmNameAndArchitecture.architecture_id
     AND application.uuid IS NULL
-ORDER BY c.create_time DESC;
+ORDER BY c.insertion_order DESC, c.create_time DESC;
 `
 	stmt, err := s.Prepare(query, ident, charmLocator{})
 	if err != nil {

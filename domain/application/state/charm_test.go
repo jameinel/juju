@@ -15,6 +15,7 @@ import (
 	"github.com/juju/utils/v4"
 
 	coreapplication "github.com/juju/juju/core/application"
+	corecharm "github.com/juju/juju/core/charm"
 	charmtesting "github.com/juju/juju/core/charm/testing"
 	coredatabase "github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/model"
@@ -3445,25 +3446,21 @@ func (s *charmStateSuite) TestGetLatestPendingCharmhubCharmForAnotherArch(c *tc.
 func (s *charmStateSuite) TestGetLatestPendingCharmhubCharmWithMultipleCharms(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), s.modelUUID, clock.WallClock, loggertesting.WrapCheckLog(c))
 
-	// Revision doesn't matter here, we only care about the latest insertion
-	// time.
+	// Revision doesn't matter here, we only care about the order in which the
+	// charms were added. Both charms are normally added within the same
+	// second, so create_time cannot order them.
+	id0 := s.addPendingCharmhubCharm(c, st, 2)
+	id1 := s.addPendingCharmhubCharm(c, st, 1)
 
-	id0 := charmtesting.GenCharmID(c)
-	uuid0 := id0.String()
-
-	id1 := charmtesting.GenCharmID(c)
-	uuid1 := id1.String()
-
+	var order0, order1 int
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		if err := insertCharmStateWithRevision(ctx, c, tx, uuid0, 2); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT insertion_order FROM charm WHERE uuid = ?`, id0.String()).Scan(&order0); err != nil {
 			return errors.Capture(err)
 		}
-		if err := insertCharmStateWithRevision(ctx, c, tx, uuid1, 1); err != nil {
-			return errors.Capture(err)
-		}
-		return nil
+		return tx.QueryRowContext(ctx, `SELECT insertion_order FROM charm WHERE uuid = ?`, id1.String()).Scan(&order1)
 	})
 	c.Assert(err, tc.ErrorIsNil)
+	c.Check(order1 > order0, tc.IsTrue)
 
 	expectedLocator := charm.CharmLocator{
 		Name:         "ubuntu",
@@ -3474,6 +3471,43 @@ func (s *charmStateSuite) TestGetLatestPendingCharmhubCharmWithMultipleCharms(c 
 	latest, err := st.GetLatestPendingCharmhubCharm(c.Context(), "ubuntu", architecture.AMD64)
 	c.Assert(err, tc.ErrorIsNil)
 	c.Check(latest, tc.DeepEquals, expectedLocator)
+}
+
+func (s *charmStateSuite) TestGetLatestPendingCharmhubCharmWithEqualInsertionOrder(c *tc.C) {
+	st := NewState(s.TxnRunnerFactory(), s.modelUUID, clock.WallClock, loggertesting.WrapCheckLog(c))
+
+	// Charms imported from older payloads keep the default insertion order,
+	// so create_time breaks the tie.
+	newer := charmtesting.GenCharmID(c).String()
+	older := charmtesting.GenCharmID(c).String()
+	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		for _, ch := range []struct {
+			uuid       string
+			revision   int
+			createTime string
+		}{
+			{newer, 1, "2026-01-02 00:00:00"},
+			{older, 2, "2026-01-01 00:00:00"},
+		} {
+			if err := insertCharmStateWithRevision(ctx, c, tx, ch.uuid, ch.revision); err != nil {
+				return errors.Capture(err)
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE charm SET create_time = ? WHERE uuid = ?`, ch.createTime, ch.uuid); err != nil {
+				return errors.Capture(err)
+			}
+		}
+		return nil
+	})
+	c.Assert(err, tc.ErrorIsNil)
+
+	latest, err := st.GetLatestPendingCharmhubCharm(c.Context(), "ubuntu", architecture.AMD64)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(latest, tc.DeepEquals, charm.CharmLocator{
+		Name:         "ubuntu",
+		Revision:     1,
+		Source:       charm.CharmHubSource,
+		Architecture: architecture.AMD64,
+	})
 }
 
 func (s *charmStateSuite) TestGetLatestPendingCharmhubCharmWithAssignedApplication(c *tc.C) {
@@ -3602,6 +3636,35 @@ func (s *charmStateSuite) TestGetCharmIDByApplicationID(c *tc.C) {
 	})
 	c.Assert(err, tc.ErrorIsNil)
 	c.Check(result, tc.Equals, charmUUID.String())
+}
+
+func (s *charmStateSuite) addPendingCharmhubCharm(c *tc.C, st *State, revision int) corecharm.ID {
+	id, _, err := st.AddCharm(c.Context(), charm.Charm{
+		Metadata: charm.Metadata{
+			Name:           "ubuntu",
+			Summary:        "summary",
+			Description:    "description",
+			Subordinate:    true,
+			RunAs:          charm.RunAsRoot,
+			MinJujuVersion: semversion.MustParse("4.0.0"),
+			Assumes:        []byte("null"),
+		},
+		Manifest:      s.minimalManifest(c),
+		Source:        charm.CharmHubSource,
+		Revision:      revision,
+		ReferenceName: "ubuntu",
+		Hash:          "hash",
+		ArchivePath:   "archive",
+		Version:       "deadbeef",
+		Architecture:  architecture.AMD64,
+	}, &charm.DownloadInfo{
+		Provenance:         charm.ProvenanceDownload,
+		CharmhubIdentifier: "ident",
+		DownloadURL:        "https://example.com/charmhub/ident",
+		DownloadSize:       1234,
+	}, false)
+	c.Assert(err, tc.ErrorIsNil)
+	return id
 }
 
 func insertCharmState(ctx context.Context, c *tc.C, tx *sql.Tx, uuid string) error {

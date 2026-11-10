@@ -79,6 +79,49 @@ func (s *deltasSuite) TestApplicationScale(c *tc.C) {
 	}})
 }
 
+// TestCharmLeavesInsertionOrderZero verifies that charms exported from a
+// 4.0.12 model, which has no insertion order column, keep every other field
+// and get the default insertion order.
+func (s *deltasSuite) TestCharmLeavesInsertionOrderZero(c *tc.C) {
+	archivePath := "archive"
+	objectStoreUUID := "object-store-uuid"
+	available := true
+	version := "deadbeef"
+	lxdProfile := "{}"
+	architectureID := int64(1)
+	createTime := time.Date(2026, 1, 2, 3, 4, 5, 6000000, time.UTC)
+	src := []v4_0_12.Charm{{
+		UUID:            "charm-uuid",
+		ArchivePath:     &archivePath,
+		ObjectStoreUUID: &objectStoreUUID,
+		Available:       &available,
+		Version:         &version,
+		LxdProfile:      &lxdProfile,
+		SourceID:        1,
+		Revision:        42,
+		ArchitectureID:  &architectureID,
+		ReferenceName:   "ubuntu",
+		CreateTime:      createTime,
+	}}
+
+	got, err := deltas{}.Charm(c.Context(), src, nil)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(got, tc.DeepEquals, []v4_1_0.Charm{{
+		UUID:            "charm-uuid",
+		ArchivePath:     &archivePath,
+		ObjectStoreUUID: &objectStoreUUID,
+		Available:       &available,
+		Version:         &version,
+		LxdProfile:      &lxdProfile,
+		SourceID:        1,
+		Revision:        42,
+		ArchitectureID:  &architectureID,
+		ReferenceName:   "ubuntu",
+		CreateTime:      createTime,
+		InsertionOrder:  0,
+	}})
+}
+
 // TestOfferLeavesDescriptionNil verifies that offers exported from a 4.0.12
 // model, which has no offer description column, are carried through with a
 // nil description.
