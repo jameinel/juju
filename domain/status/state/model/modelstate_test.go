@@ -172,7 +172,7 @@ func (s *modelStateSuite) TestGetAllRelationStatusesNone(c *tc.C) {
 }
 
 func (s *modelStateSuite) TestGetApplicationUUIDByName(c *tc.C) {
-	id, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	id, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 
 	gotID, err := s.state.GetApplicationUUIDByName(c.Context(), "foo")
 	c.Assert(err, tc.ErrorIsNil)
@@ -199,9 +199,9 @@ func (s *modelStateSuite) TestGetApplicationUUIDAndNameByUnitNameNotFound(c *tc.
 }
 
 func (s *modelStateSuite) TestSetApplicationStatus(c *tc.C) {
-	id, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	id, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	expected := status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusActive,
 		Message: "message",
@@ -218,16 +218,16 @@ func (s *modelStateSuite) TestSetApplicationStatus(c *tc.C) {
 }
 
 func (s *modelStateSuite) TestSetApplicationStatusMultipleTimes(c *tc.C) {
-	id, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	id, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 
 	err := s.state.SetApplicationStatus(c.Context(), id, status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusBlocked,
 		Message: "blocked",
-		Since:   new(time.Now().UTC()),
+		Since:   new(time.Now().UTC().Truncate(time.Microsecond)),
 	})
 	c.Assert(err, tc.ErrorIsNil)
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	expected := status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusActive,
 		Message: "message",
@@ -244,9 +244,9 @@ func (s *modelStateSuite) TestSetApplicationStatusMultipleTimes(c *tc.C) {
 }
 
 func (s *modelStateSuite) TestSetApplicationStatusWithNoData(c *tc.C) {
-	id, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	id, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	expected := status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusActive,
 		Message: "message",
@@ -262,7 +262,7 @@ func (s *modelStateSuite) TestSetApplicationStatusWithNoData(c *tc.C) {
 }
 
 func (s *modelStateSuite) TestSetApplicationStatusApplicationNotFound(c *tc.C) {
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	expected := status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusActive,
 		Message: "message",
@@ -275,7 +275,7 @@ func (s *modelStateSuite) TestSetApplicationStatusApplicationNotFound(c *tc.C) {
 }
 
 func (s *modelStateSuite) TestSetApplicationStatusInvalidStatus(c *tc.C) {
-	id, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	id, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 
 	expected := status.StatusInfo[status.WorkloadStatusType]{
 		Status: status.WorkloadStatusType(99),
@@ -301,9 +301,9 @@ func (s *modelStateSuite) TestGetApplicationStatusNotSet(c *tc.C) {
 }
 
 func (s *modelStateSuite) TestSetOperatorStatus(c *tc.C) {
-	id, _ := s.createCAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	id, _ := s.createCAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	expected := status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusActive,
 		Message: "message",
@@ -319,16 +319,16 @@ func (s *modelStateSuite) TestSetOperatorStatus(c *tc.C) {
 }
 
 func (s *modelStateSuite) TestSetOperatorStatusMultipleTimes(c *tc.C) {
-	id, _ := s.createCAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	id, _ := s.createCAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 
 	err := s.state.SetOperatorStatus(c.Context(), id, status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusBlocked,
 		Message: "blocked",
-		Since:   new(time.Now().UTC()),
+		Since:   new(time.Now().UTC().Truncate(time.Microsecond)),
 	})
 	c.Assert(err, tc.ErrorIsNil)
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	expected := status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusActive,
 		Message: "message",
@@ -344,9 +344,9 @@ func (s *modelStateSuite) TestSetOperatorStatusMultipleTimes(c *tc.C) {
 }
 
 func (s *modelStateSuite) TestSetOperatorStatusWithNoData(c *tc.C) {
-	id, _ := s.createCAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	id, _ := s.createCAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	expected := status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusActive,
 		Message: "message",
@@ -361,7 +361,7 @@ func (s *modelStateSuite) TestSetOperatorStatusWithNoData(c *tc.C) {
 }
 
 func (s *modelStateSuite) TestSetOperatorStatusApplicationNotFound(c *tc.C) {
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	expected := status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusActive,
 		Message: "message",
@@ -374,7 +374,7 @@ func (s *modelStateSuite) TestSetOperatorStatusApplicationNotFound(c *tc.C) {
 }
 
 func (s *modelStateSuite) TestSetOperatorStatusInvalidStatus(c *tc.C) {
-	id, _ := s.createCAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	id, _ := s.createCAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 
 	expected := status.StatusInfo[status.WorkloadStatusType]{
 		Status: status.WorkloadStatusType(99),
@@ -387,7 +387,7 @@ func (s *modelStateSuite) TestSetOperatorStatusInvalidStatus(c *tc.C) {
 func (s *modelStateSuite) TestSetRelationStatus(c *tc.C) {
 	// Arrange: Create relation and statuses.
 	relationUUID := s.addRelationWithLifeAndID(c, corelife.Alive, 7)
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	s.addRelationStatusWithMessage(c, relationUUID, corestatus.Joining, "", now)
 
 	sts := status.StatusInfo[status.RelationStatusType]{
@@ -410,7 +410,7 @@ func (s *modelStateSuite) TestSetRelationStatus(c *tc.C) {
 func (s *modelStateSuite) TestSetRelationStatusMultipleTimes(c *tc.C) {
 	// Arrange: Add relation and create statuses.
 	relationUUID := s.addRelationWithLifeAndID(c, corelife.Alive, 7)
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	s.addRelationStatusWithMessage(c, relationUUID, corestatus.Joining, "", now)
 
 	sts1 := status.StatusInfo[status.RelationStatusType]{
@@ -442,7 +442,7 @@ func (s *modelStateSuite) TestSetRelationStatusMultipleTimes(c *tc.C) {
 func (s *modelStateSuite) TestSetRelationStatusInvalidTransition(c *tc.C) {
 	// Arrange: Add relation and set status to broken.
 	relationUUID := s.addRelationWithLifeAndID(c, corelife.Alive, 7)
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	s.addRelationStatusWithMessage(c, relationUUID, corestatus.Broken, "", now)
 
 	// Arrange: Create joining status, which cannot be transitioned to from broken.
@@ -463,7 +463,7 @@ func (s *modelStateSuite) TestSetRelationStatusInvalidTransition(c *tc.C) {
 func (s *modelStateSuite) TestSetRelationStatusSuspendingToSuspended(c *tc.C) {
 	// Arrange: Add relation and create suspending status with message.
 	relationUUID := s.addRelationWithLifeAndID(c, corelife.Alive, 7)
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	message := "suspending message"
 	s.addRelationStatusWithMessage(c, relationUUID, corestatus.Suspending, message, now)
 
@@ -489,7 +489,7 @@ func (s *modelStateSuite) TestSetRelationStatusSuspendingToSuspended(c *tc.C) {
 func (s *modelStateSuite) TestSetRelationStatusRelationNotFound(c *tc.C) {
 	// Arrange: Create relation and statuses.
 	sts := status.StatusInfo[status.RelationStatusType]{
-		Since: new(time.Now().UTC()),
+		Since: new(time.Now().UTC().Truncate(time.Microsecond)),
 	}
 
 	// Act:
@@ -502,7 +502,7 @@ func (s *modelStateSuite) TestSetRelationStatusRelationNotFound(c *tc.C) {
 func (s *modelStateSuite) TestSetRemoteRelationStatus(c *tc.C) {
 	// Arrange: Create relation and statuses.
 	relationUUID := s.addRelationWithLifeAndID(c, corelife.Alive, 7)
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	s.addRelationStatusWithMessage(c, relationUUID, corestatus.Joining, "", now)
 
 	sts := status.StatusInfo[status.RelationStatusType]{
@@ -523,7 +523,7 @@ func (s *modelStateSuite) TestSetRemoteRelationStatus(c *tc.C) {
 func (s *modelStateSuite) TestSetRemoteRelationStatusMultipleTimes(c *tc.C) {
 	// Arrange: Add relation and create statuses.
 	relationUUID := s.addRelationWithLifeAndID(c, corelife.Alive, 7)
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	s.addRelationStatusWithMessage(c, relationUUID, corestatus.Joining, "", now)
 
 	sts1 := status.StatusInfo[status.RelationStatusType]{
@@ -553,7 +553,7 @@ func (s *modelStateSuite) TestSetRemoteRelationStatusMultipleTimes(c *tc.C) {
 func (s *modelStateSuite) TestSetRemoteRelationStatusRelationNotFound(c *tc.C) {
 	// Arrange: Create relation and statuses.
 	sts := status.StatusInfo[status.RelationStatusType]{
-		Since: new(time.Now().UTC()),
+		Since: new(time.Now().UTC().Truncate(time.Microsecond)),
 	}
 
 	// Act:
@@ -582,7 +582,7 @@ func (s *modelStateSuite) TestImportRelationStatus(c *tc.C) {
 	// Arrange: Create relation and statuses.
 	relationID := 7
 	relationUUID := s.addRelationWithLifeAndID(c, corelife.Alive, relationID)
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	s.addRelationStatusWithMessage(c, relationUUID, corestatus.Joining, "", now)
 
 	sts := status.StatusInfo[status.RelationStatusType]{
@@ -603,7 +603,7 @@ func (s *modelStateSuite) TestImportRelationStatus(c *tc.C) {
 func (s *modelStateSuite) TestImportRelationStatusRelationNotFound(c *tc.C) {
 	// Arrange: Create relation and statuses.
 	sts := status.StatusInfo[status.RelationStatusType]{
-		Since: new(time.Now().UTC()),
+		Since: new(time.Now().UTC().Truncate(time.Microsecond)),
 	}
 
 	// Act:
@@ -644,7 +644,7 @@ func (s *modelStateSuite) TestSetK8sPodStatus(c *tc.C) {
 		Status:  status.K8sPodStatusRunning,
 		Message: "it's running",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 
 	err := s.TxnRunner().Txn(c.Context(), func(ctx context.Context, tx *sqlair.TX) error {
@@ -663,7 +663,7 @@ func (s *modelStateSuite) TestSetUnitAgentStatus(c *tc.C) {
 		Status:  status.UnitAgentStatusExecuting,
 		Message: "it's executing",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 
 	err := s.state.SetUnitAgentStatus(c.Context(), unitUUID, status)
@@ -677,7 +677,7 @@ func (s *modelStateSuite) TestSetUnitAgentStatusNotFound(c *tc.C) {
 		Status:  status.UnitAgentStatusExecuting,
 		Message: "it's executing",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 
 	unitUUID := unittesting.GenUnitUUID(c)
@@ -696,7 +696,7 @@ func (s *modelStateSuite) TestGetUnitAgentStatusUnset(c *tc.C) {
 
 func (s *modelStateSuite) TestGetUnitAgentStatusDead(c *tc.C) {
 	_, unitUUIDs := s.createSubordinateIAASApplication(
-		c, "foo", life.Dead, s.workloadStatus(time.Now()),
+		c, "foo", life.Dead, s.workloadStatus(time.Now().Truncate(time.Microsecond)),
 		s.createIAASUnitArg(c),
 	)
 	unitUUID := unitUUIDs[0]
@@ -713,7 +713,7 @@ func (s *modelStateSuite) TestGetUnitAgentStatus(c *tc.C) {
 		Status:  status.UnitAgentStatusExecuting,
 		Message: "it's executing",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 
 	err := s.state.SetUnitAgentStatus(c.Context(), unitUUID, status)
@@ -735,7 +735,7 @@ func (s *modelStateSuite) TestGetUnitAgentStatusPresent(c *tc.C) {
 		Status:  status.UnitAgentStatusExecuting,
 		Message: "it's executing",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 
 	err := s.state.SetUnitAgentStatus(c.Context(), unitUUID, status)
@@ -767,7 +767,7 @@ func (s *modelStateSuite) TestGetMachineAgentStatusPresent(c *tc.C) {
 		Status:  status.MachineStatusStarted,
 		Message: "it's starting",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 
 	err := s.state.SetMachineStatus(c.Context(), "0", status)
@@ -799,7 +799,7 @@ func (s *modelStateSuite) TestGetMachineAgentStatusPresentViaChildMachine(c *tc.
 		Status:  status.MachineStatusStarted,
 		Message: "it's starting",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 
 	err := s.state.SetMachineStatus(c.Context(), parentName.String(), status)
@@ -832,7 +832,7 @@ func (s *modelStateSuite) TestGetUnitWorkloadStatusUnitNotFound(c *tc.C) {
 func (s *modelStateSuite) TestGetUnitWorkloadStatusDead(c *tc.C) {
 	u1 := s.createIAASUnitArg(c)
 	_, unitUUIDs := s.createIAASApplication(
-		c, "foo", life.Dead, s.workloadStatus(time.Now()), u1,
+		c, "foo", life.Dead, s.workloadStatus(time.Now().Truncate(time.Microsecond)), u1,
 	)
 	unitUUID := unitUUIDs[0]
 
@@ -856,7 +856,7 @@ func (s *modelStateSuite) TestSetWorkloadStatus(c *tc.C) {
 		Status:  status.WorkloadStatusActive,
 		Message: "it's active!",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 
 	err := s.state.SetUnitWorkloadStatus(c.Context(), unitUUID, sts)
@@ -873,7 +873,7 @@ func (s *modelStateSuite) TestSetWorkloadStatus(c *tc.C) {
 		Status:  status.WorkloadStatusTerminated,
 		Message: "it's terminated",
 		Data:    []byte(`{"bar": "foo"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 
 	err = s.state.SetUnitWorkloadStatus(c.Context(), unitUUID, sts)
@@ -893,7 +893,7 @@ func (s *modelStateSuite) TestSetUnitWorkloadStatusToError(c *tc.C) {
 		Status:  status.WorkloadStatusError,
 		Message: "it's an error!",
 		Data:    []byte("some data"),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 
 	err := s.state.SetUnitWorkloadStatus(c.Context(), unitUUID, sts)
@@ -913,7 +913,7 @@ func (s *modelStateSuite) TestSetWorkloadStatusPresent(c *tc.C) {
 		Status:  status.WorkloadStatusActive,
 		Message: "it's active!",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 
 	err := s.state.SetUnitWorkloadStatus(c.Context(), unitUUID, sts)
@@ -933,7 +933,7 @@ func (s *modelStateSuite) TestSetWorkloadStatusPresent(c *tc.C) {
 		Status:  status.WorkloadStatusTerminated,
 		Message: "it's terminated",
 		Data:    []byte(`{"bar": "foo"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 
 	err = s.state.SetUnitWorkloadStatus(c.Context(), unitUUID, sts)
@@ -950,7 +950,7 @@ func (s *modelStateSuite) TestSetUnitWorkloadStatusNotFound(c *tc.C) {
 		Status:  status.WorkloadStatusTerminated,
 		Message: "it's terminated",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 
 	err := s.state.SetUnitWorkloadStatus(c.Context(), "missing-uuid", status)
@@ -976,7 +976,7 @@ func (s *modelStateSuite) TestGetUnitK8sPodStatusUnitNotFound(c *tc.C) {
 func (s *modelStateSuite) TestGetUnitK8sPodStatusDead(c *tc.C) {
 	u1 := s.createCAASUnitArg(c)
 	_, unitUUIDs := s.createCAASApplication(
-		c, "foo", life.Dead, s.workloadStatus(time.Now()), u1,
+		c, "foo", life.Dead, s.workloadStatus(time.Now().Truncate(time.Microsecond)), u1,
 	)
 	unitUUID := unitUUIDs[0]
 
@@ -988,7 +988,7 @@ func (s *modelStateSuite) TestGetUnitK8sPodStatus(c *tc.C) {
 	_, unitUUIDs := s.createIAASApplicationWithNUnits(c, "foo", 1)
 	unitUUID := unitUUIDs[0]
 
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 
 	err := s.TxnRunner().Txn(c.Context(), func(ctx context.Context, tx *sqlair.TX) error {
 		return s.state.setK8sPodStatus(ctx, tx, unitUUID, status.StatusInfo[status.K8sPodStatusType]{
@@ -1018,7 +1018,7 @@ func (s *modelStateSuite) TestGetUnitWorkloadStatusesForApplication(c *tc.C) {
 		Status:  status.WorkloadStatusActive,
 		Message: "it's active!",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err := s.state.SetUnitWorkloadStatus(c.Context(), unitUUID, status)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1042,7 +1042,7 @@ func (s *modelStateSuite) TestGetUnitWorkloadStatusesForApplicationMultipleUnits
 		Status:  status.WorkloadStatusActive,
 		Message: "it's active!",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err := s.state.SetUnitWorkloadStatus(c.Context(), unitUUID1, status1)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1051,7 +1051,7 @@ func (s *modelStateSuite) TestGetUnitWorkloadStatusesForApplicationMultipleUnits
 		Status:  status.WorkloadStatusTerminated,
 		Message: "it's terminated",
 		Data:    []byte(`{"bar": "foo"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err = s.state.SetUnitWorkloadStatus(c.Context(), unitUUID2, status2)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1080,7 +1080,7 @@ func (s *modelStateSuite) TestGetUnitWorkloadStatusesForApplicationMultipleUnits
 		Status:  status.WorkloadStatusActive,
 		Message: "it's active!",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err := s.state.SetUnitWorkloadStatus(c.Context(), unitUUID1, status1)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1089,7 +1089,7 @@ func (s *modelStateSuite) TestGetUnitWorkloadStatusesForApplicationMultipleUnits
 		Status:  status.WorkloadStatusTerminated,
 		Message: "it's terminated",
 		Data:    []byte(`{"bar": "foo"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err = s.state.SetUnitWorkloadStatus(c.Context(), unitUUID2, status2)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1117,7 +1117,7 @@ func (s *modelStateSuite) TestGetUnitWorkloadStatusesForApplicationNotFound(c *t
 }
 
 func (s *modelStateSuite) TestGetUnitWorkloadStatusesForApplicationNoUnits(c *tc.C) {
-	appId, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	appId, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 
 	results, err := s.state.GetUnitWorkloadStatusesForApplication(c.Context(), appId)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1133,7 +1133,7 @@ func (s *modelStateSuite) TestGetUnitAgentStatusesForApplication(c *tc.C) {
 		Status:  status.UnitAgentStatusExecuting,
 		Message: "it's executing",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err := s.state.SetUnitAgentStatus(c.Context(), unitUUID1, status1)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1142,7 +1142,7 @@ func (s *modelStateSuite) TestGetUnitAgentStatusesForApplication(c *tc.C) {
 		Status:  status.UnitAgentStatusAllocating,
 		Message: "it's allocating m8",
 		Data:    []byte(`{"foo": "baz"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err = s.state.SetUnitAgentStatus(c.Context(), unitUUID2, status2)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1162,19 +1162,19 @@ func (s *modelStateSuite) TestGetAllUnitStatusesForApplication(c *tc.C) {
 		Status:  status.WorkloadStatusActive,
 		Message: "it's active",
 		Data:    []byte(`{"bar": "foo"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	agentStatus := status.StatusInfo[status.UnitAgentStatusType]{
 		Status:  status.UnitAgentStatusAllocating,
 		Message: "it's allocating",
 		Data:    []byte(`{"baz": "qux"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	k8sPodStatus := status.StatusInfo[status.K8sPodStatusType]{
 		Status:  status.K8sPodStatusRunning,
 		Message: "it's running",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err := s.TxnRunner().Txn(c.Context(), func(ctx context.Context, tx *sqlair.TX) error {
 		err := s.state.setK8sPodStatus(ctx, tx, unitUUID, k8sPodStatus)
@@ -1220,7 +1220,7 @@ func (s *modelStateSuite) TestGetUnitK8sPodStatusForApplicationMultipleUnits(c *
 		Status:  status.K8sPodStatusRunning,
 		Message: "it's running!",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err := s.TxnRunner().Txn(c.Context(), func(ctx context.Context, tx *sqlair.TX) error {
 		err := s.state.setUnitWorkloadStatus(ctx, tx, unitUUID1, workloadStatus)
@@ -1239,7 +1239,7 @@ func (s *modelStateSuite) TestGetUnitK8sPodStatusForApplicationMultipleUnits(c *
 		Status:  status.K8sPodStatusBlocked,
 		Message: "it's blocked",
 		Data:    []byte(`{"bar": "foo"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err = s.TxnRunner().Txn(c.Context(), func(ctx context.Context, tx *sqlair.TX) error {
 		err := s.state.setUnitWorkloadStatus(ctx, tx, unitUUID2, workloadStatus)
@@ -1272,7 +1272,7 @@ func (s *modelStateSuite) TestGetAllUnitStatusesForApplicationNotFound(c *tc.C) 
 }
 
 func (s *modelStateSuite) TestGetAllUnitStatusesForApplicationNoUnits(c *tc.C) {
-	appId, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	appId, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 
 	fullStatuses, err := s.state.GetAllFullUnitStatusesForApplication(c.Context(), appId)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1310,7 +1310,7 @@ func (s *modelStateSuite) TestGetAllFullUnitStatuses(c *tc.C) {
 		Status:  status.WorkloadStatusActive,
 		Message: "u1 is active!",
 		Data:    []byte(`{"u1": "workload"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err := s.state.SetUnitWorkloadStatus(c.Context(), u1UUID, u1Workload)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1319,7 +1319,7 @@ func (s *modelStateSuite) TestGetAllFullUnitStatuses(c *tc.C) {
 		Status:  status.UnitAgentStatusIdle,
 		Message: "u1 is idle!",
 		Data:    []byte(`{"u1": "agent"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err = s.state.SetUnitAgentStatus(c.Context(), u1UUID, u1Agent)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1331,7 +1331,7 @@ func (s *modelStateSuite) TestGetAllFullUnitStatuses(c *tc.C) {
 		Status:  status.WorkloadStatusBlocked,
 		Message: "u2 is blocked!",
 		Data:    []byte(`{"u2": "workload"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err = s.state.SetUnitWorkloadStatus(c.Context(), u2UUID, u2Workload)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1340,7 +1340,7 @@ func (s *modelStateSuite) TestGetAllFullUnitStatuses(c *tc.C) {
 		Status:  status.UnitAgentStatusAllocating,
 		Message: "u2 is allocating!",
 		Data:    []byte(`{"u2": "agent"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err = s.state.SetUnitAgentStatus(c.Context(), u2UUID, u2Agent)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1354,7 +1354,7 @@ func (s *modelStateSuite) TestGetAllFullUnitStatuses(c *tc.C) {
 		Status:  status.WorkloadStatusMaintenance,
 		Message: "u3 is maintenance!",
 		Data:    []byte(`{"u3": "workload"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err = s.state.SetUnitWorkloadStatus(c.Context(), u3UUID, u3Workload)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1363,7 +1363,7 @@ func (s *modelStateSuite) TestGetAllFullUnitStatuses(c *tc.C) {
 		Status:  status.UnitAgentStatusRebooting,
 		Message: "u3 is rebooting!",
 		Data:    []byte(`{"u3": "agent"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err = s.state.SetUnitAgentStatus(c.Context(), u3UUID, u3Agent)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1408,14 +1408,14 @@ func (s *modelStateSuite) TestGetAllUnitWorkloadAgentStatusesIgnoresSyntheticCMR
 	unitUUID := unitUUIDs[0]
 	workloadStatus := status.StatusInfo[status.WorkloadStatusType]{
 		Status: status.WorkloadStatusActive,
-		Since:  new(time.Now()),
+		Since:  new(time.Now().Truncate(time.Microsecond)),
 	}
 	err := s.state.SetUnitWorkloadStatus(c.Context(), unitUUID, workloadStatus)
 	c.Assert(err, tc.ErrorIsNil)
 
 	agentStatus := status.StatusInfo[status.UnitAgentStatusType]{
 		Status: status.UnitAgentStatusIdle,
-		Since:  new(time.Now()),
+		Since:  new(time.Now().Truncate(time.Microsecond)),
 	}
 	err = s.state.SetUnitAgentStatus(c.Context(), unitUUID, agentStatus)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1461,20 +1461,20 @@ func (s *modelStateSuite) TestGetAllApplicationStatusesUnsetStatuses(c *tc.C) {
 
 func (s *modelStateSuite) TestGetAllApplicationStatuses(c *tc.C) {
 	app1ID, _ := s.createIAASApplicationWithNUnits(c, "foo", 1)
-	app2ID, _ := s.createIAASApplication(c, "bar", life.Alive, s.workloadStatus(time.Now()))
-	s.createIAASApplication(c, "goo", life.Alive, s.workloadStatus(time.Now()))
+	app2ID, _ := s.createIAASApplication(c, "bar", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
+	s.createIAASApplication(c, "goo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 
 	app1Status := status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusActive,
 		Message: "it's active",
 		Data:    []byte(`{"foo": "bar"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	app2Status := status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusBlocked,
 		Message: "it's blocked",
 		Data:    []byte(`{"bar": "foo"}`),
-		Since:   new(time.Now()),
+		Since:   new(time.Now().Truncate(time.Microsecond)),
 	}
 	err := s.state.SetApplicationStatus(c.Context(), app1ID, app1Status)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1648,7 +1648,7 @@ func (s *modelStateSuite) TestGetApplicationAndUnitStatusesNoAppStatuses(c *tc.C
 }
 
 func (s *modelStateSuite) TestGetApplicationAndUnitStatuses(c *tc.C) {
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 
 	unitUUID := tc.Must(c, coreunit.NewUUID)
 	netNodeUUID1 := tc.Must(c, domainnetwork.NewNetNodeUUID)
@@ -1786,7 +1786,7 @@ func (s *modelStateSuite) TestGetApplicationAndUnitStatuses(c *tc.C) {
 }
 
 func (s *modelStateSuite) TestGetApplicationAndUnitStatusesSubordinate(c *tc.C) {
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	u1 := s.createIAASUnitArg(c)
 	u2 := s.createIAASUnitArg(c)
 	netNodeUUID3 := tc.Must(c, domainnetwork.NewNetNodeUUID)
@@ -1937,7 +1937,7 @@ func (s *modelStateSuite) TestGetApplicationAndUnitStatusesSubordinate(c *tc.C) 
 }
 
 func (s *modelStateSuite) TestGetApplicationAndUnitStatusesWorkloadVersion(c *tc.C) {
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	appStatus := s.workloadStatus(now)
 	appUUID, unitUUDs := s.createCAASApplication(
 		c, "foo", life.Alive, appStatus,
@@ -2000,7 +2000,7 @@ func (s *modelStateSuite) TestGetApplicationAndUnitStatusesWorkloadVersion(c *tc
 }
 
 func (s *modelStateSuite) TestGetApplicationAndUnitStatusesK8sServiceAddress(c *tc.C) {
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	appStatus := s.workloadStatus(now)
 	appUUID, _ := s.createCAASApplication(
 		c, "foo", life.Alive, appStatus,
@@ -2051,7 +2051,7 @@ func (s *modelStateSuite) TestGetApplicationAndUnitStatusesK8sServiceAddress(c *
 }
 
 func (s *modelStateSuite) TestGetApplicationAndUnitStatusesK8sServiceMultipleAddresses(c *tc.C) {
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	appStatus := s.workloadStatus(now)
 	s.createCAASApplication(
 		c, "foo", life.Alive, appStatus,
@@ -2068,7 +2068,7 @@ func (s *modelStateSuite) TestGetApplicationAndUnitStatusesK8sServiceMultipleAdd
 }
 
 func (s *modelStateSuite) TestGetApplicationAndUnitStatusesK8sServiceLocalCloudAddress(c *tc.C) {
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	appStatus := s.workloadStatus(now)
 	s.createCAASApplication(
 		c, "foo", life.Alive, appStatus,
@@ -2082,7 +2082,7 @@ func (s *modelStateSuite) TestGetApplicationAndUnitStatusesK8sServiceLocalCloudA
 }
 
 func (s *modelStateSuite) TestGetApplicationAndUnitStatusesK8sServicePrioritisesPublicAddress(c *tc.C) {
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	appStatus := s.workloadStatus(now)
 	s.createCAASApplication(
 		c, "foo", life.Alive, appStatus,
@@ -2099,7 +2099,7 @@ func (s *modelStateSuite) TestGetApplicationAndUnitStatusesK8sServicePrioritises
 }
 
 func (s *modelStateSuite) TestGetApplicationAndUnitStatusesK8sServicePrioritisesIPv4Address(c *tc.C) {
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	appStatus := s.workloadStatus(now)
 	s.createCAASApplication(
 		c, "foo", life.Alive, appStatus,
@@ -2116,7 +2116,7 @@ func (s *modelStateSuite) TestGetApplicationAndUnitStatusesK8sServicePrioritises
 }
 
 func (s *modelStateSuite) TestGetApplicationAndUnitStatusesK8sServiceSelectsAlphabeticalAddress(c *tc.C) {
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	appStatus := s.workloadStatus(now)
 	s.createCAASApplication(
 		c, "foo", life.Alive, appStatus,
@@ -2133,7 +2133,7 @@ func (s *modelStateSuite) TestGetApplicationAndUnitStatusesK8sServiceSelectsAlph
 }
 
 func (s *modelStateSuite) TestGetApplicationAndUnitStatusesK8sServiceNonLocalAddress(c *tc.C) {
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	appStatus := s.workloadStatus(now)
 	s.createCAASApplication(
 		c, "foo", life.Alive, appStatus,
@@ -2160,7 +2160,7 @@ func (s *modelStateSuite) setWorkloadVersion(c *tc.C, appUUID coreapplication.UU
 }
 
 func (s *modelStateSuite) TestGetApplicationAndUnitStatusesWithRelations(c *tc.C) {
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	appStatus := s.workloadStatus(now)
 	appUUID, _ := s.createCAASApplication(
 		c, "foo", life.Alive, appStatus,
@@ -2227,7 +2227,7 @@ func (s *modelStateSuite) TestGetApplicationAndUnitStatusesWithRelations(c *tc.C
 }
 
 func (s *modelStateSuite) TestGetApplicationAndUnitStatusesWithMultipleRelations(c *tc.C) {
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	appStatus := s.workloadStatus(now)
 	appUUID, _ := s.createCAASApplication(
 		c, "foo", life.Alive, appStatus,
@@ -2330,7 +2330,7 @@ func (s *modelStateSuite) TestGetApplicationAndUnitModelStatusesNoApplication(c 
 }
 
 func (s *modelStateSuite) TestGetApplicationAndUnitModelStatusesNoUnits(c *tc.C) {
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	appStatus := s.workloadStatus(now)
 	s.createIAASApplication(c, "foo", life.Alive, appStatus)
 
@@ -2729,7 +2729,7 @@ func (s *modelStateSuite) TestSetMachineStatusSuccess(c *tc.C) {
 	expectedStatus := status.StatusInfo[status.MachineStatusType]{
 		Status:  status.MachineStatusStarted,
 		Message: "started",
-		Since:   new(time.Now().UTC()),
+		Since:   new(time.Now().UTC().Truncate(time.Microsecond)),
 	}
 	err := s.state.SetMachineStatus(c.Context(), machineName.String(), expectedStatus)
 	c.Assert(err, tc.ErrorIsNil)
@@ -2750,7 +2750,7 @@ func (s *modelStateSuite) TestSetMachineStatusSuccessWithData(c *tc.C) {
 		Status:  status.MachineStatusStarted,
 		Message: "started",
 		Data:    []byte(`{"key": "data"}`),
-		Since:   new(time.Now().UTC()),
+		Since:   new(time.Now().UTC().Truncate(time.Microsecond)),
 	}
 	err := s.state.SetMachineStatus(c.Context(), machineName.String(), expectedStatus)
 	c.Assert(err, tc.ErrorIsNil)

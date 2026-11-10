@@ -42,7 +42,7 @@ func (s *crossModelRelationSuite) SetUpTest(c *tc.C) {
 
 func (s *crossModelRelationSuite) TestApplicationUUIDForOffer(c *tc.C) {
 	// Arrange
-	appUUID, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	appUUID, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 	offerUUID := s.insertOffer(c, "test-offer", appUUID, "endpoint")
 
 	// Act
@@ -70,7 +70,7 @@ func (s *crossModelRelationSuite) TestGetRemoteApplicationOffererUUIDByName(c *t
 }
 
 func (s *crossModelRelationSuite) TestGetRemoteApplicationOffererUUIDByNameNotRemote(c *tc.C) {
-	s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 
 	_, err := s.state.GetRemoteApplicationOffererUUIDByName(c.Context(), "foo")
 	c.Assert(err, tc.ErrorIs, crossmodelrelationerrors.ApplicationNotRemote)
@@ -81,7 +81,7 @@ func (s *crossModelRelationSuite) TestGetRemoteApplicationOffererUUIDByNameNotRe
 	// when a non-remote application exists alongside another remote
 	// application, the non-remote one must not resolve to an unrelated remote
 	// uuid.
-	s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 	s.createIAASRemoteApplicationOfferer(c, "bar")
 
 	_, err := s.state.GetRemoteApplicationOffererUUIDByName(c.Context(), "foo")
@@ -96,7 +96,7 @@ func (s *crossModelRelationSuite) TestGetRemoteApplicationOffererUUIDByNameNotFo
 func (s *crossModelRelationSuite) TestSetRemoteApplicationOffererStatus(c *tc.C) {
 	_, remoteAppUUID := s.createIAASRemoteApplicationOfferer(c, "foo")
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	expected := status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusActive,
 		Message: "message",
@@ -121,11 +121,11 @@ func (s *crossModelRelationSuite) TestSetRemoteApplicationOffererStatusMultipleT
 	err := s.state.SetRemoteApplicationOffererStatus(c.Context(), remoteAppUUID.String(), status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusBlocked,
 		Message: "blocked",
-		Since:   new(time.Now().UTC()),
+		Since:   new(time.Now().UTC().Truncate(time.Microsecond)),
 	})
 	c.Assert(err, tc.ErrorIsNil)
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	expected := status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusActive,
 		Message: "message",
@@ -165,7 +165,7 @@ func (s *crossModelRelationSuite) TestSetRemoteApplicationOffererStatusInvalidSt
 func (s *crossModelRelationSuite) TestSetRemoteApplicationOffererStatusByApplicationUUID(c *tc.C) {
 	appUUID, remoteAppUUID := s.createIAASRemoteApplicationOfferer(c, "foo")
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	expected := status.StatusInfo[status.WorkloadStatusType]{
 		Status:  status.WorkloadStatusActive,
 		Message: "message",
@@ -196,7 +196,7 @@ func (s *crossModelRelationSuite) TestSetRemoteApplicationOffererStatusByApplica
 	// A local application has no remote application offerer; a status write
 	// targeted at its UUID must be refused rather than resolved against an
 	// unrelated remote application.
-	appUUID, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	appUUID, _ := s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 	s.createIAASRemoteApplicationOfferer(c, "bar")
 
 	_, err := s.state.SetRemoteApplicationOffererStatusByApplicationUUID(c.Context(), appUUID.String(), status.StatusInfo[status.WorkloadStatusType]{
@@ -229,7 +229,7 @@ func (s *crossModelRelationSuite) TestGetRemoteApplicationOffererStatusesNoRemot
 }
 
 func (s *crossModelRelationSuite) TestGetRemoteApplicationOffererStatusesNoRemoteApplicationsButAnApplication(c *tc.C) {
-	s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now()))
+	s.createIAASApplication(c, "foo", life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)))
 
 	statuses, err := s.state.GetRemoteApplicationOffererStatuses(c.Context())
 	c.Assert(err, tc.ErrorIsNil)

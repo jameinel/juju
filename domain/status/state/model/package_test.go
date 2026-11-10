@@ -46,7 +46,7 @@ type baseSuite struct {
 
 func (s *baseSuite) SetUpTest(c *tc.C) {
 	s.ModelSuite.SetUpTest(c)
-	s.now = time.Now().UTC()
+	s.now = time.Now().UTC().Truncate(time.Microsecond)
 }
 
 func (s *baseSuite) workloadStatus(now time.Time) *status.StatusInfo[status.WorkloadStatusType] {
@@ -96,7 +96,7 @@ func (s *baseSuite) createIAASApplicationWithNUnits(
 	}
 
 	return s.createIAASApplication(
-		c, name, life.Alive, s.workloadStatus(time.Now()), units...,
+		c, name, life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)), units...,
 	)
 }
 
