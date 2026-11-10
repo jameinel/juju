@@ -294,14 +294,14 @@ VALUES (?, ?, ?, ?, ?)`, rev, sec, i, s.now, s.now)
 		_, err = s.DB().ExecContext(
 			ctx,
 			"INSERT INTO secret_value_ref (revision_uuid, backend_uuid, revision_id) VALUES (?, ?, ?)",
-			rev, "backend-uuid", i,
+			rev, "backend-uuid", strconv.Itoa(i),
 		)
 		c.Assert(err, tc.ErrorIsNil)
 
 		_, err = s.DB().ExecContext(
 			ctx,
 			"INSERT INTO secret_deleted_value_ref (revision_uuid, backend_uuid, revision_id) VALUES (?, ?, ?)",
-			rev, "backend-uuid", i,
+			rev, "backend-uuid", strconv.Itoa(i),
 		)
 		c.Assert(err, tc.ErrorIsNil)
 
