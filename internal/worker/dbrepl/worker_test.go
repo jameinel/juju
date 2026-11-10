@@ -36,6 +36,7 @@ func TestDbReplSuite(t *stdtesting.T) {
 }
 
 func (s *dbReplSuite) SetUpTest(c *tc.C) {
+	testing.SkipOnPostgreSQL(c, "the dbrepl worker queries sqlite_master")
 	s.DqliteSuite.SetUpTest(c)
 
 	s.ApplyDDL(c, &schematesting.SchemaApplier{
