@@ -455,8 +455,8 @@ func (s *relationNetworkServiceSuite) TestGetRelationNetworkIngressMultipleCIDRs
 	expectedCIDRs := []string{
 		"192.0.2.0/24",
 		"198.51.100.0/24",
-		"203.0.113.0/24",
 		"2001:db8::/32",
+		"203.0.113.0/24",
 	}
 
 	s.modelState.EXPECT().GetRelationNetworkIngress(gomock.Any(), relationUUID.String()).Return(expectedCIDRs, nil)
@@ -474,7 +474,7 @@ func (s *relationNetworkServiceSuite) TestGetRelationNetworkIngressIPv6CIDR(c *t
 
 	// Arrange
 	relationUUID := tc.Must(c, corerelation.NewUUID)
-	expectedCIDRs := []string{"2001:db8::/32", "2001:db8:1::/48"}
+	expectedCIDRs := []string{"2001:db8:1::/48", "2001:db8::/32"}
 
 	s.modelState.EXPECT().GetRelationNetworkIngress(gomock.Any(), relationUUID.String()).Return(expectedCIDRs, nil)
 
