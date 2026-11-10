@@ -91,8 +91,8 @@ func (s *stateSuite) TestGetSSHServerHostPublicKeyExisting(c *tc.C) {
 func (s *stateSuite) TestGetSSHServerHostPublicKeyEmpty(c *tc.C) {
 	// Insert a row directly with an empty public_key.
 	_, err := s.DB().Exec(
-		`INSERT INTO controller_ssh_host_key (id, algorithm_type_id, ssh_key, public_key) VALUES (?, ?, ?, x'')`,
-		domainssh.SSHServerHostKeyUUID, domainssh.SSHKeyAlgorithmTypeED25519ID, "dummy-key",
+		`INSERT INTO controller_ssh_host_key (id, algorithm_type_id, ssh_key, public_key) VALUES (?, ?, ?, ?)`,
+		domainssh.SSHServerHostKeyUUID, domainssh.SSHKeyAlgorithmTypeED25519ID, "dummy-key", []byte{},
 	)
 	c.Assert(err, tc.ErrorIsNil)
 
