@@ -31,8 +31,10 @@ type baseSuite struct {
 // with the controller schema.
 func (s *baseSuite) SetUpTest(c *tc.C) {
 	s.DqliteSuite.SetUpTest(c)
+	ddl, err := schema.ControllerDDLForBackend(domaintesting.BackendForTest())
+	c.Assert(err, tc.ErrorIsNil)
 	s.ApplyDDL(c, &domaintesting.SchemaApplier{
-		Schema:  schema.ControllerDDL(),
+		Schema:  ddl,
 		Verbose: s.Verbose,
 	})
 }
@@ -40,8 +42,10 @@ func (s *baseSuite) SetUpTest(c *tc.C) {
 // ApplyDDLForRunner is responsible for applying the controller schema to the
 // given database.
 func (s *baseSuite) ApplyDDLForRunner(c *tc.C, runner coredatabase.TxnRunner) {
+	ddl, err := schema.ControllerDDLForBackend(domaintesting.BackendForTest())
+	c.Assert(err, tc.ErrorIsNil)
 	s.DqliteSuite.ApplyDDLForRunner(c, &domaintesting.SchemaApplier{
-		Schema:  schema.ControllerDDL(),
+		Schema:  ddl,
 		Verbose: s.Verbose,
 	}, runner)
 }
