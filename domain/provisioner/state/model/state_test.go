@@ -372,7 +372,7 @@ func (s *modelStateSuite) TestGetProvisioningInfoConstraintsAllFields(c *tc.C) {
 
 	consUUID := uuid.MustNewUUID().String()
 	s.runQuery(c, `INSERT INTO "constraint" (uuid, arch, cpu_cores, cpu_power, mem, root_disk, root_disk_source, instance_role, instance_type, virt_type, allocate_public_ip, image_id, ip_family) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		consUUID, "arm64", 8, 2000, 16384, 51200, "ebs", "worker", "m5.large", "hvm", 1, "ami-custom", "ipv4")
+		consUUID, "arm64", 8, 2000, 16384, 51200, "ebs", "worker", "m5.large", "hvm", true, "ami-custom", "ipv4")
 	s.runQuery(c, `INSERT INTO machine_constraint (machine_uuid, constraint_uuid) VALUES (?,?)`,
 		machineUUID, consUUID)
 	s.runQuery(c, `INSERT INTO constraint_tag (constraint_uuid, tag) VALUES (?,?)`,
