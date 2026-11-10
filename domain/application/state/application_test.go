@@ -4687,8 +4687,8 @@ func (s *applicationStateSuite) checkNoApplicationSequence(c *tc.C, appName stri
 	c.Helper()
 
 	row := s.DB().QueryRow(
-		"SELECT EXISTS(SELECT 1 FROM sequence WHERE namespace = CONCAT('application_', ?))",
-		appName,
+		"SELECT EXISTS(SELECT 1 FROM sequence WHERE namespace = ?)",
+		"application_"+appName,
 	)
 	var exists bool
 	err := row.Scan(&exists)
@@ -4700,8 +4700,8 @@ func (s *applicationStateSuite) checkApplicationSequence(c *tc.C, appName string
 	c.Helper()
 
 	row := s.DB().QueryRow(
-		"SELECT value FROM sequence WHERE namespace = CONCAT('application_', ?)",
-		appName,
+		"SELECT value FROM sequence WHERE namespace = ?",
+		"application_"+appName,
 	)
 	var got int
 	err := row.Scan(&got)
