@@ -27,6 +27,7 @@ import (
 	charmresource "github.com/juju/juju/domain/deployment/charm/resource"
 	domainnetwork "github.com/juju/juju/domain/network"
 	"github.com/juju/juju/domain/removal"
+	schematesting "github.com/juju/juju/domain/schema/testing"
 	domainstorage "github.com/juju/juju/domain/storage"
 	"github.com/juju/juju/internal/errors"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
@@ -647,12 +648,12 @@ WHERE  a.uuid = ?
 AND    r.state_id = 0`, appID).Scan(&oldCharmUUID, &oldResourceUUID); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `
-CREATE TRIGGER fail_application_charm_update
-BEFORE UPDATE OF charm_uuid ON application
-BEGIN
-    SELECT RAISE(ABORT, 'forced charm update failure');
-END`)
+		_, err := tx.ExecContext(ctx, schematesting.FailingTriggerSQL(schematesting.FailingTrigger{
+			Name:    "fail_application_charm_update",
+			Event:   "BEFORE UPDATE OF charm_uuid",
+			Table:   "application",
+			Message: "forced charm update failure",
+		}))
 		return err
 	})
 	c.Assert(err, tc.ErrorIsNil)

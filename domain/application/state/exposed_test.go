@@ -17,6 +17,7 @@ import (
 	"github.com/juju/juju/core/network"
 	"github.com/juju/juju/domain/application"
 	"github.com/juju/juju/domain/life"
+	schematesting "github.com/juju/juju/domain/schema/testing"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
 	"github.com/juju/juju/internal/uuid"
 )
@@ -712,10 +713,14 @@ func (s *exposedStateSuite) TestUnsetExposeSettingsFailureIdentifiesQuery(c *tc.
 		"application_exposed_endpoint_cidr",
 		"application_exposed_endpoint_space",
 	} {
+		trigger := schematesting.FailingTrigger{
+			Name:    "fail_exposure_delete",
+			Event:   "BEFORE DELETE",
+			Table:   table,
+			Message: "exposure deletion failed",
+		}
 		err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-			_, err := tx.ExecContext(ctx, fmt.Sprintf(`
-CREATE TRIGGER fail_exposure_delete BEFORE DELETE ON %s
-BEGIN SELECT RAISE(ABORT, 'exposure deletion failed'); END`, table))
+			_, err := tx.ExecContext(ctx, schematesting.FailingTriggerSQL(trigger))
 			return err
 		})
 		c.Assert(err, tc.ErrorIsNil)
@@ -728,7 +733,7 @@ BEGIN SELECT RAISE(ABORT, 'exposure deletion failed'); END`, table))
 		c.Check(got, tc.DeepEquals, exposed)
 
 		err = s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-			_, err := tx.ExecContext(ctx, `DROP TRIGGER fail_exposure_delete`)
+			_, err := tx.ExecContext(ctx, schematesting.DropFailingTriggerSQL(trigger))
 			return err
 		})
 		c.Assert(err, tc.ErrorIsNil)
