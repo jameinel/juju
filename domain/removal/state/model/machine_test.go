@@ -2462,7 +2462,7 @@ func (s *machineSuite) TestDeleteMachineWithForceDoesNotCheckChildMachines(c *tc
 	// delete fails on the machine_parent foreign key instead.
 	err = st.DeleteMachine(c.Context(), machineUUID.String(), true)
 	c.Assert(err, tc.NotNil)
-	c.Check(err, tc.ErrorMatches, ".*FOREIGN KEY constraint failed.*")
+	c.Check(err, tc.ErrorMatches, `(?s).*(FOREIGN KEY constraint failed|violates foreign key constraint "fk_machine_parent_parent" on table "machine_parent").*`)
 	c.Check(err, tc.Not(tc.ErrorIs), removalerrors.MachineHasContainers)
 
 	// The container's own forced removal job deletes the child machine

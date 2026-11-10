@@ -1295,7 +1295,7 @@ func (s *applicationSuite) TestDeleteCharmReturnConstraintError(c *tc.C) {
 	err = st.DeleteCharmIfUnused(c.Context(), charmUUID)
 
 	// Assert: delete charm should return a ConstraintError.
-	c.Assert(err, tc.ErrorMatches, ".*FOREIGN KEY constraint failed.*")
+	c.Assert(err, tc.ErrorMatches, `(?s).*(FOREIGN KEY constraint failed|violates foreign key constraint "charm_external_reference_charm_uuid_fkey" on table "charm_external_reference").*`)
 }
 
 func (s *applicationSuite) TestDeleteCharmIfUnusedWithAnnotation(c *tc.C) {
