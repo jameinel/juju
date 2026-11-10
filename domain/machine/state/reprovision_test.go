@@ -1116,13 +1116,13 @@ func (s *stateSuite) TestDetachLostMachineCloudInstanceRollsBack(c *tc.C) {
 	s.addReprovisionUnit(c, netNodeUUID)
 	s.addReprovisionRelationScope(c)
 	s.addReprovisionVolumeStorage(c, machineUUID.String(), netNodeUUID, 1, 1)
-	s.runQuery(c, `
-CREATE TRIGGER fail_reprovision_detach
-BEFORE UPDATE ON machine_cloud_instance
-WHEN NEW.instance_id IS NULL
-BEGIN
-    SELECT RAISE(ABORT, 'detach failed');
-END`)
+	s.runQuery(c, schematesting.FailingTriggerSQL(schematesting.FailingTrigger{
+		Name:    "fail_reprovision_detach",
+		Event:   "BEFORE UPDATE",
+		Table:   "machine_cloud_instance",
+		When:    "NEW.instance_id IS NULL",
+		Message: "detach failed",
+	}))
 
 	err := s.state.DetachLostMachineCloudInstance(
 		c.Context(), machineName.String(), "123", "message", nil, time.Now(), pendingReprovisionStatusIDs(c),
