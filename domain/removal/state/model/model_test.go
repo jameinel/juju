@@ -17,6 +17,7 @@ import (
 	"github.com/juju/juju/domain/life"
 	modelerrors "github.com/juju/juju/domain/model/errors"
 	removalerrors "github.com/juju/juju/domain/removal/errors"
+	schematesting "github.com/juju/juju/domain/schema/testing"
 	"github.com/juju/juju/internal/errors"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
 	"github.com/juju/juju/internal/uuid"
@@ -778,7 +779,7 @@ func (s *modelSuite) TestIsControllerModel(c *tc.C) {
 func (s *modelSuite) TestIsControllerModelControllerModel(c *tc.C) {
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		// Force the model to be a controller model.
-		_, err := tx.ExecContext(ctx, `DROP TRIGGER IF EXISTS trg_model_immutable_update;`)
+		_, err := tx.ExecContext(ctx, schematesting.DropTriggerSQL("trg_model_immutable_update", "model"))
 		if err != nil {
 			return err
 		}
