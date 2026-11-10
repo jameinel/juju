@@ -364,7 +364,7 @@ func (s *watcherSuite) addOperationTaskLogs(c *tc.C, taskUUID string, contents [
 		results = nil
 
 		for _, content := range contents {
-			date := time.Now().UTC()
+			date := time.Now().UTC().Truncate(time.Microsecond)
 
 			_, err := tx.ExecContext(ctx, `
 INSERT INTO operation_task_log (task_uuid, content, created_at) VALUES (?, ?, ?)
