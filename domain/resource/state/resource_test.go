@@ -35,6 +35,7 @@ import (
 	schematesting "github.com/juju/juju/domain/schema/testing"
 	domainsequence "github.com/juju/juju/domain/sequence"
 	sequencestate "github.com/juju/juju/domain/sequence/state"
+	"github.com/juju/juju/internal/database"
 	"github.com/juju/juju/internal/errors"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
 )
@@ -1703,7 +1704,7 @@ INSERT INTO unit_resource (resource_uuid, unit_uuid, charm_resource_name, added_
 VALUES (?, ?, ?, ?)`, resource.UUID, s.constants.fakeUnitUUID1, "other-name", time.Now().UTC())
 		return err
 	})
-	c.Check(err, tc.ErrorMatches, `.*FOREIGN KEY constraint failed.*`)
+	c.Check(database.IsErrConstraintForeignKey(err), tc.IsTrue)
 }
 
 // TestSetUnitResourceUnsetExistingOtherUnits verifies that setting a unit
