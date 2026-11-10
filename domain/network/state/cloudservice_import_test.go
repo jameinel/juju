@@ -116,7 +116,7 @@ func (s *k8sServiceImportSuite) TestCreateK8sServicesDuplicateApplication(c *tc.
 	}
 
 	err := s.state.CreateK8sServices(c.Context(), args)
-	c.Check(err, tc.ErrorMatches, `inserting services: .*UNIQUE constraint failed: k8s_service.application_uuid.*`)
+	c.Check(err, tc.ErrorMatches, `inserting services: .*(UNIQUE constraint failed: k8s_service\.application_uuid|duplicate key value violates unique constraint "idx_k8s_service_application").*`)
 
 	// Reject the entire batch, including the first Service and both net nodes.
 	var count int
