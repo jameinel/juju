@@ -31,8 +31,10 @@ type baseSuite struct {
 // with the controller schema.
 func (s *baseSuite) SetUpTest(c *tc.C) {
 	s.DqliteSuite.SetUpTest(c)
+	ddl, err := schema.ControllerDDLForBackend(domaintesting.BackendForTest())
+	c.Assert(err, tc.ErrorIsNil)
 	s.DqliteSuite.ApplyDDL(c, &domaintesting.SchemaApplier{
-		Schema:  schema.ControllerDDL(),
+		Schema:  ddl,
 		Verbose: s.Verbose,
 	})
 }
