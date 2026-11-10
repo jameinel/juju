@@ -6,6 +6,7 @@ package state
 import (
 	"context"
 	"database/sql"
+	"sort"
 	stdtesting "testing"
 	"time"
 
@@ -2085,7 +2086,7 @@ func (s *resourceSuite) TestListResourcesNoResources(c *tc.C) {
 	results, err := s.state.ListResources(c.Context(), application.UUID(s.constants.fakeApplicationUUID1))
 	// Assert
 	c.Assert(err, tc.ErrorIsNil, tc.Commentf("(Assert) failed to list resources: %v", errors.ErrorStack(err)))
-	c.Check(results.UnitResources, tc.DeepEquals, []coreresource.UnitResources{
+	c.Check(results.UnitResources, tc.SameContents, []coreresource.UnitResources{
 		{
 			Name: unit.Name(s.constants.fakeUnitName1),
 			// No resources
@@ -2198,7 +2199,12 @@ func (s *resourceSuite) TestListResources(c *tc.C) {
 	// the application, even if not directly linked to this unit resource, should be properly retrieved
 	withUnit2AvailableRes.ApplicationUUID = s.constants.fakeApplicationUUID1
 	c.Assert(err, tc.ErrorIsNil, tc.Commentf("(Assert) failed to list resources: %v", errors.ErrorStack(err)))
-	c.Check(results.UnitResources, tc.DeepEquals, []coreresource.UnitResources{
+	for _, unitResources := range results.UnitResources {
+		sort.Slice(unitResources.Resources, func(i, j int) bool {
+			return unitResources.Resources[i].Name < unitResources.Resources[j].Name
+		})
+	}
+	c.Check(results.UnitResources, tc.SameContents, []coreresource.UnitResources{
 		{
 			Name: unit.Name(s.constants.fakeUnitName1),
 			Resources: []coreresource.Resource{
@@ -2217,13 +2223,13 @@ func (s *resourceSuite) TestListResources(c *tc.C) {
 			// No resources
 		},
 	})
-	c.Check(results.Resources, tc.DeepEquals, []coreresource.Resource{
+	c.Check(results.Resources, tc.SameContents, []coreresource.Resource{
 		noUnitAvailableRes.toResource(s, c),
 		withUnit1AvailableRes.toResource(s, c),
 		// withUnit2AvailableRes is the same resource as above on another unit
 		withUnitBisAvailableRes.toResource(s, c),
 	})
-	c.Check(results.RepositoryResources, tc.DeepEquals, []charmresource.Resource{
+	c.Check(results.RepositoryResources, tc.SameContents, []charmresource.Resource{
 		noUnitPotentialRes.toCharmResource(c),
 		withUnitPotentialRes.toCharmResource(c),
 	})
