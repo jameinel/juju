@@ -942,7 +942,7 @@ func (s *watcherSuite) TestWatchSecretsRevisionExpiryChanges(c *tc.C) {
 		c.Assert(err, tc.ErrorIsNil)
 	}, func(w watchertest.WatcherC[[]corewatcher.SecretTriggerChange]) {
 		w.Check(
-			watchertest.SecretTriggerSliceAssert(
+			secretTriggerSliceUnorderedAssert(
 				corewatcher.SecretTriggerChange{
 					URI:             uris[0],
 					Revision:        1,
@@ -977,7 +977,7 @@ func (s *watcherSuite) TestWatchSecretsRevisionExpiryChanges(c *tc.C) {
 	harness1 := watchertest.NewHarness(s, watchertest.NewWatcherC(c, w1))
 	harness1.AddTest(c, func(c *tc.C) {}, func(w watchertest.WatcherC[[]corewatcher.SecretTriggerChange]) {
 		w.Check(
-			watchertest.SecretTriggerSliceAssert(
+			secretTriggerSliceUnorderedAssert(
 				corewatcher.SecretTriggerChange{
 					URI:             uris[0],
 					Revision:        1,
@@ -993,6 +993,31 @@ func (s *watcherSuite) TestWatchSecretsRevisionExpiryChanges(c *tc.C) {
 	})
 
 	harness1.Run(c, []corewatcher.SecretTriggerChange(nil))
+}
+
+func secretTriggerSliceUnorderedAssert(expect ...corewatcher.SecretTriggerChange) watchertest.WatcherAssert[[]corewatcher.SecretTriggerChange] {
+	compare := func(a, b corewatcher.SecretTriggerChange) int {
+		if order := coresecrets.CompareURI(a.URI, b.URI); order != 0 {
+			return order
+		}
+		if a.Revision < b.Revision {
+			return -1
+		}
+		if a.Revision > b.Revision {
+			return 1
+		}
+		return 0
+	}
+	slices.SortFunc(expect, compare)
+	assert := watchertest.SecretTriggerSliceAssert(expect...)
+	return func(c *tc.C, changes [][]corewatcher.SecretTriggerChange) bool {
+		var received []corewatcher.SecretTriggerChange
+		for _, change := range changes {
+			received = append(received, change...)
+		}
+		slices.SortFunc(received, compare)
+		return assert(c, [][]corewatcher.SecretTriggerChange{received})
+	}
 }
 
 func (s *watcherSuite) setupUnits(c *tc.C, appName string) string {
