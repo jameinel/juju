@@ -15,6 +15,7 @@ import (
 
 	corenetwork "github.com/juju/juju/core/network"
 	"github.com/juju/juju/domain/network"
+	"github.com/juju/juju/internal/database"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
 	"github.com/juju/juju/internal/uuid"
 )
@@ -333,7 +334,8 @@ VALUES (?, ?)
 	})
 
 	// Assert
-	c.Assert(err, tc.ErrorMatches, "CHECK constraint failed: chk_provider_id_empty")
+	c.Assert(database.IsErrConstraintCheck(err), tc.IsTrue)
+	c.Check(err, tc.ErrorMatches, ".*chk_provider_id_empty.*")
 }
 
 // TestCannotAddEmptyProviderIPAddress tests that an empty string provider ID
@@ -357,7 +359,8 @@ VALUES (?, ?)
 	})
 
 	// Assert
-	c.Assert(err, tc.ErrorMatches, "CHECK constraint failed: chk_provider_id_empty")
+	c.Assert(database.IsErrConstraintCheck(err), tc.IsTrue)
+	c.Check(err, tc.ErrorMatches, ".*chk_provider_id_empty.*")
 }
 
 // TestMergeLinkLayerDeviceLiveData test with real data from an OCI cloud

@@ -14,6 +14,7 @@ import (
 	"github.com/juju/juju/core/network"
 	networktesting "github.com/juju/juju/core/network/testing"
 	networkerrors "github.com/juju/juju/domain/network/errors"
+	"github.com/juju/juju/internal/database"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
 )
 
@@ -713,7 +714,8 @@ func (s *stateSuite) TestCannotAddEmptyProviderSubnet(c *tc.C) {
 	})
 
 	// Assert
-	c.Assert(err, tc.ErrorMatches, "CHECK constraint failed: chk_provider_id_empty")
+	c.Assert(database.IsErrConstraintCheck(err), tc.IsTrue)
+	c.Check(err, tc.ErrorMatches, ".*chk_provider_id_empty.*")
 }
 
 func (s *stateSuite) assertSubnet(c *tc.C, db *sql.DB, subnetUUID, expectedCIDR string, expectedVLANTag int, expectedSpaceUUID string) {
