@@ -1965,18 +1965,14 @@ func (s *streamSuite) insertChangeRows(c *tc.C, rows ...changeRow) []int64 {
 // writeChangeRows is insertChangeRows without assertions, so that it can be
 // used from goroutines other than the test's.
 func (s *streamSuite) writeChangeRows(ctx context.Context, rows ...changeRow) ([]int64, error) {
-	q := `INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at) VALUES (?, ?, ?, ?)`
+	q := `INSERT INTO change_log (edit_type_id, namespace_id, changed, created_at) VALUES (?, ?, ?, ?) RETURNING id`
 
 	var ids []int64
 	err := s.TxnRunner().StdTxn(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		ids = ids[:0]
 		for _, row := range rows {
-			result, err := tx.ExecContext(ctx, q, row.changeType, row.namespace, row.changed, row.createdAt)
-			if err != nil {
-				return err
-			}
-			id, err := result.LastInsertId()
-			if err != nil {
+			var id int64
+			if err := tx.QueryRowContext(ctx, q, row.changeType, row.namespace, row.changed, row.createdAt).Scan(&id); err != nil {
 				return err
 			}
 			ids = append(ids, id)
