@@ -3202,10 +3202,10 @@ SELECT uuid, created_at
 FROM   resource
 WHERE  charm_resource_name = ?
 AND    charm_uuid = ?
-AND    COALESCE(revision, '') = COALESCE(?, '') -- Revision may be NULL
+AND    (revision = ? OR (revision IS NULL AND CAST(? AS INTEGER) IS NULL))
 AND    origin_type_id = ?
 AND    state_id = 0 -- "available"
-`, res.Name, charmUUID, NullableRevision(res.Revision), OriginTypeID(res.Origin.String())).Scan(
+`, res.Name, charmUUID, NullableRevision(res.Revision), NullableRevision(res.Revision), OriginTypeID(res.Origin.String())).Scan(
 			&uuid, &createdAt,
 		)
 	})
