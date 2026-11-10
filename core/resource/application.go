@@ -8,18 +8,16 @@ import (
 	"github.com/juju/juju/domain/deployment/charm/resource"
 )
 
-// ApplicationResources contains the list of resources for the application and all its
-// units.
+// ApplicationResources contains resources for an application and its units.
+// Slice order is not guaranteed.
 type ApplicationResources struct {
 	// Resources are the current version of the resource for the application that
 	// resource-get will retrieve.
 	Resources []Resource
 
-	// RepositoryResources provides the resource info from the charm
-	// store for each of the application's resources. The information from
-	// the charm store is current as of the last time the charm store
-	// was polled. Each entry here corresponds to the same indexed entry
-	// in the Resources field.
+	// RepositoryResources provides resource information from the charm store
+	// as of the last poll. Match entries to Resources by resource name, not
+	// slice index. The slices may differ in length, order and resource names.
 	RepositoryResources []resource.Resource
 
 	// UnitResources reports the currently-in-use version of resources for each
