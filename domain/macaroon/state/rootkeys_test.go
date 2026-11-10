@@ -27,7 +27,7 @@ var (
 	// Ensure we use one time for all the tests, so that we can reliably compare
 	// the time without worrying about the time changing from one test to
 	// another, causing intermittent failure.
-	now = time.Now()
+	now = time.Now().Truncate(time.Microsecond)
 
 	key0 = macaroon.RootKey{
 		ID:      []byte("0"),
