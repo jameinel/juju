@@ -16,6 +16,7 @@ import (
 	"github.com/juju/juju/core/network"
 	"github.com/juju/juju/domain/deployment/charm"
 	networkerrors "github.com/juju/juju/domain/network/errors"
+	schematesting "github.com/juju/juju/domain/schema/testing"
 )
 
 type spaceDeleteSuite struct {
@@ -274,9 +275,13 @@ func (s *spaceDeleteSuite) TestDeleteSpaceExposureFailureIdentifiesTable(c *tc.C
 			{"DELETE", "deleting duplicate exposure from"},
 			{"UPDATE", "resetting exposure references in"},
 		} {
-			s.query(c, fmt.Sprintf(`
-CREATE TRIGGER fail_exposure_change BEFORE %s ON %s
-BEGIN SELECT RAISE(ABORT, 'exposure change failed'); END`, operation.sql, table))
+			trigger := schematesting.FailingTrigger{
+				Name:    "fail_exposure_change",
+				Event:   "BEFORE " + operation.sql,
+				Table:   table,
+				Message: "exposure change failed",
+			}
+			s.query(c, schematesting.FailingTriggerSQL(trigger))
 
 			err := s.txn(c, func(ctx context.Context, tx *sqlair.TX) error {
 				return s.state.deleteSpace(ctx, tx, "toDelete")
@@ -293,7 +298,7 @@ BEGIN SELECT RAISE(ABORT, 'exposure change failed'); END`, operation.sql, table)
 			c.Check(s.selectDistinctValues(c, "name", "space"),
 				tc.SameContents, []string{network.AlphaSpaceName.String(), "toDelete"})
 
-			s.query(c, `DROP TRIGGER fail_exposure_change`)
+			s.query(c, schematesting.DropFailingTriggerSQL(trigger))
 		}
 	}
 }
