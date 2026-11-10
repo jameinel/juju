@@ -150,7 +150,7 @@ func (s *relationWithRemoteConsumer) TestRelationWithRemoteConsumerScheduleRemov
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.RelationWithRemoteConsumerScheduleRemoval(
 		c.Context(), "removal-uuid", relUUID.String(), false, when,
 	)
@@ -180,7 +180,7 @@ where  r.uuid = ?`, "removal-uuid",
 func (s *relationWithRemoteConsumer) TestRelationWithRemoteConsumerScheduleRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.RelationWithRemoteConsumerScheduleRemoval(
 		c.Context(), "removal-uuid", "some-relation-uuid", true, when,
 	)

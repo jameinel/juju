@@ -449,7 +449,7 @@ func (s *unitSuite) TestUnitRemovalNormalSuccess(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.UnitScheduleRemoval(
 		c.Context(), "removal-uuid", unitUUID.String(), false, when,
 	)
@@ -565,7 +565,7 @@ VALUES (?, ?, ?, ?)`,
 func (s *unitSuite) TestUnitRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.UnitScheduleRemoval(
 		c.Context(), "removal-uuid", "some-unit-uuid", true, when,
 	)

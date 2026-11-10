@@ -105,7 +105,7 @@ func (s *storageSuite) TestScheduleStorageAttachmentRemovalSuccess(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.StorageAttachmentScheduleRemoval(
 		c.Context(), "removal-uuid", attachment, false, when,
 	)
@@ -446,7 +446,7 @@ func (s *storageSuite) TestStorageInstanceScheduleRemoval(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.StorageInstanceScheduleRemoval(
 		c.Context(), "removal-uuid", attachment, false, when,
 	)
@@ -566,7 +566,7 @@ func (s *storageSuite) TestVolumeScheduleRemovalSuccess(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.VolumeScheduleRemoval(
 		c.Context(), "removal-uuid", volUUID, false, when,
 	)
@@ -749,7 +749,7 @@ func (s *storageSuite) TestFilesystemScheduleRemovalSuccess(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.FilesystemScheduleRemoval(
 		c.Context(), "removal-uuid", fsUUID, false, when,
 	)
@@ -1086,7 +1086,7 @@ func (s *storageSuite) TestFilesystemAttachmentScheduleRemoval(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.FilesystemAttachmentScheduleRemoval(
 		c.Context(), "removal-uuid", fsaUUID, false, when,
 	)
@@ -1248,7 +1248,7 @@ func (s *storageSuite) TestVolumeAttachmentScheduleRemoval(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.VolumeAttachmentScheduleRemoval(
 		c.Context(), "removal-uuid", vaUUID, false, when,
 	)
@@ -1827,7 +1827,7 @@ func (s *storageSuite) TestVolumeAttachmentPlanScheduleRemoval(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.VolumeAttachmentPlanScheduleRemoval(
 		c.Context(), "removal-uuid", vapUUID, false, when,
 	)

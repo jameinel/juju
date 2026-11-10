@@ -1194,7 +1194,7 @@ func (s *machineSuite) TestMachineRemovalNormalSuccess(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.MachineScheduleRemoval(
 		c.Context(), "removal-uuid", machineUUID.String(), false, when,
 	)
@@ -1223,7 +1223,7 @@ func (s *machineSuite) TestMachineRemovalNormalSuccess(c *tc.C) {
 func (s *machineSuite) TestMachineRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.MachineScheduleRemoval(
 		c.Context(), "removal-uuid", "some-machine-uuid", true, when,
 	)

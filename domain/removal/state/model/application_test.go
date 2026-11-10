@@ -512,7 +512,7 @@ func (s *applicationSuite) TestApplicationRemovalNormalSuccess(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.ApplicationScheduleRemoval(
 		c.Context(), "removal-uuid", appUUID.String(), false, when,
 	)
@@ -541,7 +541,7 @@ func (s *applicationSuite) TestApplicationRemovalNormalSuccess(c *tc.C) {
 func (s *applicationSuite) TestApplicationRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.ApplicationScheduleRemoval(
 		c.Context(), "removal-uuid", "some-application-uuid", true, when,
 	)

@@ -501,7 +501,7 @@ func (s *modelSuite) TestModelRemovalNormalSuccess(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.ModelScheduleRemoval(
 		c.Context(),
 		"removal-uuid",
@@ -536,7 +536,7 @@ func (s *modelSuite) TestModelRemovalNormalSuccess(c *tc.C) {
 func (s *modelSuite) TestModelRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.ModelScheduleRemoval(
 		c.Context(),
 		"removal-uuid",
@@ -576,7 +576,7 @@ func (s *modelSuite) TestControllerModelRemovalNormalSuccess(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.ControllerModelScheduleRemoval(
 		c.Context(),
 		"removal-uuid",
@@ -611,7 +611,7 @@ func (s *modelSuite) TestControllerModelRemovalNormalSuccess(c *tc.C) {
 func (s *modelSuite) TestControllerModelRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC()
+	when := time.Now().UTC().Truncate(time.Microsecond)
 	err := st.ControllerModelScheduleRemoval(
 		c.Context(),
 		"removal-uuid",
