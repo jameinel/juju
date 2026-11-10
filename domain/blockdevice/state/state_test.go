@@ -58,10 +58,6 @@ func (s *stateSuite) insertBlockDevice(
 	c *tc.C, bd coreblockdevice.BlockDevice,
 	blockDeviceUUID blockdevice.BlockDeviceUUID, machineUUID machine.UUID,
 ) {
-	inUse := 0
-	if bd.InUse {
-		inUse = 1
-	}
 	_, err := s.DB().Exec(`
 INSERT INTO block_device (
 	uuid, machine_uuid, name, filesystem_label,
@@ -70,7 +66,7 @@ INSERT INTO block_device (
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `, blockDeviceUUID, machineUUID, bd.DeviceName, bd.FilesystemLabel,
 		bd.FilesystemUUID, bd.HardwareId, bd.WWN, bd.BusAddress, bd.SerialId,
-		bd.MountPoint, bd.FilesystemType, bd.SizeMiB, inUse,
+		bd.MountPoint, bd.FilesystemType, bd.SizeMiB, bd.InUse,
 		int(bd.Provenance))
 	c.Assert(err, tc.ErrorIsNil)
 
