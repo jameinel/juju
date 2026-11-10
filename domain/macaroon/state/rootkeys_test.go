@@ -4,7 +4,6 @@
 package state
 
 import (
-	"math"
 	stdtesting "testing"
 	"time"
 
@@ -28,6 +27,8 @@ var (
 	// the time without worrying about the time changing from one test to
 	// another, causing intermittent failure.
 	now = time.Now().Truncate(time.Microsecond)
+
+	farFuture = time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	key0 = macaroon.RootKey{
 		ID:      []byte("0"),
@@ -99,7 +100,7 @@ func (s *rootKeyStateSuite) TestFindLatestKeyReturnsMostRecent(c *tc.C) {
 	ctx := c.Context()
 	addAllKeys(c, st)
 
-	res, err := st.FindLatestKey(ctx, time.Unix(0, 0), time.Unix(0, 0), time.Unix(math.MaxInt64, 0), now)
+	res, err := st.FindLatestKey(ctx, time.Unix(0, 0), time.Unix(0, 0), farFuture, now)
 	c.Assert(err, tc.ErrorIsNil)
 	compareRootKeys(c, key3, res)
 }
@@ -109,7 +110,7 @@ func (s *rootKeyStateSuite) TestFindLatestKeyExpiresAfter(c *tc.C) {
 	ctx := c.Context()
 	addAllKeys(c, st)
 
-	res, err := st.FindLatestKey(ctx, time.Unix(0, 0), now.Add(7*time.Second), time.Unix(math.MaxInt64, 0), now)
+	res, err := st.FindLatestKey(ctx, time.Unix(0, 0), now.Add(7*time.Second), farFuture, now)
 	c.Assert(err, tc.ErrorIsNil)
 	compareRootKeys(c, key2, res)
 }
@@ -119,11 +120,11 @@ func (s *rootKeyStateSuite) TestFindLatestKeyCreatedAfter(c *tc.C) {
 	ctx := c.Context()
 	addAllKeys(c, st)
 
-	res, err := st.FindLatestKey(ctx, time.Unix(0, 0), time.Unix(0, 0), time.Unix(math.MaxInt64, 0), now)
+	res, err := st.FindLatestKey(ctx, time.Unix(0, 0), time.Unix(0, 0), farFuture, now)
 	c.Assert(err, tc.ErrorIsNil)
 	compareRootKeys(c, key3, res)
 
-	_, err = st.FindLatestKey(ctx, time.Unix(math.MaxInt64, 0), time.Unix(0, 0), time.Unix(math.MaxInt64, 0), now)
+	_, err = st.FindLatestKey(ctx, farFuture, time.Unix(0, 0), farFuture, now)
 	c.Assert(err, tc.ErrorIs, errors.KeyNotFound)
 }
 
@@ -211,7 +212,7 @@ func (s *rootKeyStateSuite) TestRemoveKeysExpiredAll(c *tc.C) {
 	_, err = st.GetKey(ctx, key4.ID, now)
 	c.Check(err, tc.ErrorIs, errors.KeyNotFound)
 
-	_, err = st.FindLatestKey(ctx, time.Unix(0, 0), time.Unix(0, 0), time.Unix(math.MaxInt64, 0), now)
+	_, err = st.FindLatestKey(ctx, time.Unix(0, 0), time.Unix(0, 0), farFuture, now)
 	c.Check(err, tc.ErrorIs, errors.KeyNotFound)
 }
 
