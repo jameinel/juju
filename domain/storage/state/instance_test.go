@@ -159,7 +159,7 @@ func (s *instanceSuite) TestStorageInstanceInfoFilesystemUnitAttach(c *tc.C) {
 		c, fsUUID, unitNetNodeUUID, "/mnt/fs1",
 	)
 
-	statusTime := time.Now()
+	statusTime := time.Now().UTC().Truncate(time.Microsecond)
 	s.setFilesystemStatus(
 		c, fsUUID, domainstatus.StorageFilesystemStatusTypeAttached,
 		"test", statusTime,
@@ -273,7 +273,7 @@ func (s *instanceSuite) TestStorageInstanceInfoFilesysteamVolumeBackedUnitAttach
 		c, vUUID, unitNetNodeUUID, blockDeviceUUID,
 	)
 
-	statusTime := time.Now()
+	statusTime := time.Now().UTC().Truncate(time.Microsecond)
 	s.setFilesystemStatus(
 		c, fsUUID, domainstatus.StorageFilesystemStatusTypeAttached,
 		"testFilesystem", statusTime,
@@ -365,7 +365,7 @@ func (s *instanceSuite) TestStorageInstanceInfoVolumeUnitAttach(c *tc.C) {
 		c, vUUID, unitNetNodeUUID, blockDeviceUUID,
 	)
 
-	statusTime := time.Now()
+	statusTime := time.Now().UTC().Truncate(time.Microsecond)
 	s.setVolumeStatus(
 		c, vUUID, domainstatus.StorageVolumeStatusTypeAttached,
 		"testVolume", statusTime,
@@ -438,7 +438,7 @@ func (s *instanceSuite) TestStorageInstanceInfoVolumeUnitAttachNoDeviceLinks(c *
 		c, vUUID, unitNetNodeUUID, blockDeviceUUID,
 	)
 
-	statusTime := time.Now()
+	statusTime := time.Now().UTC().Truncate(time.Microsecond)
 	s.setVolumeStatus(
 		c, vUUID, domainstatus.StorageVolumeStatusTypeAttached,
 		"testVolume", statusTime,

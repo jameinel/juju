@@ -65,7 +65,7 @@ func (s *storageSuite) TestCreateStorageInstanceWithExistingFilesystem(c *tc.C) 
 
 	storageInstanceUUID := tc.Must(c, domainstorage.NewStorageInstanceUUID)
 	filesystemUUID := tc.Must(c, domainstorage.NewFilesystemUUID)
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 
 	args := domainstorageinternal.CreateStorageInstanceWithExistingFilesystem{
 		UUID:                      storageInstanceUUID,
@@ -203,7 +203,7 @@ func (s *storageSuite) TestCreateStorageInstanceWithExistingVolumeBackedFilesyst
 	storageInstanceUUID := tc.Must(c, domainstorage.NewStorageInstanceUUID)
 	filesystemUUID := tc.Must(c, domainstorage.NewFilesystemUUID)
 	volumeUUID := tc.Must(c, domainstorage.NewVolumeUUID)
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 
 	fsArgs := domainstorageinternal.CreateStorageInstanceWithExistingFilesystem{
 		UUID:                      storageInstanceUUID,
