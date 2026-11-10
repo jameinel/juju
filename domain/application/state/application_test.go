@@ -303,7 +303,7 @@ func (s *applicationStateSuite) TestCreateApplicationWithStatus(c *tc.C) {
 	}
 	ctx := c.Context()
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	id, _, err := s.state.CreateIAASApplication(ctx, "666", application.AddIAASApplicationArg{
 		BaseAddApplicationArg: application.BaseAddApplicationArg{
 			Platform: platform,

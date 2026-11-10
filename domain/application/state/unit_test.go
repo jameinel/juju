@@ -207,7 +207,7 @@ WHERE u.name=?`,
 func (s *unitStateSuite) TestUpdateCAASUnitStatuses(c *tc.C) {
 	unitName, unitUUID := s.createNamedCAASUnit(c)
 
-	now := new(time.Now())
+	now := new(time.Now().Truncate(time.Microsecond))
 	params := application.UpdateCAASUnitParams{
 		AgentStatus: new(status.StatusInfo[status.UnitAgentStatusType]{
 			Status:  status.UnitAgentStatusIdle,
@@ -753,7 +753,7 @@ func (s *unitStateSuite) TestAddUnitsApplicationNotAlive(c *tc.C) {
 func (s *unitStateSuite) TestAddIAASUnits(c *tc.C) {
 	appID := s.createIAASApplication(c, "foo", life.Alive)
 
-	now := new(time.Now())
+	now := new(time.Now().Truncate(time.Microsecond))
 	netNodeUUID := tc.Must(c, domainnetwork.NewNetNodeUUID)
 	u := application.AddIAASUnitArg{
 		MachineNetNodeUUID: netNodeUUID,
@@ -809,7 +809,7 @@ func (s *unitStateSuite) TestAddIAASUnitWithSpaceConstraint(c *tc.C) {
 	appID := s.createIAASApplication(c, "foo", life.Alive)
 	s.addSpace(c, "beta")
 
-	now := new(time.Now())
+	now := new(time.Now().Truncate(time.Microsecond))
 	netNodeUUID := tc.Must(c, domainnetwork.NewNetNodeUUID)
 	u := application.AddIAASUnitArg{
 		MachineNetNodeUUID: netNodeUUID,
@@ -869,7 +869,7 @@ func (s *unitStateSuite) TestAddIAASUnitWithSpaceConstraint(c *tc.C) {
 func (s *unitStateSuite) TestAddCAASUnits(c *tc.C) {
 	appID := s.createIAASApplication(c, "foo", life.Alive)
 
-	now := new(time.Now())
+	now := new(time.Now().Truncate(time.Microsecond))
 	u := application.AddCAASUnitArg{
 		AddUnitArg: application.AddUnitArg{
 			NetNodeUUID: tc.Must(c, domainnetwork.NewNetNodeUUID),
