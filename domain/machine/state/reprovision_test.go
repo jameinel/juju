@@ -17,6 +17,8 @@ import (
 	machineerrors "github.com/juju/juju/domain/machine/errors"
 	provisionermodelstate "github.com/juju/juju/domain/provisioner/state/model"
 	removalmodelstate "github.com/juju/juju/domain/removal/state/model"
+	"github.com/juju/juju/domain/schema"
+	schematesting "github.com/juju/juju/domain/schema/testing"
 	domainstatus "github.com/juju/juju/domain/status"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
 )
@@ -349,13 +351,15 @@ VALUES (?, ?, ?)`, "reprovision-unit", 0, "old-host-key")
 	c.Check(s.rowCountWhere(c, "storage_unit_owner", "unit_uuid = ?", "reprovision-unit"), tc.Equals, 0)
 	c.Check(s.rowCountWhere(c, "unit_virtual_ssh_host_key", "unit_uuid = ?", "reprovision-unit"), tc.Equals, 0)
 
-	// We should use foreign key checks to ensure that all the related data has
-	// been removed in the removal domain.
-	rows, err := s.DB().QueryContext(c.Context(), "PRAGMA foreign_key_check")
-	c.Assert(err, tc.ErrorIsNil)
-	defer rows.Close()
-	c.Check(rows.Next(), tc.IsFalse)
-	c.Assert(rows.Err(), tc.ErrorIsNil)
+	// PostgreSQL has no deferrable foreign keys, so each statement has
+	// already checked them. Dqlite also needs an explicit integrity check.
+	if schematesting.BackendForTest() == schema.BackendDqlite {
+		rows, err := s.DB().QueryContext(c.Context(), "PRAGMA foreign_key_check")
+		c.Assert(err, tc.ErrorIsNil)
+		defer rows.Close()
+		c.Check(rows.Next(), tc.IsFalse)
+		c.Assert(rows.Err(), tc.ErrorIsNil)
+	}
 }
 
 func (s *stateSuite) TestDetachLostMachineCloudInstanceRejectsReplacementUnitNameCollision(c *tc.C) {
