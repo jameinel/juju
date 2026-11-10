@@ -1274,7 +1274,7 @@ func (s *applicationSuite) TestDeleteCharmReturnConstraintError(c *tc.C) {
 		CREATE TABLE IF NOT EXISTS charm_external_reference (
 			uuid TEXT PRIMARY KEY,
 			charm_uuid TEXT,
-			created_at DATETIME,
+			created_at TIMESTAMP,
 			FOREIGN KEY(charm_uuid) REFERENCES charm(uuid)
 		)`)
 		if err != nil {
