@@ -295,6 +295,8 @@ func (s *applicationSuite) TestEnsureApplicationOnMultipleMachines(c *tc.C) {
 
 	app1UnitUUIDs := s.getAllUnitUUIDs(c, appUUID1)
 	app2UnitUUIDs := s.getAllUnitUUIDs(c, appUUID2)
+	c.Assert(app1UnitUUIDs, tc.HasLen, 1)
+	c.Assert(app2UnitUUIDs, tc.HasLen, 1)
 
 	c.Check(artifacts.RelationUUIDs, tc.HasLen, 0)
 	s.checkUnitContents(c, artifacts.UnitUUIDs, app1UnitUUIDs)
@@ -302,28 +304,32 @@ func (s *applicationSuite) TestEnsureApplicationOnMultipleMachines(c *tc.C) {
 
 	s.checkApplicationDyingState(c, appUUID1)
 
-	var (
-		count int
-		uuid  string
-	)
-
 	// There should be one unit that is alive (from app2), and one that is dying
 	// (from app1).
-	row := s.DB().QueryRow("SELECT COUNT(*), uuid FROM unit WHERE life_id = 0")
-	err = row.Scan(&count, &uuid)
-	c.Assert(err, tc.ErrorIsNil)
-	c.Check(count, tc.Equals, 1)
-	c.Check(uuid, tc.Equals, app2UnitUUIDs[0].String())
-
-	row = s.DB().QueryRow("SELECT COUNT(*), uuid FROM unit WHERE life_id != 0")
-	err = row.Scan(&count, &uuid)
-	c.Assert(err, tc.ErrorIsNil)
-	c.Check(count, tc.Equals, 1)
-	c.Check(uuid, tc.Equals, app1UnitUUIDs[0].String())
+	for _, check := range []struct {
+		query string
+		uuid  string
+	}{
+		{"SELECT uuid FROM unit WHERE life_id = 0", app2UnitUUIDs[0].String()},
+		{"SELECT uuid FROM unit WHERE life_id != 0", app1UnitUUIDs[0].String()},
+	} {
+		rows, err := s.DB().QueryContext(c.Context(), check.query)
+		c.Assert(err, tc.ErrorIsNil)
+		var uuids []string
+		for rows.Next() {
+			var uuid string
+			c.Assert(rows.Scan(&uuid), tc.ErrorIsNil)
+			uuids = append(uuids, uuid)
+		}
+		c.Assert(rows.Err(), tc.ErrorIsNil)
+		c.Assert(rows.Close(), tc.ErrorIsNil)
+		c.Check(uuids, tc.DeepEquals, []string{check.uuid})
+	}
 
 	// The machine is being used by another application, so it should be
 	// still alive.
-	row = s.DB().QueryRow("SELECT COUNT(*) FROM machine WHERE life_id = 0")
+	var count int
+	row := s.DB().QueryRow("SELECT COUNT(*) FROM machine WHERE life_id = 0")
 	err = row.Scan(&count)
 	c.Assert(err, tc.ErrorIsNil)
 	c.Check(count, tc.Equals, 1)
