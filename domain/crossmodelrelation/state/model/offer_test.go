@@ -312,7 +312,7 @@ func (s *modelOfferSuite) TestDeleteFailedOffer(c *tc.C) {
 	c.Check(s.readOfferEndpoints(c), tc.HasLen, 0)
 }
 
-func (s *modelOfferSuite) TestCreateOfferEndpointsInsertedInNameOrder(c *tc.C) {
+func (s *modelOfferSuite) TestCreateOfferEndpointsReturnedInNameOrder(c *tc.C) {
 	// Arrange
 	charmUUID := s.addCharm(c)
 	s.addCharmMetadata(c, charmUUID, false)
@@ -333,8 +333,8 @@ func (s *modelOfferSuite) TestCreateOfferEndpointsInsertedInNameOrder(c *tc.C) {
 
 	appName := "test-application"
 	appUUID := s.addApplication(c, charmUUID, appName)
-	appEndpointAlphaUUID := s.addApplicationEndpoint(c, appUUID, relationAlphaUUID)
-	appEndpointZedUUID := s.addApplicationEndpoint(c, appUUID, relationZedUUID)
+	s.addApplicationEndpoint(c, appUUID, relationAlphaUUID)
+	s.addApplicationEndpoint(c, appUUID, relationZedUUID)
 
 	args := crossmodelrelation.CreateOfferArgs{
 		UUID:            tc.Must(c, offer.NewUUID),
@@ -347,19 +347,13 @@ func (s *modelOfferSuite) TestCreateOfferEndpointsInsertedInNameOrder(c *tc.C) {
 	// Act
 	err := s.state.CreateOffer(c.Context(), args)
 
-	// Assert — the offer_endpoint rows are inserted in canonical endpoint
-	// name order, regardless of the requested order.
 	c.Assert(err, tc.ErrorIsNil)
-	rows, err := s.DB().QueryContext(c.Context(), `SELECT endpoint_uuid FROM offer_endpoint ORDER BY rowid`)
+	obtained, err := s.state.GetOfferDetails(c.Context(), crossmodelrelation.OfferFilter{})
 	c.Assert(err, tc.ErrorIsNil)
-	defer func() { _ = rows.Close() }()
-	var obtained []string
-	for rows.Next() {
-		var endpointUUID string
-		c.Assert(rows.Scan(&endpointUUID), tc.ErrorIsNil)
-		obtained = append(obtained, endpointUUID)
-	}
-	c.Check(obtained, tc.DeepEquals, []string{appEndpointAlphaUUID, appEndpointZedUUID})
+	c.Assert(obtained, tc.HasLen, 1)
+	c.Assert(obtained[0].Endpoints, tc.HasLen, 2)
+	c.Check(obtained[0].Endpoints[0].Name, tc.Equals, "alpha")
+	c.Check(obtained[0].Endpoints[1].Name, tc.Equals, "zed")
 }
 
 // TestGetOfferDetailsDeterministicOrder verifies that offers and their
