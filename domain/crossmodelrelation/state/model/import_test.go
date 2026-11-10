@@ -984,7 +984,7 @@ func (s *importSecretSuite) TestImportRemoteApplicationSecretGrantsDuplicateAppl
 	err := s.state.ImportRemoteApplicationSecretGrants(c.Context(), grants)
 
 	// Assert
-	c.Assert(err, tc.ErrorMatches, `.*UNIQUE constraint failed: secret_permission.secret_id, secret_permission.subject_uuid.*`)
+	c.Assert(err, tc.ErrorMatches, `.*(UNIQUE constraint failed: secret_permission.secret_id, secret_permission.subject_uuid|duplicate key value violates unique constraint "secret_permission_pkey").*`)
 }
 
 func (s *importSecretSuite) TestImportRemoteSecretConsumers(c *tc.C) {
