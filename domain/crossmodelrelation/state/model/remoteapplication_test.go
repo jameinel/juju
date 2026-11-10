@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/juju/collections/set"
 	"github.com/juju/tc"
@@ -2161,7 +2162,7 @@ func (s *modelRemoteApplicationSuite) TestIsRelationWithEndpointIdentifiersSuspe
 	relUUID := s.setupRelationSuspended(c, "test", "remote-test", true)
 	s.query(c, `
 INSERT INTO relation_status (relation_uuid, relation_status_type_id, updated_at)
-VALUES (?, ?, 0)`, relUUID, 3)
+VALUES (?, ?, ?)`, relUUID, 3, time.Unix(0, 0).UTC())
 
 	isSuspended, err := s.state.IsRelationWithEndpointIdentifiersSuspended(
 		c.Context(),

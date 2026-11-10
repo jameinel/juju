@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"maps"
+	"time"
 
 	"github.com/juju/clock"
 	"github.com/juju/collections/set"
@@ -216,7 +217,7 @@ VALUES (?, ?, ?, 'bob')`, connUUID, offerUUID, relUUID)
 
 	s.query(c, `
 INSERT INTO relation_status (relation_uuid, relation_status_type_id, updated_at)
-VALUES (?, ?, 0)`, relUUID, statusID)
+VALUES (?, ?, ?)`, relUUID, statusID, time.Unix(0, 0).UTC())
 	return relUUID.String()
 }
 
