@@ -1225,7 +1225,7 @@ SELECT ae.charm_relation_uuid, s.name
 FROM application_endpoint ae
 LEFT JOIN space s ON s.uuid=ae.space_uuid
 WHERE ae.application_uuid=?
-ORDER BY s.name`, s.appID)
+ORDER BY s.name NULLS FIRST`, s.appID)
 		defer func() { _ = rows.Close() }()
 		if err != nil {
 			return errors.Capture(err)
@@ -1263,7 +1263,7 @@ FROM application_endpoint AS ae
 JOIN charm_relation AS cr ON ae.charm_relation_uuid = cr.uuid
 LEFT JOIN space AS s ON s.uuid = ae.space_uuid
 WHERE ae.application_uuid=?
-ORDER BY s.name`, appID)
+ORDER BY s.name NULLS FIRST`, appID)
 		defer func() { _ = rows.Close() }()
 		if err != nil {
 			return errors.Capture(err)
@@ -1296,7 +1296,7 @@ FROM application_extra_endpoint AS ae
 JOIN charm_extra_binding AS cr ON ae.charm_extra_binding_uuid = cr.uuid
 LEFT JOIN space AS s ON s.uuid = ae.space_uuid
 WHERE ae.application_uuid=?
-ORDER BY s.name`, appID)
+ORDER BY s.name NULLS FIRST`, appID)
 		defer func() { _ = rows.Close() }()
 		if err != nil {
 			return errors.Capture(err)
@@ -1328,7 +1328,7 @@ SELECT ae.charm_extra_binding_uuid, s.name
 FROM application_extra_endpoint ae
 LEFT JOIN space s ON s.uuid=ae.space_uuid
 WHERE ae.application_uuid=?
-ORDER BY s.name`, s.appID)
+ORDER BY s.name NULLS FIRST`, s.appID)
 		defer func() { _ = rows.Close() }()
 		if err != nil {
 			return errors.Capture(err)
