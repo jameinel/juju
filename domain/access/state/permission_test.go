@@ -337,7 +337,7 @@ func (s *permissionStateSuite) TestReadUserAccessForTarget(c *tc.C) {
 	row2 := s.DB().QueryRow(`
 SELECT uuid, access_type_id, object_type_id, grant_to, grant_on
 FROM permission
-WHERE grant_to = 123
+WHERE grant_to = '123'
 `)
 	c.Assert(row2.Err(), tc.ErrorIsNil)
 	err = row2.Scan(&userUuid, &accessTypeID, &objectTypeID, &grantTo, &grantOn)
