@@ -45,6 +45,25 @@ BEGIN
 END`, t.Name, t.Event, t.Table, when, message)
 }
 
+// DropFailingTriggerSQL returns the DDL that removes the failing trigger and
+// its PostgreSQL function, allowing the same trigger to be created again.
+func DropFailingTriggerSQL(t FailingTrigger) string {
+	ddl := DropTriggerSQL(t.Name, t.Table)
+	if BackendForTest() == domainschema.BackendPostgreSQL {
+		ddl += fmt.Sprintf(";\nDROP FUNCTION IF EXISTS %s();", t.Name)
+	}
+	return ddl
+}
+
+// DropTriggerSQL returns the DDL that removes a trigger without removing its
+// function, which may belong to the schema.
+func DropTriggerSQL(name, table string) string {
+	if BackendForTest() == domainschema.BackendPostgreSQL {
+		return fmt.Sprintf("DROP TRIGGER IF EXISTS %s ON %s", name, table)
+	}
+	return fmt.Sprintf("DROP TRIGGER IF EXISTS %s", name)
+}
+
 // failingTriggerPostgreSQL evaluates the condition inside the trigger
 // function, as PostgreSQL does not allow subqueries in a trigger's WHEN
 // clause.
