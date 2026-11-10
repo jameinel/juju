@@ -244,7 +244,7 @@ func (s *updateUnitPortsSuite) TestGetEndpointsForPopulatedUnit(c *tc.C) {
 		return err
 	})
 	c.Assert(err, tc.ErrorIsNil)
-	c.Check(endpoints, tc.DeepEquals, []string{"ep0", "ep1", "ep2", relation.JujuInfo})
+	c.Check(endpoints, tc.SameContents, []string{"ep0", "ep1", "ep2", relation.JujuInfo})
 }
 
 func (s *updateUnitPortsSuite) TestGetEndpointsForUnpopulatedUnit(c *tc.C) {
@@ -260,7 +260,7 @@ func (s *updateUnitPortsSuite) TestGetEndpointsForUnpopulatedUnit(c *tc.C) {
 		return err
 	})
 	c.Assert(err, tc.ErrorIsNil)
-	c.Check(endpoints, tc.DeepEquals, []string{"ep0", "ep1", "ep2", relation.JujuInfo})
+	c.Check(endpoints, tc.SameContents, []string{"ep0", "ep1", "ep2", relation.JujuInfo})
 }
 
 func (s *updateUnitPortsSuite) TestUpdateUnitPortsOpenPort(c *tc.C) {
