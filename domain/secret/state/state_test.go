@@ -480,8 +480,8 @@ func (s *stateSuite) TestGetSecretOwnerKindsEmpty(c *tc.C) {
 func (s *stateSuite) TestGetRotationExpiryInfo(c *tc.C) {
 	s.setupUnits(c, "mysql")
 
-	expireTime := time.Now().Add(2 * time.Hour)
-	rotateTime := time.Now().Add(time.Hour)
+	expireTime := time.Now().Truncate(time.Microsecond).Add(2 * time.Hour)
+	rotateTime := time.Now().Truncate(time.Microsecond).Add(time.Hour)
 	sp := domainsecret.UpsertSecretParams{
 		Description:    new("my secretMetadata"),
 		Label:          new("my label"),
@@ -1441,8 +1441,8 @@ func (s *stateSuite) TestListCharmSecretsApplicationOrUnit(c *tc.C) {
 	s.setupUnits(c, "mysql")
 	s.setupUnits(c, "postgresql")
 
-	expireTime := time.Now().Add(2 * time.Hour)
-	rotateTime := time.Now().Add(time.Hour)
+	expireTime := time.Now().Truncate(time.Microsecond).Add(2 * time.Hour)
+	rotateTime := time.Now().Truncate(time.Microsecond).Add(time.Hour)
 	sp := []domainsecret.UpsertSecretParams{{
 		Description:  new("my secretMetadata"),
 		Label:        new("my label"),
@@ -2459,7 +2459,7 @@ func (s *stateSuite) TestUpdateSecretContent(c *tc.C) {
 	err := s.createCharmUnitSecret(c, 1, uri, "mysql/0", sp)
 	c.Assert(err, tc.ErrorIsNil)
 
-	expireTime := time.Now().Add(2 * time.Hour)
+	expireTime := time.Now().Truncate(time.Microsecond).Add(2 * time.Hour)
 	sp2 := domainsecret.UpsertSecretParams{
 		RevisionUUID: new(uuid.MustNewUUID().String()),
 		ExpireTime:   &expireTime,
@@ -2505,11 +2505,11 @@ func (s *stateSuite) TestUpdateSecretContentNonUTCInput(c *tc.C) {
 
 	// Force the input location to NOT BE UTC
 	loc, _ := time.LoadLocation("Australia/Brisbane")
-	expireTime := time.Now().Add(2 * time.Hour).In(loc)
+	expireTime := time.Now().Truncate(time.Microsecond).Add(2 * time.Hour).In(loc)
 	sp := domainsecret.UpsertSecretParams{
 		RevisionUUID: new(uuid.MustNewUUID().String()),
-		CreateTime:   time.Now().In(loc),
-		UpdateTime:   time.Now().In(loc),
+		CreateTime:   time.Now().Truncate(time.Microsecond).In(loc),
+		UpdateTime:   time.Now().Truncate(time.Microsecond).In(loc),
 		ExpireTime:   &expireTime,
 	}
 	fillDataForUpsertSecretParams(c, &sp, coresecrets.SecretData{"foo": "bar", "hello": "world"})
@@ -2520,7 +2520,7 @@ func (s *stateSuite) TestUpdateSecretContentNonUTCInput(c *tc.C) {
 
 	sp2 := domainsecret.UpsertSecretParams{
 		RevisionUUID: new(uuid.MustNewUUID().String()),
-		UpdateTime:   time.Now().In(loc),
+		UpdateTime:   time.Now().Truncate(time.Microsecond).In(loc),
 		ExpireTime:   &expireTime,
 	}
 	fillDataForUpsertSecretParams(c, &sp2, coresecrets.SecretData{"foo2": "bar2", "hello": "world"})
@@ -2569,7 +2569,7 @@ func (s *stateSuite) TestUpdateSecretContentObsolete(c *tc.C) {
 	err = s.state.SaveSecretConsumer(ctx, uri, "mysql/0", consumer)
 	c.Assert(err, tc.ErrorIsNil)
 
-	expireTime := time.Now().Add(2 * time.Hour)
+	expireTime := time.Now().Truncate(time.Microsecond).Add(2 * time.Hour)
 	sp2 := domainsecret.UpsertSecretParams{
 		RevisionUUID: new(uuid.MustNewUUID().String()),
 		ExpireTime:   &expireTime,
@@ -4361,7 +4361,7 @@ func (s *stateSuite) prepareWatchForWatchStatementForSecretsRotationChanges(c *t
 	c.Assert(err, tc.ErrorIsNil)
 	updateSecretContent(c, s.state, uri2)
 
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	err = s.state.SecretRotated(ctx, uri1, now.Add(1*time.Hour))
 	c.Assert(err, tc.ErrorIsNil)
 	err = s.state.SecretRotated(ctx, uri2, now.Add(2*time.Hour))
@@ -4503,7 +4503,7 @@ func (s *stateSuite) prepareWatchForWatchStatementForSecretsRevisionExpiryChange
 	s.setupUnits(c, "mysql")
 	s.setupUnits(c, "mediawiki")
 
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	uri1 := coresecrets.NewURI()
 	err := s.createCharmApplicationSecret(c, 1, uri1, "mysql", domainsecret.UpsertSecretParams{
 		RevisionUUID: new(uuid.MustNewUUID().String()),
@@ -4684,7 +4684,7 @@ func (s *stateSuite) TestSecretRotated(c *tc.C) {
 	})
 	c.Assert(err, tc.ErrorIsNil)
 
-	next := time.Now().Add(1 * time.Hour)
+	next := time.Now().Truncate(time.Microsecond).Add(1 * time.Hour)
 	err = s.state.SecretRotated(ctx, uri, next)
 	c.Assert(err, tc.ErrorIsNil)
 
