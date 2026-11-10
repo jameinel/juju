@@ -777,6 +777,7 @@ func (s *modelSuite) TestIsControllerModel(c *tc.C) {
 }
 
 func (s *modelSuite) TestIsControllerModelControllerModel(c *tc.C) {
+	modelUUID := s.getModelUUID(c)
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		// Force the model to be a controller model.
 		_, err := tx.ExecContext(ctx, schematesting.DropTriggerSQL("trg_model_immutable_update", "model"))
@@ -784,14 +785,12 @@ func (s *modelSuite) TestIsControllerModelControllerModel(c *tc.C) {
 			return err
 		}
 
-		_, err = tx.ExecContext(ctx, `UPDATE model SET is_controller_model = 1 WHERE uuid = ?`, s.getModelUUID(c))
+		_, err = tx.ExecContext(ctx, `UPDATE model SET is_controller_model = TRUE WHERE uuid = ?`, modelUUID)
 		return err
 	})
 	c.Assert(err, tc.ErrorIsNil)
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
-
-	modelUUID := s.getModelUUID(c)
 
 	isController, err := st.IsControllerModel(c.Context(), modelUUID)
 	c.Assert(err, tc.ErrorIsNil)
