@@ -104,15 +104,13 @@ VALUES (?, ?, ?, ?, ?, ?)`
 	c.Assert(err, tc.ErrorIsNil)
 	c.Assert(jobs, tc.HasLen, 2)
 
-	c.Check(jobs[0], tc.DeepEquals, removal.Job{
+	c.Check(jobs, tc.SameContents, []removal.Job{{
 		UUID:         jID1,
 		RemovalType:  removal.RelationJob,
 		EntityUUID:   "rel-1",
 		Force:        false,
 		ScheduledFor: now,
-	})
-
-	c.Check(jobs[1], tc.DeepEquals, removal.Job{
+	}, {
 		UUID:         jID2,
 		RemovalType:  removal.RelationJob,
 		EntityUUID:   "rel-2",
@@ -121,7 +119,7 @@ VALUES (?, ?, ?, ?, ?, ?)`
 		Arg: map[string]any{
 			"special-key": "special-value",
 		},
-	})
+	}})
 }
 
 func (s *stateSuite) TestDeleteJob(c *tc.C) {
