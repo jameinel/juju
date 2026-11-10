@@ -29,7 +29,7 @@ func (s *step0001Suite) setupTestModel(c *tc.C, cloudTypeID int, modelUUID model
 		cloudUUID := modelUUID.String() + "-cloud"
 		if _, err := tx.ExecContext(ctx,
 			"INSERT INTO cloud (uuid, cloud_type_id, name, endpoint, skip_tls_verify) VALUES (?, ?, ?, ?, ?)",
-			cloudUUID, cloudTypeID, "test-cloud", "", 0); err != nil {
+			cloudUUID, cloudTypeID, "test-cloud", "", false); err != nil {
 			return err
 		}
 
