@@ -486,7 +486,7 @@ func (s *modelStateSuite) addProvisionedModelScopedVolume(
 	s.runQuery(c, `INSERT INTO storage_instance_volume (storage_instance_uuid, storage_volume_uuid) VALUES (?,?)`,
 		siUUID, volUUID)
 
-	s.runQuery(c, `INSERT INTO storage_volume_attachment (uuid, storage_volume_uuid, net_node_uuid, life_id, provision_scope_id, read_only) VALUES (?,?,?,?,0,0)`,
+	s.runQuery(c, `INSERT INTO storage_volume_attachment (uuid, storage_volume_uuid, net_node_uuid, life_id, provision_scope_id, read_only) VALUES (?,?,?,?,0,FALSE)`,
 		uuid.MustNewUUID().String(), volUUID, netNodeUUID, life.Alive)
 
 	return volUUID
@@ -509,7 +509,7 @@ func (s *modelStateSuite) addUnprovisionedModelScopedVolumeAttachment(
 	s.runQuery(c, `INSERT INTO storage_instance_volume (storage_instance_uuid, storage_volume_uuid) VALUES (?,?)`,
 		siUUID, volUUID)
 
-	s.runQuery(c, `INSERT INTO storage_volume_attachment (uuid, storage_volume_uuid, net_node_uuid, life_id, provision_scope_id, read_only) VALUES (?,?,?,?,0,0)`,
+	s.runQuery(c, `INSERT INTO storage_volume_attachment (uuid, storage_volume_uuid, net_node_uuid, life_id, provision_scope_id, read_only) VALUES (?,?,?,?,0,FALSE)`,
 		uuid.MustNewUUID().String(), volUUID, netNodeUUID, life.Alive)
 
 	return volUUID
@@ -531,7 +531,7 @@ func (s *modelStateSuite) addProvisionedMachineScopedVolume(
 	s.runQuery(c, `INSERT INTO storage_instance_volume (storage_instance_uuid, storage_volume_uuid) VALUES (?,?)`,
 		siUUID, volUUID)
 
-	s.runQuery(c, `INSERT INTO storage_volume_attachment (uuid, storage_volume_uuid, net_node_uuid, life_id, provision_scope_id, read_only) VALUES (?,?,?,?,1,0)`,
+	s.runQuery(c, `INSERT INTO storage_volume_attachment (uuid, storage_volume_uuid, net_node_uuid, life_id, provision_scope_id, read_only) VALUES (?,?,?,?,1,FALSE)`,
 		uuid.MustNewUUID().String(), volUUID, netNodeUUID, life.Alive)
 
 	return volUUID
@@ -559,7 +559,7 @@ func (s *modelStateSuite) addAttachedProvisionedModelScopedVolume(
 	deviceUUID := uuid.MustNewUUID().String()
 	s.runQuery(c, `INSERT INTO block_device (uuid, machine_uuid, name) VALUES (?,?,?)`,
 		deviceUUID, machineUUID, "sda")
-	s.runQuery(c, `INSERT INTO storage_volume_attachment (uuid, storage_volume_uuid, net_node_uuid, life_id, provision_scope_id, block_device_uuid, read_only) VALUES (?,?,?,?,0,?,0)`,
+	s.runQuery(c, `INSERT INTO storage_volume_attachment (uuid, storage_volume_uuid, net_node_uuid, life_id, provision_scope_id, block_device_uuid, read_only) VALUES (?,?,?,?,0,?,FALSE)`,
 		uuid.MustNewUUID().String(), volUUID, netNodeUUID, life.Alive, deviceUUID)
 
 	return volUUID
