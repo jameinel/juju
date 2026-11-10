@@ -1485,7 +1485,7 @@ func (s *applicationSuite) checkNoApplicationSequence(c *tc.C, appName string) {
 
 	// Ensure that there are no sequences left for the application.
 	row := s.DB().QueryRow(`
-SELECT EXISTS(SELECT 1 FROM sequence WHERE namespace = CONCAT('application_', ?))`, appName)
+SELECT EXISTS(SELECT 1 FROM sequence WHERE namespace = ?)`, "application_"+appName)
 	var exists bool
 	err := row.Scan(&exists)
 	c.Assert(err, tc.ErrorIsNil)
@@ -1497,7 +1497,7 @@ func (s *applicationSuite) checkApplicationSequence(c *tc.C, appName string, amo
 
 	// Ensure that there are no sequences left for the application.
 	row := s.DB().QueryRow(`
-SELECT COUNT(*) FROM sequence WHERE namespace = CONCAT('application_', ?)`, appName)
+SELECT COUNT(*) FROM sequence WHERE namespace = ?`, "application_"+appName)
 	var count int
 	err := row.Scan(&count)
 	c.Assert(err, tc.ErrorIsNil)
