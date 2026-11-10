@@ -90,7 +90,7 @@ VALUES (?, ?, ?, ?, ?, ?)`
 
 	jID1, _ := removal.NewUUID()
 	jID2, _ := removal.NewUUID()
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 
 	_, err := s.DB().Exec(ins, jID1, 0, "rel-1", false, now, nil)
 	c.Assert(err, tc.ErrorIsNil)
