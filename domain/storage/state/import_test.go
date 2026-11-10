@@ -1168,10 +1168,6 @@ VALUES (?, 'foo', ?, 1, ?, 0, ?, 4048)`, siUUID, name, fullID, poolUUID)
 
 func (s *importSuite) newBlockDevice(c *tc.C, machineUUID string, bd coreblockdevice.BlockDevice) blockdevice.BlockDeviceUUID {
 	blockDeviceUUID := tc.Must(c, blockdevice.NewBlockDeviceUUID)
-	inUse := 0
-	if bd.InUse {
-		inUse = 1
-	}
 	_, err := s.DB().Exec(`
 INSERT INTO block_device (
 	uuid, machine_uuid, name, filesystem_label,
@@ -1180,7 +1176,7 @@ INSERT INTO block_device (
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `, blockDeviceUUID, machineUUID, bd.DeviceName, bd.FilesystemLabel,
 		bd.FilesystemUUID, bd.HardwareId, bd.WWN, bd.BusAddress, bd.SerialId,
-		bd.MountPoint, bd.FilesystemType, bd.SizeMiB, inUse)
+		bd.MountPoint, bd.FilesystemType, bd.SizeMiB, bd.InUse)
 	c.Assert(err, tc.ErrorIsNil)
 
 	for _, link := range bd.DeviceLinks {
