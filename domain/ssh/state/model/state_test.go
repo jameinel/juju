@@ -36,8 +36,10 @@ func TestStateSuite(t *stdtesting.T) {
 func (s *stateSuite) SetUpTest(c *tc.C) {
 	s.ModelSuite.SetUpTest(c)
 	s.controllerRunner, s.controllerDB = s.OpenDB(c)
+	ddl, err := schema.ControllerDDLForBackend(schematesting.BackendForTest())
+	c.Assert(err, tc.ErrorIsNil)
 	s.ApplyDDLForRunner(c, &schematesting.SchemaApplier{
-		Schema:  schema.ControllerDDL(),
+		Schema:  ddl,
 		Verbose: s.Verbose,
 	}, s.controllerRunner)
 }
