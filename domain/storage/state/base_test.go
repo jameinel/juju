@@ -371,7 +371,7 @@ func (s *baseSuite) newPersistentModelVolume(
 
 	_, err := s.DB().Exec(`
 INSERT INTO storage_volume (uuid, volume_id, life_id, provision_scope_id, persistent)
-VALUES (?, ?, 0, ?, 1)
+VALUES (?, ?, 0, ?, TRUE)
 	`,
 		volumeUUID.String(), volumeID, domainstorage.ProvisionScopeModel)
 	c.Assert(err, tc.ErrorIsNil)
