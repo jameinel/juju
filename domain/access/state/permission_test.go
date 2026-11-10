@@ -1566,7 +1566,7 @@ func (s *permissionStateSuite) ensurePermission(c *tc.C, grantOn, grantTo string
 			SELECT
 			    ?, ?, ?, pat.id, pot.id
 			FROM permission_access_type AS pat
-			LEFT JOIN permission_object_type AS pot
+			CROSS JOIN permission_object_type AS pot
 			WHERE pat.type = ?
 			AND   pot.type = ?
 		`, permissionUUID, grantTo, grantOn, access, objectType)
