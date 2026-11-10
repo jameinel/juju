@@ -127,8 +127,8 @@ func (s *baseSuite) getRowCount(c *tc.C, table string) int {
 func (s *baseSuite) getRowCountByField(c *tc.C, field, value, table string) int {
 	var obtained int
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = %q", table, field, value)
-		return tx.QueryRowContext(ctx, query).Scan(&obtained)
+		query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = ?", table, field)
+		return tx.QueryRowContext(ctx, query, value).Scan(&obtained)
 	})
 	c.Assert(err, tc.IsNil, tc.Commentf("counting rows in table %q for the field %q and value %q", table, field, value))
 	return obtained
