@@ -1192,7 +1192,7 @@ func (s *importSecretSuite) createSecretWithMetadata(c *tc.C, secretID string) {
 		// metadata requires rotate policy id to exist; schema seeds it. Use 0 (never).
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO secret_metadata (secret_id, version, description, rotate_policy_id, auto_prune, create_time, update_time)
-			VALUES (?, 1, '', 0, 0, ?, ?)
+			VALUES (?, 1, '', 0, FALSE, ?, ?)
 		`, secretID, now, now); err != nil {
 			return err
 		}
