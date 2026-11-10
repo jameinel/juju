@@ -5,9 +5,9 @@ package state
 
 import (
 	"context"
+	"time"
 
 	"github.com/canonical/sqlair"
-	"github.com/juju/clock"
 	"github.com/juju/collections/set"
 
 	coredatabase "github.com/juju/juju/core/database"
@@ -22,14 +22,12 @@ import (
 // State describes retrieval and persistence methods for storage.
 type State struct {
 	*domain.StateBase
-	clock clock.Clock
 }
 
 // NewState returns a new state reference.
 func NewState(factory coredatabase.TxnRunnerFactory) *State {
 	return &State{
 		StateBase: domain.NewStateBase(factory),
-		clock:     clock.WallClock,
 	}
 }
 
@@ -116,15 +114,12 @@ func (s *State) ClaimLease(ctx context.Context, uuid uuid.UUID, key corelease.Ke
 		return errors.Capture(err)
 	}
 
-	now := s.clock.Now()
 	lease := Lease{
 		UUID:      uuid.String(),
 		ModelUUID: key.ModelUUID,
 		Type:      key.Namespace,
 		Name:      key.Lease,
 		Holder:    req.Holder,
-		StartAt:   formatTimestamp(now),
-		ExpiryAt:  formatTimestamp(expiryFrom(now, req.Duration)),
 	}
 
 	stmt, err := s.Prepare(`
@@ -137,7 +132,15 @@ WHERE  type = $Lease.type;`, lease)
 	}
 
 	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
-		err := tx.Query(ctx, stmt, lease).Run()
+		now, err := s.databaseNow(ctx, tx)
+		if err != nil {
+			return errors.Capture(err)
+		}
+		timedLease := lease
+		timedLease.StartAt = formatTimestamp(now)
+		timedLease.ExpiryAt = formatTimestamp(expiryFrom(now, req.Duration))
+
+		err = tx.Query(ctx, stmt, timedLease).Run()
 		if database.IsErrConstraintUnique(err) {
 			return corelease.ErrHeld
 		} else if err != nil {
@@ -159,7 +162,6 @@ func (s *State) ExtendLease(ctx context.Context, key corelease.Key, req coreleas
 	}
 
 	lease := Lease{
-		ExpiryAt:  formatTimestamp(expiryFrom(s.clock.Now(), req.Duration)),
 		ModelUUID: key.ModelUUID,
 		Type:      key.Namespace,
 		Name:      key.Lease,
@@ -182,8 +184,15 @@ WHERE  uuid = (
 	}
 
 	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
+		now, err := s.databaseNow(ctx, tx)
+		if err != nil {
+			return errors.Capture(err)
+		}
+		timedLease := lease
+		timedLease.ExpiryAt = formatTimestamp(expiryFrom(now, req.Duration))
+
 		var outcome sqlair.Outcome
-		err := tx.Query(ctx, stmt, lease).Get(&outcome)
+		err = tx.Query(ctx, stmt, timedLease).Get(&outcome)
 
 		// If no rows were affected, then either this key does not exist or
 		// it is not held by the input holder, constituting an invalid request.
@@ -197,6 +206,20 @@ WHERE  uuid = (
 		return errors.Capture(err)
 	})
 	return errors.Capture(err)
+}
+
+func (s *State) databaseNow(ctx context.Context, tx *sqlair.TX) (time.Time, error) {
+	stmt, err := s.Prepare(`
+SELECT (CURRENT_TIMESTAMP) AS (&dbCurrentTime.value)`, dbCurrentTime{})
+	if err != nil {
+		return time.Time{}, errors.Errorf("preparing database time statement: %w", err)
+	}
+
+	var now dbCurrentTime
+	if err := tx.Query(ctx, stmt).Get(&now); err != nil {
+		return time.Time{}, errors.Errorf("getting database time: %w", err)
+	}
+	return now.Value.Time, nil
 }
 
 // RevokeLease (lease.Store) deletes the lease from the store,

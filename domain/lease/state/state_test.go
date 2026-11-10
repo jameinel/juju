@@ -44,6 +44,7 @@ func (s *stateSuite) TestClaimLeaseSuccessAndLeaseQueries(c *tc.C) {
 		Duration: time.Minute,
 	}
 
+	before := s.databaseTime(c)
 	// Add 2 leases.
 	err := s.store.ClaimLease(c.Context(), uuid.MustNewUUID(), pgKey, pgReq)
 	c.Assert(err, tc.ErrorIsNil)
@@ -56,17 +57,18 @@ func (s *stateSuite) TestClaimLeaseSuccessAndLeaseQueries(c *tc.C) {
 
 	err = s.store.ClaimLease(c.Context(), uuid.MustNewUUID(), mmKey, mmReq)
 	c.Assert(err, tc.ErrorIsNil)
+	after := s.databaseTime(c)
 
 	// Check all the leases.
 	leases, err := s.store.Leases(c.Context())
 	c.Assert(err, tc.ErrorIsNil)
 	c.Assert(leases, tc.HasLen, 2)
 	c.Check(leases[pgKey].Holder, tc.Equals, "postgresql/0")
-	c.Check(leases[pgKey].Expiry.After(time.Now().UTC()), tc.IsTrue)
-	// The expiry is a minute after the claim, to whole-second precision.
-	c.Check(leases[pgKey].Expiry.Before(time.Now().UTC().Add(time.Minute+time.Second)), tc.IsTrue)
+	c.Check(leases[pgKey].Expiry.Before(before.Add(time.Minute)), tc.IsFalse)
+	c.Check(leases[pgKey].Expiry.After(after.Add(time.Minute)), tc.IsFalse)
 	c.Check(leases[mmKey].Holder, tc.Equals, "mattermost/0")
-	c.Check(leases[mmKey].Expiry.After(time.Now().UTC()), tc.IsTrue)
+	c.Check(leases[mmKey].Expiry.Before(before.Add(time.Minute)), tc.IsFalse)
+	c.Check(leases[mmKey].Expiry.After(after.Add(time.Minute)), tc.IsFalse)
 
 	// Check with a filter.
 	leases, err = s.store.Leases(c.Context(), pgKey)
@@ -114,6 +116,39 @@ func (s *stateSuite) TestClaimLeaseAlreadyHeld(c *tc.C) {
 
 	err = s.store.ClaimLease(c.Context(), uuid.MustNewUUID(), key, req)
 	c.Assert(err, tc.ErrorIs, corelease.ErrHeld)
+}
+
+func (s *stateSuite) TestClaimAndExtendUseDatabaseTime(c *tc.C) {
+	key := corelease.Key{
+		Namespace: "application-leadership",
+		ModelUUID: "model-uuid",
+		Lease:     "database-clock",
+	}
+	req := corelease.Request{
+		Holder:   "unit/0",
+		Duration: time.Second + time.Nanosecond,
+	}
+
+	before := s.databaseTime(c)
+	err := s.store.ClaimLease(c.Context(), uuid.MustNewUUID(), key, req)
+	c.Assert(err, tc.ErrorIsNil)
+	after := s.databaseTime(c)
+
+	start, expiry := s.leaseTimes(c, key.Lease)
+	c.Check(start.Before(before), tc.IsFalse)
+	c.Check(start.After(after), tc.IsFalse)
+	c.Check(expiry.Sub(start), tc.Equals, 2*time.Second)
+
+	req.Duration = 2*time.Minute + time.Nanosecond
+	before = s.databaseTime(c)
+	err = s.store.ExtendLease(c.Context(), key, req)
+	c.Assert(err, tc.ErrorIsNil)
+	after = s.databaseTime(c)
+
+	extendedStart, extendedExpiry := s.leaseTimes(c, key.Lease)
+	c.Check(extendedStart.Equal(start), tc.IsTrue)
+	c.Check(extendedExpiry.Before(before.Add(2*time.Minute+time.Second)), tc.IsFalse)
+	c.Check(extendedExpiry.After(after.Add(2*time.Minute+time.Second)), tc.IsFalse)
 }
 
 func (s *stateSuite) TestExtendLeaseSuccess(c *tc.C) {
@@ -255,4 +290,36 @@ func (s *stateSuite) TestLeaseOperationCancellation(c *tc.C) {
 
 	err := s.store.ClaimLease(ctx, uuid.MustNewUUID(), key, req)
 	c.Assert(err, tc.ErrorMatches, "context canceled")
+}
+
+func (s *stateSuite) databaseTime(c *tc.C) time.Time {
+	var value any
+	err := s.DB().QueryRowContext(c.Context(), `SELECT CURRENT_TIMESTAMP`).Scan(&value)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Logf("CURRENT_TIMESTAMP driver value type: %T", value)
+
+	var text string
+	switch value := value.(type) {
+	case time.Time:
+		return value.UTC().Truncate(time.Second)
+	case string:
+		text = value
+	case []byte:
+		text = string(value)
+	default:
+		c.Fatalf("unexpected CURRENT_TIMESTAMP type %T", value)
+	}
+	now, err := time.Parse("2006-01-02 15:04:05", text)
+	c.Assert(err, tc.ErrorIsNil)
+	return now
+}
+
+func (s *stateSuite) leaseTimes(c *tc.C, name string) (time.Time, time.Time) {
+	var start, expiry time.Time
+	err := s.DB().QueryRowContext(c.Context(), `
+SELECT start, expiry
+FROM lease
+WHERE name = ?`, name).Scan(&start, &expiry)
+	c.Assert(err, tc.ErrorIsNil)
+	return start, expiry
 }

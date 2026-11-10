@@ -118,6 +118,5 @@ func NewStore(ctx context.Context, dbGetter database.DBGetter, logger logger.Log
 	return &expiryStore{
 		db:     noRetryDB,
 		logger: logger,
-		clock:  clock.WallClock,
 	}, nil
 }

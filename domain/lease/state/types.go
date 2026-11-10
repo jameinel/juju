@@ -6,6 +6,8 @@ package state
 import (
 	"math"
 	"time"
+
+	"github.com/juju/juju/internal/errors"
 )
 
 // Lease represents a lease to be serialised to the database.
@@ -46,6 +48,38 @@ func formatTimestamp(t time.Time) string {
 func expiryFrom(now time.Time, duration time.Duration) time.Time {
 	seconds := int64(math.Ceil(duration.Seconds()))
 	return now.Truncate(time.Second).Add(time.Duration(seconds) * time.Second)
+}
+
+type dbCurrentTime struct {
+	Value dbTimestamp `db:"value"`
+}
+
+type dbTimestamp struct {
+	Time time.Time
+}
+
+// Scan accepts SQLite's text and PostgreSQL's timestamp representations.
+func (t *dbTimestamp) Scan(value any) error {
+	switch value := value.(type) {
+	case time.Time:
+		t.Time = value.UTC()
+		return nil
+	case string:
+		return t.scanText(value)
+	case []byte:
+		return t.scanText(string(value))
+	default:
+		return errors.Errorf("unsupported database timestamp type %T", value)
+	}
+}
+
+func (t *dbTimestamp) scanText(value string) error {
+	parsed, err := time.Parse(timestampLayout, value)
+	if err != nil {
+		return errors.Errorf("invalid database timestamp %q: %w", value, err)
+	}
+	t.Time = parsed
+	return nil
 }
 
 // LeasePin represents a lease pin to be serialised to the database.
