@@ -18,6 +18,7 @@ import (
 	schematesting "github.com/juju/juju/domain/schema/testing"
 	domainupgrade "github.com/juju/juju/domain/upgrade"
 	upgradeerrors "github.com/juju/juju/domain/upgrade/errors"
+	databasetesting "github.com/juju/juju/internal/database/testing"
 	"github.com/juju/juju/internal/uuid"
 )
 
@@ -351,6 +352,13 @@ func (s *stateSuite) TestSetControllerDoneCompleteUpgrade(c *tc.C) {
 }
 
 func (s *stateSuite) TestSetControllerDoneCompleteUpgradeEmptyCompletedAt(c *tc.C) {
+	// This assertion is dubious: it treats invalid timestamp text as completed,
+	// rather than checking that a completion time is recorded. The valid-time
+	// cases are covered by TestSetControllerDoneCompleteUpgrade and
+	// TestSetControllerDoneRecordsCompletedAt.
+	databasetesting.SkipOnPostgreSQL(c,
+		"an empty string is not a valid PostgreSQL timestamp")
+
 	db := s.DB()
 
 	_, err := db.Exec("INSERT INTO controller_node (controller_id, dqlite_node_id) VALUES ('1', '1')")
