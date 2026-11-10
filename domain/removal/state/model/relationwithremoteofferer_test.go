@@ -12,6 +12,7 @@ import (
 	applicationservice "github.com/juju/juju/domain/application/service"
 	"github.com/juju/juju/domain/life"
 	removalerrors "github.com/juju/juju/domain/removal/errors"
+	schematesting "github.com/juju/juju/domain/schema/testing"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
 )
 
@@ -120,12 +121,14 @@ func (s *relationWithRemoteOfferer) TestEnsureRelationWithRemoteOffererNotAliveC
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 	ctx := c.Context()
 
-	_, err := s.DB().ExecContext(ctx, `
-CREATE TRIGGER fail_last_synthetic_unit_deletion BEFORE DELETE ON unit
-WHEN (SELECT COUNT(*) FROM unit WHERE application_uuid = OLD.application_uuid) = 1
-BEGIN
-    SELECT RAISE(ABORT, 'synthetic unit deletion failed');
-END`)
+	trigger := schematesting.FailingTrigger{
+		Name:    "fail_last_synthetic_unit_deletion",
+		Event:   "BEFORE DELETE",
+		Table:   "unit",
+		When:    "(SELECT COUNT(*) FROM unit WHERE application_uuid = OLD.application_uuid) = 1",
+		Message: "synthetic unit deletion failed",
+	}
+	_, err := s.DB().ExecContext(ctx, schematesting.FailingTriggerSQL(trigger))
 	c.Assert(err, tc.ErrorIsNil)
 
 	err = st.EnsureRelationWithRemoteOffererNotAliveCascade(ctx, relUUID.String())
@@ -152,7 +155,7 @@ SELECT COUNT(*) FROM relation_unit_setting_archive WHERE relation_uuid = ?`, rel
 	c.Assert(err, tc.ErrorIsNil)
 	c.Check(archived, tc.Equals, 0)
 
-	_, err = s.DB().ExecContext(ctx, "DROP TRIGGER fail_last_synthetic_unit_deletion")
+	_, err = s.DB().ExecContext(ctx, schematesting.DropFailingTriggerSQL(trigger))
 	c.Assert(err, tc.ErrorIsNil)
 	err = st.EnsureRelationWithRemoteOffererNotAliveCascade(ctx, relUUID.String())
 	c.Assert(err, tc.ErrorIsNil)

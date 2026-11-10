@@ -25,6 +25,7 @@ import (
 	relationerrors "github.com/juju/juju/domain/relation/errors"
 	removalerrors "github.com/juju/juju/domain/removal/errors"
 	"github.com/juju/juju/domain/removal/internal"
+	schematesting "github.com/juju/juju/domain/schema/testing"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
 )
 
@@ -383,11 +384,13 @@ func (s *relationSuite) TestDeleteRelationRollsBackUnitState(c *tc.C) {
 	c.Assert(err, tc.ErrorIsNil)
 
 	// Fail the final deletion to check that checkpoint cleanup rolls back.
-	_, err = s.DB().Exec(`
-CREATE TRIGGER fail_relation_deletion BEFORE DELETE ON relation
-BEGIN
-    SELECT RAISE(ABORT, 'relation deletion failed');
-END`)
+	trigger := schematesting.FailingTrigger{
+		Name:    "fail_relation_deletion",
+		Event:   "BEFORE DELETE",
+		Table:   "relation",
+		Message: "relation deletion failed",
+	}
+	_, err = s.DB().ExecContext(c.Context(), schematesting.FailingTriggerSQL(trigger))
 	c.Assert(err, tc.ErrorIsNil)
 
 	err = st.DeleteRelation(c.Context(), rel)
@@ -400,6 +403,13 @@ END`)
 	c.Check(checkpoint, tc.Equals, "checkpoint")
 	_, err = st.GetRelationLife(c.Context(), rel)
 	c.Check(err, tc.ErrorIsNil)
+
+	_, err = s.DB().ExecContext(c.Context(), schematesting.DropFailingTriggerSQL(trigger))
+	c.Assert(err, tc.ErrorIsNil)
+	err = st.DeleteRelation(c.Context(), rel)
+	c.Assert(err, tc.ErrorIsNil)
+	_, err = st.GetRelationLife(c.Context(), rel)
+	c.Check(err, tc.ErrorIs, relationerrors.RelationNotFound)
 }
 
 func (s *relationSuite) TestDeleteRelationUnitsInScopeSuccessHasSecretPermission(c *tc.C) {
