@@ -4157,7 +4157,7 @@ func (s *relationSuite) TestGetGoalStateRelationDataForApplication(c *tc.C) {
 	})
 	appEndpoint3 := s.addApplicationEndpoint(c, app3, charm3RelationUUID)
 
-	testTime := time.Now().UTC()
+	testTime := time.Now().UTC().Truncate(time.Microsecond)
 
 	// Relate applications 1 and 3.
 	relID1 := 3
