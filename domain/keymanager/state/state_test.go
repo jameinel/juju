@@ -15,6 +15,7 @@ import (
 	"github.com/juju/clock"
 	"github.com/juju/tc"
 
+	"github.com/juju/juju/core/database/dialect"
 	"github.com/juju/juju/core/model"
 	"github.com/juju/juju/core/user"
 	usertesting "github.com/juju/juju/core/user/testing"
@@ -129,6 +130,10 @@ func (s *stateSuite) TestAddPublicKeyForUser(c *tc.C) {
 }
 
 func (s *stateSuite) TestEnsureUserPublicKeyConcurrentWrite(c *tc.C) {
+	if s.SchemaDialect() == dialect.PostgreSQL {
+		// PostgreSQL permits these nonconflicting writes.
+		c.Skip("stale-snapshot write contention is SQLite/dqlite-specific")
+	}
 	if !dqlite.Enabled {
 		_, err := s.DB().ExecContext(c.Context(), "PRAGMA journal_mode=WAL")
 		c.Assert(err, tc.ErrorIsNil)
