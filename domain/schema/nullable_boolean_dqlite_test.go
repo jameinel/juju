@@ -10,6 +10,7 @@ import (
 
 	"github.com/juju/tc"
 
+	"github.com/juju/juju/core/database/dialect"
 	databasetesting "github.com/juju/juju/internal/database/testing"
 )
 
@@ -22,6 +23,11 @@ func TestNullableBooleanDqliteSuite(t *testing.T) {
 }
 
 func (s *nullableBooleanDqliteSuite) TestWorkaroundStillRequired(c *tc.C) {
+	if s.SchemaDialect() == dialect.PostgreSQL {
+		// PostgreSQL preserves NULL; this sentinel checks dqlite's encoding.
+		c.Skip("nullable BOOLEAN encoding sentinel is dqlite-specific")
+	}
+
 	_, err := s.DB().ExecContext(c.Context(), `CREATE TABLE nullable_boolean (value BOOLEAN)`)
 	c.Assert(err, tc.ErrorIsNil)
 	_, err = s.DB().ExecContext(c.Context(), `INSERT INTO nullable_boolean (value) VALUES (NULL)`)
