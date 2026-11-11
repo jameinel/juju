@@ -11,6 +11,7 @@ import (
 
 	"github.com/juju/juju/domain/life"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
+	coretesting "github.com/juju/juju/internal/testing"
 )
 
 type charmSuite struct {
@@ -38,7 +39,7 @@ func (s *charmSuite) TestCharmScheduleRemoval(c *tc.C) {
 	charmUUID := s.createBareCharm(c, true, s.now.Add(-2*time.Hour))
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := s.now.Add(time.Hour)
+	when := coretesting.DatabaseNow().Add(time.Hour)
 	err := st.CharmScheduleRemoval(c.Context(), "removal-uuid", charmUUID, when)
 	c.Assert(err, tc.ErrorIsNil)
 
