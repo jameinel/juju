@@ -2028,9 +2028,7 @@ func (m *stateSuite) TestGetActivatedModelUUIDs(c *tc.C) {
 	activatedModelUUIDs, err = m.modelState.GetActivatedModelUUIDs(c.Context(),
 		[]coremodel.UUID{m.uuid, activatedModelUUID, unactivatedModelUUID, "non-existent-uuid"})
 	c.Assert(err, tc.ErrorIsNil)
-	c.Assert(activatedModelUUIDs, tc.HasLen, 2)
-	c.Check(activatedModelUUIDs[0], tc.Equals, m.uuid)
-	c.Check(activatedModelUUIDs[1], tc.Equals, activatedModelUUID)
+	c.Check(activatedModelUUIDs, tc.SameContents, []coremodel.UUID{m.uuid, activatedModelUUID})
 }
 
 func (m *stateSuite) TestGetDeadModels(c *tc.C) {
