@@ -401,12 +401,12 @@ inside (classid, objid) AS (
         FROM pg_amop x JOIN inside_opf f ON x.amopfamily = f.oid
     UNION ALL SELECT 'pg_amproc'::regclass, x.oid
         FROM pg_amproc x JOIN inside_opf f ON x.amprocfamily = f.oid
-)
--- A description is NULL when another session has just dropped the object.
-SELECT dep FROM (
-    SELECT DISTINCT
-        pg_describe_object(d.classid, d.objid, d.objsubid) || ' depends on ' ||
-        pg_describe_object(d.refclassid, d.refobjid, d.refobjsubid) AS dep
+),
+-- Do not let the planner evaluate descriptions for unrelated pg_depend rows:
+-- concurrent DDL can remove those objects while they are being described.
+outside AS MATERIALIZED (
+    SELECT d.classid, d.objid, d.objsubid,
+           d.refclassid, d.refobjid, d.refobjsubid
     FROM pg_depend d
     JOIN inside ref ON ref.classid = d.refclassid AND ref.objid = d.refobjid
     WHERE d.deptype <> 'i'
@@ -414,6 +414,13 @@ SELECT dep FROM (
         SELECT 1 FROM inside dep
         WHERE dep.classid = d.classid AND dep.objid = d.objid
     )
+)
+-- A description is NULL when another session has just dropped the object.
+SELECT dep FROM (
+    SELECT DISTINCT
+        pg_describe_object(d.classid, d.objid, d.objsubid) || ' depends on ' ||
+        pg_describe_object(d.refclassid, d.refobjid, d.refobjsubid) AS dep
+    FROM outside d
 ) deps
 WHERE dep IS NOT NULL
 ORDER BY dep

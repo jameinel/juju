@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strings"
 	stdtesting "testing"
 
 	"github.com/jackc/pgx/v5"
@@ -244,6 +245,69 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA %[1]s GRANT SELECT ON TABLES TO PUBLIC;
 	deps, err := outsideDependents(c.Context(), admin, name)
 	c.Assert(err, tc.ErrorIsNil)
 	c.Check(deps, tc.HasLen, 0)
+}
+
+func (s *schemaSuite) TestOutsideDependentsDoesNotDescribeUnrelatedObjects(c *tc.C) {
+	admin := OpenAdmin(c)
+	inside := NewSchemaName(c, "inside")
+	outside := NewSchemaName(c, "outside")
+	CreateSchema(c, admin, inside)
+	CreateSchema(c, admin, outside)
+	in := pgx.Identifier{inside}.Sanitize()
+	out := pgx.Identifier{outside}.Sanitize()
+
+	execf(c, admin, `
+CREATE TABLE %[1]s.t (id integer);
+CREATE TABLE %[2]s.unrelated (id integer);
+CREATE VIEW %[2]s.v AS SELECT id FROM %[1]s.t;
+`, in, out)
+
+	var unrelatedOID uint32
+	err := admin.QueryRowContext(c.Context(),
+		`SELECT $1::regclass::oid`, pgx.Identifier{outside, "unrelated"}.Sanitize(),
+	).Scan(&unrelatedOID)
+	c.Assert(err, tc.ErrorIsNil)
+	execf(c, admin, `
+CREATE FUNCTION %[1]s.describe_object(classid oid, objid oid, subid integer)
+RETURNS text LANGUAGE plpgsql STABLE AS $$
+BEGIN
+    IF classid = 'pg_class'::regclass AND objid = %[2]d::oid THEN
+        RAISE EXCEPTION 'described unrelated object';
+    END IF;
+    RETURN pg_catalog.pg_describe_object(classid, objid, subid);
+END
+$$;
+`, in, unrelatedOID)
+
+	describe := pgx.Identifier{inside, "describe_object"}.Sanitize()
+	_, err = admin.ExecContext(c.Context(),
+		`SELECT `+describe+`('pg_class'::regclass, $1::oid, 0)`, unrelatedOID)
+	c.Assert(err, tc.ErrorMatches, `.*described unrelated object.*`)
+
+	tx, err := admin.BeginTx(c.Context(), nil)
+	c.Assert(err, tc.ErrorIsNil)
+	defer func() { _ = tx.Rollback() }()
+	// Force the scan where the old query evaluated unrelated descriptions.
+	execf(c, tx, `
+SET LOCAL enable_indexscan = off;
+SET LOCAL enable_indexonlyscan = off;
+SET LOCAL enable_bitmapscan = off;
+`)
+	c.Assert(strings.Count(outsideDependentsQuery, "pg_describe_object("), tc.Equals, 2)
+	query := strings.ReplaceAll(outsideDependentsQuery, "pg_describe_object(", describe+"(")
+	rows, err := tx.QueryContext(c.Context(), query, inside)
+	c.Assert(err, tc.ErrorIsNil)
+	defer func() { _ = rows.Close() }()
+
+	var deps []string
+	for rows.Next() {
+		var dep string
+		c.Assert(rows.Scan(&dep), tc.ErrorIsNil)
+		deps = append(deps, dep)
+	}
+	c.Assert(rows.Err(), tc.ErrorIsNil)
+	c.Check(deps, tc.DeepEquals, []string{fmt.Sprintf(
+		`rule _RETURN on view %s.v depends on column id of table %s.t`, out, in)})
 }
 
 func (s *schemaSuite) TestOutsideDependents(c *tc.C) {
