@@ -13,6 +13,7 @@ import (
 	domainstorageerrors "github.com/juju/juju/domain/storage/errors"
 	domainstorageinternal "github.com/juju/juju/domain/storage/internal"
 	domainstorageprov "github.com/juju/juju/domain/storageprovisioning"
+	coretesting "github.com/juju/juju/internal/testing"
 	"github.com/juju/juju/internal/uuid"
 )
 
@@ -65,7 +66,7 @@ func (s *storageSuite) TestCreateStorageInstanceWithExistingFilesystem(c *tc.C) 
 
 	storageInstanceUUID := tc.Must(c, domainstorage.NewStorageInstanceUUID)
 	filesystemUUID := tc.Must(c, domainstorage.NewFilesystemUUID)
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 
 	args := domainstorageinternal.CreateStorageInstanceWithExistingFilesystem{
 		UUID:                      storageInstanceUUID,
@@ -203,7 +204,7 @@ func (s *storageSuite) TestCreateStorageInstanceWithExistingVolumeBackedFilesyst
 	storageInstanceUUID := tc.Must(c, domainstorage.NewStorageInstanceUUID)
 	filesystemUUID := tc.Must(c, domainstorage.NewFilesystemUUID)
 	volumeUUID := tc.Must(c, domainstorage.NewVolumeUUID)
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 
 	fsArgs := domainstorageinternal.CreateStorageInstanceWithExistingFilesystem{
 		UUID:                      storageInstanceUUID,

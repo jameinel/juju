@@ -14,6 +14,7 @@ import (
 	"github.com/juju/juju/domain/life"
 	removalerrors "github.com/juju/juju/domain/removal/errors"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
+	coretesting "github.com/juju/juju/internal/testing"
 )
 
 type relationWithRemoteConsumer struct {
@@ -150,7 +151,7 @@ func (s *relationWithRemoteConsumer) TestRelationWithRemoteConsumerScheduleRemov
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.RelationWithRemoteConsumerScheduleRemoval(
 		c.Context(), "removal-uuid", relUUID.String(), false, when,
 	)
@@ -180,7 +181,7 @@ where  r.uuid = ?`, "removal-uuid",
 func (s *relationWithRemoteConsumer) TestRelationWithRemoteConsumerScheduleRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.RelationWithRemoteConsumerScheduleRemoval(
 		c.Context(), "removal-uuid", "some-relation-uuid", true, when,
 	)

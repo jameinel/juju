@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/juju/clock"
 	"github.com/juju/tc"
@@ -26,6 +25,7 @@ import (
 	"github.com/juju/juju/domain/operation/state"
 	changestreamtesting "github.com/juju/juju/internal/changestream/testing"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
+	coretesting "github.com/juju/juju/internal/testing"
 	internaluuid "github.com/juju/juju/internal/uuid"
 )
 
@@ -364,7 +364,7 @@ func (s *watcherSuite) addOperationTaskLogs(c *tc.C, taskUUID string, contents [
 		results = nil
 
 		for _, content := range contents {
-			date := time.Now().UTC().Truncate(time.Microsecond)
+			date := coretesting.DatabaseNow()
 
 			_, err := tx.ExecContext(ctx, `
 INSERT INTO operation_task_log (task_uuid, content, created_at) VALUES (?, ?, ?)

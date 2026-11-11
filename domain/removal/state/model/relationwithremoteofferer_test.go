@@ -14,6 +14,7 @@ import (
 	removalerrors "github.com/juju/juju/domain/removal/errors"
 	schematesting "github.com/juju/juju/domain/schema/testing"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
+	coretesting "github.com/juju/juju/internal/testing"
 )
 
 type relationWithRemoteOfferer struct {
@@ -171,7 +172,7 @@ func (s *relationWithRemoteOfferer) TestRelationWithRemoteOffererScheduleRemoval
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.RelationWithRemoteOffererScheduleRemoval(
 		c.Context(), "removal-uuid", relUUID.String(), false, when,
 	)
@@ -201,7 +202,7 @@ where  r.uuid = ?`, "removal-uuid",
 func (s *relationWithRemoteOfferer) TestRelationWithRemoteOffererScheduleRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.RelationWithRemoteOffererScheduleRemoval(
 		c.Context(), "removal-uuid", "some-relation-uuid", true, when,
 	)

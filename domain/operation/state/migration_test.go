@@ -13,6 +13,7 @@ import (
 	corestatus "github.com/juju/juju/core/status"
 	coreunit "github.com/juju/juju/core/unit"
 	"github.com/juju/juju/domain/operation/internal"
+	coretesting "github.com/juju/juju/internal/testing"
 	internaluuid "github.com/juju/juju/internal/uuid"
 )
 
@@ -51,7 +52,7 @@ func (s *migrationSuite) TestImportOperationsWithSingleUnitTask(c *tc.C) {
 	s.addCharmAction(c, charmUUID)               // ensures action key "test-action" exists
 	s.addUnitWithName(c, charmUUID, "miniapp/0") // creates application "miniapp" and unit named "miniapp/0"
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 	opUUID := internaluuid.MustNewUUID().String()
 	taskUUID := internaluuid.MustNewUUID().String()
 	enqOp := now.Add(-2 * time.Hour)

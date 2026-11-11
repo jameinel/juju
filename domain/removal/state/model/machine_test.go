@@ -23,6 +23,7 @@ import (
 	"github.com/juju/juju/internal/errors"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
 	internalstorage "github.com/juju/juju/internal/storage"
+	coretesting "github.com/juju/juju/internal/testing"
 )
 
 type machineSuite struct {
@@ -1194,7 +1195,7 @@ func (s *machineSuite) TestMachineRemovalNormalSuccess(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.MachineScheduleRemoval(
 		c.Context(), "removal-uuid", machineUUID.String(), false, when,
 	)
@@ -1223,7 +1224,7 @@ func (s *machineSuite) TestMachineRemovalNormalSuccess(c *tc.C) {
 func (s *machineSuite) TestMachineRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.MachineScheduleRemoval(
 		c.Context(), "removal-uuid", "some-machine-uuid", true, when,
 	)

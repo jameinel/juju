@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/canonical/sqlair"
 	"github.com/juju/collections/transform"
@@ -35,6 +34,7 @@ import (
 	relationerrors "github.com/juju/juju/domain/relation/errors"
 	"github.com/juju/juju/domain/relation/internal"
 	"github.com/juju/juju/internal/errors"
+	coretesting "github.com/juju/juju/internal/testing"
 	"github.com/juju/juju/internal/uuid"
 )
 
@@ -4157,7 +4157,7 @@ func (s *relationSuite) TestGetGoalStateRelationDataForApplication(c *tc.C) {
 	})
 	appEndpoint3 := s.addApplicationEndpoint(c, app3, charm3RelationUUID)
 
-	testTime := time.Now().UTC().Truncate(time.Microsecond)
+	testTime := coretesting.DatabaseNow()
 
 	// Relate applications 1 and 3.
 	relID1 := 3

@@ -12,6 +12,7 @@ import (
 	"github.com/juju/juju/domain/macaroon"
 	"github.com/juju/juju/domain/macaroon/errors"
 	"github.com/juju/juju/internal/changestream/testing"
+	coretesting "github.com/juju/juju/internal/testing"
 )
 
 type rootKeyStateSuite struct {
@@ -26,7 +27,7 @@ var (
 	// Ensure we use one time for all the tests, so that we can reliably compare
 	// the time without worrying about the time changing from one test to
 	// another, causing intermittent failure.
-	now = time.Now().Truncate(time.Microsecond)
+	now = coretesting.DatabaseNow()
 
 	farFuture = time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
 

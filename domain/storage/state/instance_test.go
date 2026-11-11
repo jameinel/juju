@@ -5,7 +5,6 @@ package state
 
 import (
 	"testing"
-	"time"
 
 	"github.com/juju/tc"
 
@@ -14,6 +13,7 @@ import (
 	domainstorage "github.com/juju/juju/domain/storage"
 	domainstorageerrors "github.com/juju/juju/domain/storage/errors"
 	"github.com/juju/juju/domain/storage/internal"
+	coretesting "github.com/juju/juju/internal/testing"
 )
 
 // instanceSuite is a test suite for asserting storage instance based interfaces
@@ -159,7 +159,7 @@ func (s *instanceSuite) TestStorageInstanceInfoFilesystemUnitAttach(c *tc.C) {
 		c, fsUUID, unitNetNodeUUID, "/mnt/fs1",
 	)
 
-	statusTime := time.Now().UTC().Truncate(time.Microsecond)
+	statusTime := coretesting.DatabaseNow()
 	s.setFilesystemStatus(
 		c, fsUUID, domainstatus.StorageFilesystemStatusTypeAttached,
 		"test", statusTime,
@@ -273,7 +273,7 @@ func (s *instanceSuite) TestStorageInstanceInfoFilesysteamVolumeBackedUnitAttach
 		c, vUUID, unitNetNodeUUID, blockDeviceUUID,
 	)
 
-	statusTime := time.Now().UTC().Truncate(time.Microsecond)
+	statusTime := coretesting.DatabaseNow()
 	s.setFilesystemStatus(
 		c, fsUUID, domainstatus.StorageFilesystemStatusTypeAttached,
 		"testFilesystem", statusTime,
@@ -365,7 +365,7 @@ func (s *instanceSuite) TestStorageInstanceInfoVolumeUnitAttach(c *tc.C) {
 		c, vUUID, unitNetNodeUUID, blockDeviceUUID,
 	)
 
-	statusTime := time.Now().UTC().Truncate(time.Microsecond)
+	statusTime := coretesting.DatabaseNow()
 	s.setVolumeStatus(
 		c, vUUID, domainstatus.StorageVolumeStatusTypeAttached,
 		"testVolume", statusTime,
@@ -438,7 +438,7 @@ func (s *instanceSuite) TestStorageInstanceInfoVolumeUnitAttachNoDeviceLinks(c *
 		c, vUUID, unitNetNodeUUID, blockDeviceUUID,
 	)
 
-	statusTime := time.Now().UTC().Truncate(time.Microsecond)
+	statusTime := coretesting.DatabaseNow()
 	s.setVolumeStatus(
 		c, vUUID, domainstatus.StorageVolumeStatusTypeAttached,
 		"testVolume", statusTime,

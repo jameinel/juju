@@ -20,3 +20,9 @@ func ZeroTime() time.Time {
 func NonZeroTime() time.Time {
 	return time.Unix(0, 1) // 1 nanosecond since epoch
 }
+
+// DatabaseNow returns the current time in UTC at microsecond precision, so it
+// can be round-tripped exactly through the supported database timestamp types.
+func DatabaseNow() time.Time {
+	return time.Now().UTC().Truncate(time.Microsecond)
+}

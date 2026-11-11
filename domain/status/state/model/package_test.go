@@ -35,6 +35,7 @@ import (
 	schematesting "github.com/juju/juju/domain/schema/testing"
 	"github.com/juju/juju/domain/status"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
+	coretesting "github.com/juju/juju/internal/testing"
 	"github.com/juju/juju/internal/uuid"
 )
 
@@ -46,7 +47,7 @@ type baseSuite struct {
 
 func (s *baseSuite) SetUpTest(c *tc.C) {
 	s.ModelSuite.SetUpTest(c)
-	s.now = time.Now().UTC().Truncate(time.Microsecond)
+	s.now = coretesting.DatabaseNow()
 }
 
 func (s *baseSuite) workloadStatus(now time.Time) *status.StatusInfo[status.WorkloadStatusType] {
@@ -96,7 +97,7 @@ func (s *baseSuite) createIAASApplicationWithNUnits(
 	}
 
 	return s.createIAASApplication(
-		c, name, life.Alive, s.workloadStatus(time.Now().Truncate(time.Microsecond)), units...,
+		c, name, life.Alive, s.workloadStatus(coretesting.DatabaseNow()), units...,
 	)
 }
 

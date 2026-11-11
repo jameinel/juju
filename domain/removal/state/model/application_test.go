@@ -32,6 +32,7 @@ import (
 	"github.com/juju/juju/domain/relation"
 	removalerrors "github.com/juju/juju/domain/removal/errors"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
+	coretesting "github.com/juju/juju/internal/testing"
 )
 
 type applicationSuite struct {
@@ -518,7 +519,7 @@ func (s *applicationSuite) TestApplicationRemovalNormalSuccess(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.ApplicationScheduleRemoval(
 		c.Context(), "removal-uuid", appUUID.String(), false, when,
 	)
@@ -547,7 +548,7 @@ func (s *applicationSuite) TestApplicationRemovalNormalSuccess(c *tc.C) {
 func (s *applicationSuite) TestApplicationRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.ApplicationScheduleRemoval(
 		c.Context(), "removal-uuid", "some-application-uuid", true, when,
 	)

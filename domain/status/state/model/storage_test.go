@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/juju/clock"
 	"github.com/juju/tc"
@@ -26,6 +25,7 @@ import (
 	"github.com/juju/juju/domain/storage"
 	storageerrors "github.com/juju/juju/domain/storage/errors"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
+	coretesting "github.com/juju/juju/internal/testing"
 	"github.com/juju/juju/internal/uuid"
 )
 
@@ -102,7 +102,7 @@ func (s *storageSuite) TestSetFilesystemStatus(c *tc.C) {
 		c, status.StorageFilesystemStatusTypePending,
 	)
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 	expected := status.StatusInfo[status.StorageFilesystemStatusType]{
 		Status:  status.StorageFilesystemStatusTypeAttached,
 		Message: "message",
@@ -117,7 +117,7 @@ func (s *storageSuite) TestSetFilesystemStatus(c *tc.C) {
 func (s *storageSuite) TestSetFilesystemStatusInitialMissing(c *tc.C) {
 	filesystemUUID, _ := s.newFilesystem(c)
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 	expected := status.StatusInfo[status.StorageFilesystemStatusType]{
 		Status:  status.StorageFilesystemStatusTypeAttached,
 		Message: "message",
@@ -137,11 +137,11 @@ func (s *storageSuite) TestSetFilesystemStatusMultipleTimes(c *tc.C) {
 	err := s.modelState.SetFilesystemStatus(c.Context(), filesystemUUID, status.StatusInfo[status.StorageFilesystemStatusType]{
 		Status:  status.StorageFilesystemStatusTypeAttaching,
 		Message: "waiting",
-		Since:   new(time.Now().UTC().Truncate(time.Microsecond)),
+		Since:   new(coretesting.DatabaseNow()),
 	})
 	c.Assert(err, tc.ErrorIsNil)
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 	expected := status.StatusInfo[status.StorageFilesystemStatusType]{
 		Status:  status.StorageFilesystemStatusTypeAttached,
 		Message: "attached with 60MB",
@@ -155,7 +155,7 @@ func (s *storageSuite) TestSetFilesystemStatusMultipleTimes(c *tc.C) {
 }
 
 func (s *storageSuite) TestSetFilesystemStatusFilesystemNotFound(c *tc.C) {
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 	expected := status.StatusInfo[status.StorageFilesystemStatusType]{
 		Status:  status.StorageFilesystemStatusTypeAttaching,
 		Message: "waiting",
@@ -202,7 +202,7 @@ func (s *storageSuite) TestSetFilesystemStatusPendingWhenProvisioned(c *tc.C) {
 	)
 	s.newStorageInstanceFilesystem(c, s0, fsUUID)
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 	sts := status.StatusInfo[status.StorageFilesystemStatusType]{
 		Status: status.StorageFilesystemStatusTypeAttached,
 		Since:  new(now),
@@ -238,7 +238,7 @@ func (s *storageSuite) TestImportFilesystemStatus(c *tc.C) {
 		c, status.StorageFilesystemStatusTypePending,
 	)
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 	expected := status.StatusInfo[status.StorageFilesystemStatusType]{
 		Status:  status.StorageFilesystemStatusTypeAttached,
 		Message: "message",
@@ -253,7 +253,7 @@ func (s *storageSuite) TestImportFilesystemStatus(c *tc.C) {
 func (s *storageSuite) TestSetVolumeStatus(c *tc.C) {
 	volumeUUID, _ := s.newVolumeWithStatus(c, status.StorageVolumeStatusTypePending)
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 	expected := status.StatusInfo[status.StorageVolumeStatusType]{
 		Status:  status.StorageVolumeStatusTypeAttached,
 		Message: "message",
@@ -268,7 +268,7 @@ func (s *storageSuite) TestSetVolumeStatus(c *tc.C) {
 func (s *storageSuite) TestSetVolumeStatusInitialMissing(c *tc.C) {
 	volumeUUID, _ := s.newVolume(c)
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 	expected := status.StatusInfo[status.StorageVolumeStatusType]{
 		Status:  status.StorageVolumeStatusTypeAttached,
 		Message: "message",
@@ -286,11 +286,11 @@ func (s *storageSuite) TestSetVolumeStatusMultipleTimes(c *tc.C) {
 	err := s.modelState.SetVolumeStatus(c.Context(), volumeUUID, status.StatusInfo[status.StorageVolumeStatusType]{
 		Status:  status.StorageVolumeStatusTypeAttaching,
 		Message: "waiting",
-		Since:   new(time.Now().UTC().Truncate(time.Microsecond)),
+		Since:   new(coretesting.DatabaseNow()),
 	})
 	c.Assert(err, tc.ErrorIsNil)
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 	expected := status.StatusInfo[status.StorageVolumeStatusType]{
 		Status:  status.StorageVolumeStatusTypeAttached,
 		Message: "attached with 60MB",
@@ -304,7 +304,7 @@ func (s *storageSuite) TestSetVolumeStatusMultipleTimes(c *tc.C) {
 }
 
 func (s *storageSuite) TestSetVolumeStatusVolumeNotFound(c *tc.C) {
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 	expected := status.StatusInfo[status.StorageVolumeStatusType]{
 		Status:  status.StorageVolumeStatusTypeAttaching,
 		Message: "waiting",
@@ -346,7 +346,7 @@ func (s *storageSuite) TestSetVolumeStatusPendingWhenProvisioned(c *tc.C) {
 	s0, _ := s.newStorageInstance(c, ch0, "blk", blkPoolUUID, storage.StorageKindBlock)
 	vUUID, _ := s.newVolumeWithStatus(c, status.StorageVolumeStatusTypePending)
 	s.newStorageInstanceVolume(c, s0, vUUID)
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 
 	sts := status.StatusInfo[status.StorageVolumeStatusType]{
 		Status: status.StorageVolumeStatusTypeAttached,
@@ -380,7 +380,7 @@ func (s *storageSuite) TestGetVolumeUUIDByIDNotFound(c *tc.C) {
 func (s *storageSuite) TestImportVolumeStatus(c *tc.C) {
 	volumeUUID, _ := s.newVolumeWithStatus(c, status.StorageVolumeStatusTypePending)
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 	expected := status.StatusInfo[status.StorageVolumeStatusType]{
 		Status:  status.StorageVolumeStatusTypeAttached,
 		Message: "message",

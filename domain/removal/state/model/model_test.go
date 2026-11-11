@@ -20,6 +20,7 @@ import (
 	schematesting "github.com/juju/juju/domain/schema/testing"
 	"github.com/juju/juju/internal/errors"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
+	coretesting "github.com/juju/juju/internal/testing"
 	"github.com/juju/juju/internal/uuid"
 )
 
@@ -502,7 +503,7 @@ func (s *modelSuite) TestModelRemovalNormalSuccess(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.ModelScheduleRemoval(
 		c.Context(),
 		"removal-uuid",
@@ -537,7 +538,7 @@ func (s *modelSuite) TestModelRemovalNormalSuccess(c *tc.C) {
 func (s *modelSuite) TestModelRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.ModelScheduleRemoval(
 		c.Context(),
 		"removal-uuid",
@@ -577,7 +578,7 @@ func (s *modelSuite) TestControllerModelRemovalNormalSuccess(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.ControllerModelScheduleRemoval(
 		c.Context(),
 		"removal-uuid",
@@ -612,7 +613,7 @@ func (s *modelSuite) TestControllerModelRemovalNormalSuccess(c *tc.C) {
 func (s *modelSuite) TestControllerModelRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.ControllerModelScheduleRemoval(
 		c.Context(),
 		"removal-uuid",

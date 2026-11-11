@@ -23,6 +23,7 @@ import (
 	removalerrors "github.com/juju/juju/domain/removal/errors"
 	domainstorage "github.com/juju/juju/domain/storage"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
+	coretesting "github.com/juju/juju/internal/testing"
 )
 
 type unitSuite struct {
@@ -449,7 +450,7 @@ func (s *unitSuite) TestUnitRemovalNormalSuccess(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.UnitScheduleRemoval(
 		c.Context(), "removal-uuid", unitUUID.String(), false, when,
 	)
@@ -565,7 +566,7 @@ VALUES (?, ?, ?, ?)`,
 func (s *unitSuite) TestUnitRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.UnitScheduleRemoval(
 		c.Context(), "removal-uuid", "some-unit-uuid", true, when,
 	)

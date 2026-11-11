@@ -39,6 +39,7 @@ import (
 	"github.com/juju/juju/internal/secrets/provider"
 	"github.com/juju/juju/internal/secrets/provider/juju"
 	"github.com/juju/juju/internal/secrets/provider/kubernetes"
+	coretesting "github.com/juju/juju/internal/testing"
 	"github.com/juju/juju/internal/uuid"
 )
 
@@ -329,7 +330,7 @@ WHERE backend_uuid = ?`[1:], expectedSecretBackend.ID)
 func (s *stateSuite) TestCreateSecretBackendFailed(c *tc.C) {
 	backendID := uuid.MustNewUUID().String()
 	rotateInternal := 24 * time.Hour
-	nextRotateTime := time.Now().Truncate(time.Microsecond).Add(rotateInternal)
+	nextRotateTime := coretesting.DatabaseNow().Add(rotateInternal)
 	_, err := s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID,
@@ -364,7 +365,7 @@ func (s *stateSuite) TestCreateSecretBackendFailed(c *tc.C) {
 func (s *stateSuite) TestCreateSecretBackend(c *tc.C) {
 	backendID := uuid.MustNewUUID().String()
 	rotateInternal := 24 * time.Hour
-	nextRotateTime := time.Now().Truncate(time.Microsecond).Add(rotateInternal)
+	nextRotateTime := coretesting.DatabaseNow().Add(rotateInternal)
 	result, err := s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID,
@@ -454,7 +455,7 @@ func (s *stateSuite) TestUpsertSecretBackendInvalidArg(c *tc.C) {
 func (s *stateSuite) TestUpdateSecretBackend(c *tc.C) {
 	backendID := uuid.MustNewUUID().String()
 	rotateInternal := 24 * time.Hour
-	nextRotateTime := time.Now().Truncate(time.Microsecond).Add(rotateInternal)
+	nextRotateTime := coretesting.DatabaseNow().Add(rotateInternal)
 	_, err := s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID,
@@ -503,7 +504,7 @@ func (s *stateSuite) TestUpdateSecretBackend(c *tc.C) {
 
 	// Update by name.
 	newRotateInternal := 48 * time.Hour
-	newNextRotateTime := time.Now().Truncate(time.Microsecond).Add(newRotateInternal)
+	newNextRotateTime := coretesting.DatabaseNow().Add(newRotateInternal)
 	_, err = s.state.UpdateSecretBackend(c.Context(), secretbackend.UpdateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			Name: "my-backend-updated",
@@ -532,7 +533,7 @@ func (s *stateSuite) TestUpdateSecretBackend(c *tc.C) {
 func (s *stateSuite) TestUpdateSecretBackendWithNoRotateNoConfig(c *tc.C) {
 	backendID := uuid.MustNewUUID().String()
 	rotateInternal := 24 * time.Hour
-	nextRotateTime := time.Now().Truncate(time.Microsecond).Add(rotateInternal)
+	nextRotateTime := coretesting.DatabaseNow().Add(rotateInternal)
 	_, err := s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID,
@@ -581,7 +582,7 @@ func (s *stateSuite) TestUpdateSecretBackendWithNoRotateNoConfig(c *tc.C) {
 func (s *stateSuite) TestUpdateSecretBackendFailed(c *tc.C) {
 	backendID1 := uuid.MustNewUUID().String()
 	rotateInternal := 24 * time.Hour
-	nextRotateTime := time.Now().Truncate(time.Microsecond).Add(rotateInternal)
+	nextRotateTime := coretesting.DatabaseNow().Add(rotateInternal)
 	_, err := s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID1,
@@ -847,7 +848,7 @@ WHERE model_uuid = ?`[1:], modelUUID)
 func (s *stateSuite) TestListSecretBackendsIAAS(c *tc.C) {
 	backendID1 := uuid.MustNewUUID().String()
 	rotateInternal1 := 24 * time.Hour
-	nextRotateTime1 := time.Now().Truncate(time.Microsecond).Add(rotateInternal1)
+	nextRotateTime1 := coretesting.DatabaseNow().Add(rotateInternal1)
 	_, err := s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID1,
@@ -942,7 +943,7 @@ func (s *stateSuite) TestListSecretBackendsCAAS(c *tc.C) {
 
 	backendID2 := uuid.MustNewUUID().String()
 	rotateInternal2 := 48 * time.Hour
-	nextRotateTime2 := time.Now().Truncate(time.Microsecond).Add(rotateInternal2)
+	nextRotateTime2 := coretesting.DatabaseNow().Add(rotateInternal2)
 	_, err = s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID2,
@@ -1028,7 +1029,7 @@ func (s *stateSuite) TestListSecretBackendIDs(c *tc.C) {
 
 	backendID2 := uuid.MustNewUUID().String()
 	rotateInternal2 := 48 * time.Hour
-	nextRotateTime2 := time.Now().Truncate(time.Microsecond).Add(rotateInternal2)
+	nextRotateTime2 := coretesting.DatabaseNow().Add(rotateInternal2)
 	_, err = s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID2,
@@ -1060,7 +1061,7 @@ func (s *stateSuite) assertListSecretBackendsForModelIAAS(c *tc.C, includeEmpty 
 
 	backendID1 := uuid.MustNewUUID().String()
 	rotateInternal1 := 24 * time.Hour
-	nextRotateTime1 := time.Now().Truncate(time.Microsecond).Add(rotateInternal1)
+	nextRotateTime1 := coretesting.DatabaseNow().Add(rotateInternal1)
 	_, err = s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID1,
@@ -1088,7 +1089,7 @@ func (s *stateSuite) assertListSecretBackendsForModelIAAS(c *tc.C, includeEmpty 
 
 	backendID2 := uuid.MustNewUUID().String()
 	rotateInternal2 := 48 * time.Hour
-	nextRotateTime2 := time.Now().Truncate(time.Microsecond).Add(rotateInternal2)
+	nextRotateTime2 := coretesting.DatabaseNow().Add(rotateInternal2)
 	_, err = s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID2,
@@ -1177,7 +1178,7 @@ func (s *stateSuite) assertListSecretBackendsForModelCAAS(c *tc.C, includeEmpty 
 
 	backendID1 := uuid.MustNewUUID().String()
 	rotateInternal1 := 24 * time.Hour
-	nextRotateTime1 := time.Now().Truncate(time.Microsecond).Add(rotateInternal1)
+	nextRotateTime1 := coretesting.DatabaseNow().Add(rotateInternal1)
 	_, err = s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID1,
@@ -1205,7 +1206,7 @@ func (s *stateSuite) assertListSecretBackendsForModelCAAS(c *tc.C, includeEmpty 
 
 	backendID2 := uuid.MustNewUUID().String()
 	rotateInternal2 := 48 * time.Hour
-	nextRotateTime2 := time.Now().Truncate(time.Microsecond).Add(rotateInternal2)
+	nextRotateTime2 := coretesting.DatabaseNow().Add(rotateInternal2)
 	_, err = s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID2,
@@ -1514,7 +1515,7 @@ func (s *stateSuite) TestGetSecretBackendNotFound(c *tc.C) {
 func (s *stateSuite) TestSecretBackendRotated(c *tc.C) {
 	backendID := uuid.MustNewUUID().String()
 	rotateInternal := 24 * time.Hour
-	nextRotateTime := time.Now().Truncate(time.Microsecond).Add(rotateInternal)
+	nextRotateTime := coretesting.DatabaseNow().Add(rotateInternal)
 	_, err := s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID,
@@ -1532,7 +1533,7 @@ func (s *stateSuite) TestSecretBackendRotated(c *tc.C) {
 		TokenRotateInterval: &rotateInternal,
 	}, &nextRotateTime)
 
-	newNextRotateTime := time.Now().Truncate(time.Microsecond).Add(2 * rotateInternal)
+	newNextRotateTime := coretesting.DatabaseNow().Add(2 * rotateInternal)
 	err = s.state.SecretBackendRotated(c.Context(), backendID, newNextRotateTime)
 	c.Assert(err, tc.IsNil)
 	s.assertSecretBackend(c, secretbackend.SecretBackend{
@@ -1545,7 +1546,7 @@ func (s *stateSuite) TestSecretBackendRotated(c *tc.C) {
 		&nextRotateTime,
 	)
 
-	newNextRotateTime = time.Now().Truncate(time.Microsecond).Add(rotateInternal / 2)
+	newNextRotateTime = coretesting.DatabaseNow().Add(rotateInternal / 2)
 	err = s.state.SecretBackendRotated(c.Context(), backendID, newNextRotateTime)
 	c.Assert(err, tc.IsNil)
 	s.assertSecretBackend(c, secretbackend.SecretBackend{
@@ -1559,7 +1560,7 @@ func (s *stateSuite) TestSecretBackendRotated(c *tc.C) {
 	)
 
 	nonExistBackendID := uuid.MustNewUUID().String()
-	newNextRotateTime = time.Now().Truncate(time.Microsecond).Add(rotateInternal / 4)
+	newNextRotateTime = coretesting.DatabaseNow().Add(rotateInternal / 4)
 	err = s.state.SecretBackendRotated(c.Context(), nonExistBackendID, newNextRotateTime)
 	c.Assert(err, tc.ErrorIs, backenderrors.NotFound)
 	c.Assert(err, tc.ErrorMatches, `secret backend not found: "`+nonExistBackendID+`"`)
@@ -1744,7 +1745,7 @@ func (s *stateSuite) TestInitialWatchStatement(c *tc.C) {
 func (s *stateSuite) TestGetSecretBackendRotateChanges(c *tc.C) {
 	backendID1 := uuid.MustNewUUID().String()
 	rotateInternal1 := 24 * time.Hour
-	nextRotateTime1 := time.Now().Truncate(time.Microsecond).Add(rotateInternal1)
+	nextRotateTime1 := coretesting.DatabaseNow().Add(rotateInternal1)
 	_, err := s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID1,
@@ -1764,7 +1765,7 @@ func (s *stateSuite) TestGetSecretBackendRotateChanges(c *tc.C) {
 
 	backendID2 := uuid.MustNewUUID().String()
 	rotateInternal2 := 48 * time.Hour
-	nextRotateTime2 := time.Now().Truncate(time.Microsecond).Add(rotateInternal2)
+	nextRotateTime2 := coretesting.DatabaseNow().Add(rotateInternal2)
 	_, err = s.state.CreateSecretBackend(c.Context(), secretbackend.CreateSecretBackendParams{
 		BackendIdentifier: secretbackend.BackendIdentifier{
 			ID:   backendID2,

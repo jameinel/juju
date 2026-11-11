@@ -27,6 +27,7 @@ import (
 	"github.com/juju/juju/domain/removal/internal"
 	schematesting "github.com/juju/juju/domain/schema/testing"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
+	coretesting "github.com/juju/juju/internal/testing"
 )
 
 type relationSuite struct {
@@ -147,7 +148,7 @@ func (s *relationSuite) TestRelationRemovalNormalSuccess(c *tc.C) {
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.RelationScheduleRemoval(
 		c.Context(), "removal-uuid", relUUID.String(), false, when,
 	)
@@ -176,7 +177,7 @@ func (s *relationSuite) TestRelationRemovalNormalSuccess(c *tc.C) {
 func (s *relationSuite) TestRelationRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.RelationScheduleRemoval(
 		c.Context(), "removal-uuid", "some-relation-uuid", true, when,
 	)

@@ -48,6 +48,7 @@ import (
 	internaldatabase "github.com/juju/juju/internal/database"
 	"github.com/juju/juju/internal/errors"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
+	coretesting "github.com/juju/juju/internal/testing"
 	"github.com/juju/juju/internal/uuid"
 )
 
@@ -304,7 +305,7 @@ func (s *applicationStateSuite) TestCreateApplicationWithStatus(c *tc.C) {
 	}
 	ctx := c.Context()
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := coretesting.DatabaseNow()
 	id, _, err := s.state.CreateIAASApplication(ctx, "666", application.AddIAASApplicationArg{
 		BaseAddApplicationArg: application.BaseAddApplicationArg{
 			Platform: platform,

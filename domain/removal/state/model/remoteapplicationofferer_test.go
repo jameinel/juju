@@ -23,6 +23,7 @@ import (
 	removalerrors "github.com/juju/juju/domain/removal/errors"
 	removalservice "github.com/juju/juju/domain/removal/service"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
+	coretesting "github.com/juju/juju/internal/testing"
 )
 
 type remoteApplicationOffererSuite struct {
@@ -198,7 +199,7 @@ func (s *remoteApplicationOffererSuite) TestRemoteApplicationOffererScheduleRemo
 
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.RemoteApplicationOffererScheduleRemoval(
 		c.Context(), "removal-uuid", remoteAppUUID.String(), false, when,
 	)
@@ -229,7 +230,7 @@ where  r.uuid = ?`, "removal-uuid",
 func (s *remoteApplicationOffererSuite) TestRemoteApplicationOffererScheduleRemovalNotExistsSuccess(c *tc.C) {
 	st := NewState(s.TxnRunnerFactory(), loggertesting.WrapCheckLog(c))
 
-	when := time.Now().UTC().Truncate(time.Microsecond)
+	when := coretesting.DatabaseNow()
 	err := st.RemoteApplicationOffererScheduleRemoval(
 		c.Context(), "removal-uuid", "some-application-uuid", true, when,
 	)
