@@ -220,6 +220,29 @@ subset of test names.
 go test -run='$REGEX'
 ```
 
+#### Database test selection
+
+The shared database test harness reads `JUJU_TEST_DATABASE`. Leaving it unset
+or empty preserves the existing build-tag-selected default: SQLite without
+the `dqlite` tag, or real dqlite with that tag. An explicit selection must
+match the compiled backend; it never silently falls back.
+
+```sh
+JUJU_TEST_DATABASE=sqlite go test ./domain/sequence/state
+JUJU_TEST_DATABASE=dqlite make run-go-tests \
+    TEST_PACKAGES=./domain/sequence/state
+```
+
+`JUJU_TEST_POSTGRESQL_URL` is reserved for PostgreSQL connection configuration.
+It may stay set while running another backend: only an explicit
+`JUJU_TEST_DATABASE=postgresql` uses it. PostgreSQL selection requires a
+nonempty URL, but the PostgreSQL driver and schema support are not yet wired
+into this branch's harness, so that selection currently fails explicitly.
+
+New domain suites should embed the existing shared database/schema suites,
+not read these environment variables themselves. The configuration is
+preserved through test-environment isolation.
+
 ### Other
 
 For more information see [CODING.md](CODING.md)
