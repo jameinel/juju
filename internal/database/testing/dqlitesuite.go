@@ -25,6 +25,7 @@ import (
 	"github.com/juju/juju/internal/database/client"
 	"github.com/juju/juju/internal/database/dqlite"
 	"github.com/juju/juju/internal/database/pragma"
+	"github.com/juju/juju/internal/database/testconfig"
 	"github.com/juju/juju/internal/testhelpers"
 	"github.com/juju/juju/internal/uuid"
 )
@@ -56,6 +57,8 @@ type DqliteSuite struct {
 	dqlite    *app.App
 	db        *sql.DB
 	trackedDB *txnRunner
+
+	backend testconfig.Backend
 }
 
 // SetUpTest creates a new sql.DB reference and ensures that the
@@ -63,10 +66,17 @@ type DqliteSuite struct {
 func (s *DqliteSuite) SetUpTest(c *tc.C) {
 	s.IsolationSuite.SetUpTest(c)
 
+	config, err := testconfig.Load()
+	c.Assert(err, tc.ErrorIsNil)
+	if config.Backend == testconfig.PostgreSQL {
+		c.Fatalf("JUJU_TEST_DATABASE=postgresql: PostgreSQL test backend is not implemented yet")
+	}
+	s.backend = config.Backend
+
 	s.rootPath = c.MkDir()
 
 	path := filepath.Join(s.rootPath, "dqlite")
-	err := os.Mkdir(path, 0700)
+	err = os.Mkdir(path, 0700)
 	c.Assert(err, tc.ErrorIsNil)
 	s.dbPath = path
 	c.Cleanup(func() {
@@ -138,6 +148,12 @@ func (s *DqliteSuite) SetUpTest(c *tc.C) {
 // DB returns a sql.DB reference.
 func (s *DqliteSuite) DB() *sql.DB {
 	return s.db
+}
+
+// Backend returns the actual database backend selected during SetUpTest.
+// SQLite and dqlite use the same SQL dialect but are distinct backends.
+func (s *DqliteSuite) Backend() testconfig.Backend {
+	return s.backend
 }
 
 // TxnRunner returns the suite's transaction runner.
