@@ -609,6 +609,13 @@ endif
 	@if ! command -v yq >/dev/null 2>&1; then \
 		echo 'Installing yq snap'; \
 		sudo snap install yq; \
+	fi; \
+	if ! json_input=$$(printf '%s\n' '{"value":"ok"}' | yq -p=json -r '.value' 2>/dev/null) || \
+		[ "$$json_input" != "ok" ] || \
+		! json_output=$$(printf '%s\n' 'value: ok' | yq -o=json '.value' 2>/dev/null) || \
+		[ "$$json_output" != '"ok"' ]; then \
+		echo "Incompatible yq on PATH: install yq v4 and ensure it is selected before other versions" >&2; \
+		exit 1; \
 	fi
 
 WAIT_FOR_DPKG=bash -c '. "${PROJECT_DIR}/make_functions.sh"; wait_for_dpkg "$$@"' wait_for_dpkg
@@ -653,6 +660,16 @@ install-development-go-tools:
 			fi; \
 			echo "Installing $$tool"; \
 			GOOS='' GOARCH='' go install "$$module"; \
+		fi; \
+		if [ "$$tool" = golangci-lint ]; then \
+			version=$$(golangci-lint --version) || { \
+				echo "Cannot determine golangci-lint version on PATH" >&2; exit 1; \
+			}; \
+			version=$$(printf '%s\n' "$$version" | tr -s ' ' | cut -d ' ' -f 4 | cut -d '.' -f 1,2); \
+			if [ "$$version" != "2.14" ]; then \
+				echo "Incompatible golangci-lint on PATH: use version 2.14.x" >&2; \
+				exit 1; \
+			fi; \
 		fi; \
 	done; \
 	echo "Ensure $$gobin is on PATH when running development checks."
