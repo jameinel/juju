@@ -23,6 +23,12 @@ type txnRunner struct {
 	postHook func(context.Context, *sqlair.TX)
 }
 
+// NewTxnRunner wraps an existing database with the shared test retry semantics.
+// The caller remains responsible for closing the database.
+func NewTxnRunner(db *sql.DB) coredatabase.TxnRunner {
+	return &txnRunner{db: sqlair.NewDB(db)}
+}
+
 // Txn executes the input function against the tracked database, using
 // the sqlair package. The sqlair package provides a mapping library for
 // SQL queries and statements.

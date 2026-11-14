@@ -8,6 +8,7 @@ import (
 	"database/sql"
 
 	"github.com/juju/juju/core/database"
+	"github.com/juju/juju/core/database/dialect"
 	"github.com/juju/juju/internal/errors"
 )
 
@@ -18,6 +19,7 @@ type Tx interface {
 
 // Schema captures the schema of a database as a series of ordered updates.
 type Schema struct {
+	dialect dialect.Dialect
 	patches []Patch
 	hook    Hook
 }
@@ -51,7 +53,15 @@ type Hook func(int, string) (string, error)
 
 // New creates a new [Schema] with the input patches.
 func New(patches ...Patch) *Schema {
+	return NewForDialect(dialect.SQLite, patches...)
+}
+
+// NewForDialect creates a schema whose patches use the supplied SQL dialect.
+// PostgreSQL currently supports fresh schemas and identical reapplication,
+// not incremental upgrades. SQLite/dqlite retain their upgrade behaviour.
+func NewForDialect(d dialect.Dialect, patches ...Patch) *Schema {
 	return &Schema{
+		dialect: d,
 		patches: patches,
 		hook:    omitHook,
 	}
@@ -98,6 +108,9 @@ type ChangeSet struct {
 // updates are tracked in the 'schema' table, which gets automatically
 // created).
 //
+// PostgreSQL accepts a fresh schema or identical reapplication, but rejects
+// pending patches on an already-versioned schema.
+//
 // The returned ChangeSet contains the prior and new schema version numbers.
 func (s *Schema) Ensure(ctx context.Context, runner database.TxnRunner) (ChangeSet, error) {
 	current, post := -1, -1
@@ -117,7 +130,12 @@ func (s *Schema) Ensure(ctx context.Context, runner database.TxnRunner) (ChangeS
 	hashes := computeHashes(toApply)
 
 	err := runner.StdTxn(ctx, func(ctx context.Context, t *sql.Tx) error {
-		if err := createSchemaTable(ctx, t); err != nil {
+		if stmt := s.dialect.BeginSchemaChangeSQL(); stmt != "" {
+			if _, err := t.ExecContext(ctx, stmt); err != nil {
+				return errors.Errorf("beginning schema change: %w", err)
+			}
+		}
+		if err := createSchemaTable(ctx, t, s.dialect); err != nil {
 			return errors.Capture(err)
 		}
 
@@ -125,8 +143,12 @@ func (s *Schema) Ensure(ctx context.Context, runner database.TxnRunner) (ChangeS
 		if current, err = validateCurrentVersion(ctx, t, hashes); err != nil {
 			return errors.Errorf("querying current schema version: %w", err)
 		}
+		if s.dialect == dialect.PostgreSQL && current != 0 && current != len(toApply) {
+			return errors.Errorf("PostgreSQL schema upgrades are not supported: current version %d, expected %d",
+				current, len(toApply))
+		}
 
-		if err := ensurePatchesAreApplied(ctx, t, current, toApply, hashes); err != nil {
+		if err := ensurePatchesAreApplied(ctx, t, s.dialect, current, toApply, hashes); err != nil {
 			return errors.Errorf("applying schema patches: %w", err)
 		}
 

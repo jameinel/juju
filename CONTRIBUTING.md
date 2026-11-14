@@ -233,11 +233,30 @@ JUJU_TEST_DATABASE=dqlite make run-go-tests \
     TEST_PACKAGES=./domain/sequence/state
 ```
 
-`JUJU_TEST_POSTGRESQL_URL` is reserved for PostgreSQL connection configuration.
+`JUJU_TEST_POSTGRESQL_URL` supplies PostgreSQL connection configuration.
 It may stay set while running another backend: only an explicit
 `JUJU_TEST_DATABASE=postgresql` uses it. PostgreSQL selection requires a
-nonempty URL, but the PostgreSQL driver and schema support are not yet wired
-into this branch's harness, so that selection currently fails explicitly.
+nonempty URL. The driver and schema-bookkeeping tests can run against
+PostgreSQL 16 using this selection:
+
+```sh
+JUJU_TEST_DATABASE=postgresql go test -race \
+    ./internal/database/postgresql/... \
+    ./core/database/schema -run 'TestRewriteSuite|TestDriverSuite|TestPostgreSQLSchemaSuite'
+```
+
+Supply `JUJU_TEST_POSTGRESQL_URL` privately through the environment; do not put
+credentials in command history or logs. Tests create unique schemas, use bounded
+connection pools, and drop only their own schemas on cleanup. The role needs
+permission to create schemas in the configured database. No stale-schema sweep
+is performed after interrupted runs.
+
+PostgreSQL schema application initially supports fresh schemas and reapplying
+the identical version/hash chain. It rejects incremental upgrades; patch-level
+upgrades are a future capability. SQLite/dqlite upgrades are unchanged.
+Generated controller/model PostgreSQL schemas and shared-suite wiring are
+still pending, so PostgreSQL selection in existing domain suites continues to
+fail explicitly. The focused command above does not establish domain coverage.
 
 New domain suites should embed the existing shared database/schema suites,
 not read these environment variables themselves. The configuration is

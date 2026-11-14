@@ -11,23 +11,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/juju/juju/core/database/dialect"
 	"github.com/juju/juju/internal/errors"
 )
 
-const schemaTable = `
-CREATE TABLE IF NOT EXISTS schema (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-    version      INTEGER NOT NULL,
-    hash         TEXT NOT NULL,
-    updated_at   DATETIME NOT NULL
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_schema_version ON schema (version);
-`
-
 // Create the schema table.
-func createSchemaTable(ctx context.Context, tx *sql.Tx) error {
-	_, err := tx.ExecContext(ctx, schemaTable)
+func createSchemaTable(ctx context.Context, tx *sql.Tx, d dialect.Dialect) error {
+	_, err := tx.ExecContext(ctx, d.SchemaTableDDL())
 	return errors.Capture(err)
 }
 
@@ -38,7 +28,7 @@ func createSchemaTable(ctx context.Context, tx *sql.Tx) error {
 func validateCurrentVersion(ctx context.Context, tx *sql.Tx, computedHashes []string) (int, error) {
 	versions, err := selectSchemaVersions(ctx, tx)
 	if err != nil {
-		return -1, errors.Errorf("failed to fetch patch versions: %v", err)
+		return -1, errors.Errorf("failed to fetch patch versions: %w", err)
 	}
 
 	var current int
@@ -122,7 +112,9 @@ func checkSchemaHashesMatch(versions []versionHash, computedHashes []string) err
 // It returns an error if the current version is more recent than the
 // expected version, or if any patch fails to apply.
 // The input hashes are assumed to be valid for the input patches.
-func ensurePatchesAreApplied(ctx context.Context, tx *sql.Tx, current int, patches []Patch, hashes []string) error {
+func ensurePatchesAreApplied(
+	ctx context.Context, tx *sql.Tx, d dialect.Dialect, current int, patches []Patch, hashes []string,
+) error {
 	if current > len(patches) {
 		return errors.Errorf("schema version '%d' is more recent than expected '%d'", current, len(patches))
 	}
@@ -137,15 +129,15 @@ func ensurePatchesAreApplied(ctx context.Context, tx *sql.Tx, current int, patch
 		}
 
 		if err := patch.run(ctx, tx); err != nil {
-			return errors.Errorf("failed to apply patch %d: %v", current, err)
+			return errors.Errorf("failed to apply patch %d: %w", current, err)
 		}
 		current++
 
-		if err := insertSchemaVersion(ctx, tx, versionHash{
+		if err := insertSchemaVersion(ctx, tx, d, versionHash{
 			version: current,
 			hash:    hashes[current-1],
 		}); err != nil {
-			return errors.Errorf("failed to insert version %d", current)
+			return errors.Errorf("failed to insert version %d: %w", current, err)
 		}
 	}
 
@@ -153,9 +145,8 @@ func ensurePatchesAreApplied(ctx context.Context, tx *sql.Tx, current int, patch
 }
 
 // Insert a new version into the schema table.
-func insertSchemaVersion(ctx context.Context, tx *sql.Tx, new versionHash) error {
-	statement := `INSERT INTO schema (version, hash, updated_at) VALUES (?, ?, strftime('%s'));`
-	_, err := tx.ExecContext(ctx, statement, new.version, new.hash)
+func insertSchemaVersion(ctx context.Context, tx *sql.Tx, d dialect.Dialect, new versionHash) error {
+	_, err := tx.ExecContext(ctx, d.InsertSchemaVersionSQL(), new.version, new.hash)
 	return errors.Capture(err)
 }
 
