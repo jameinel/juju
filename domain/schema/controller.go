@@ -69,10 +69,7 @@ const (
 // within the same major.minor version. So all entries should be of the same
 // major.minor version as the current version. The full version is only included
 // for clarity of reading
-var controllerPostPatchFilesByVersion = []struct {
-	version semversion.Number
-	files   []string
-}{}
+var controllerPostPatchFilesByVersion = []versionedPostPatchFiles{}
 
 // ControllerDDL is used to create the controller database schema at bootstrap.
 func ControllerDDL() *schema.Schema {
@@ -82,16 +79,37 @@ func ControllerDDL() *schema.Schema {
 // ControllerDDLForVersion returns the controller database schema for the
 // specified version. The version must match the current major.minor version
 func ControllerDDLForVersion(version semversion.Number) *schema.Schema {
+	ctrlSchema := schema.New()
+	for _, source := range ControllerPatchSourcesForVersion(version) {
+		ctrlSchema.Add(source.Patch)
+	}
+	return ctrlSchema
+}
+
+// ControllerPatchSourcesForVersion returns every controller schema patch in
+// application order, with its source identity for schema generation. This
+// includes Go-built patches and version-selected post-patches. The version must
+// match the current major.minor version.
+func ControllerPatchSourcesForVersion(version semversion.Number) []PatchSource {
+	return controllerPatchSourcesForVersion(
+		version, controllerSchemaDir, controllerPostPatchFilesByVersion,
+	)
+}
+
+func controllerPatchSourcesForVersion(
+	version semversion.Number, fs ReadFileDirFS, postPatchFiles []versionedPostPatchFiles,
+) []PatchSource {
 	if version.Major != coreversion.Current.Major || version.Minor != coreversion.Current.Minor {
 		panic("Cannot return the controller DDL for a different major.minor version")
 	}
 
-	patches, err := readPatches(controllerSchemaDir, "dqlite/controller/sql")
+	sources, err := readPatches(fs, "dqlite/controller/sql")
 	if err != nil {
 		panic(err)
 	}
 
 	// Changestream triggers.
+	var patches []func() schema.Patch
 	patches = append(patches,
 		triggers.ChangeLogTriggersForCloud("uuid", tableCloud),
 		triggers.ChangeLogTriggersForCloudCaCert("cloud_uuid", tableCloudCACert),
@@ -135,25 +153,13 @@ func ControllerDDLForVersion(version semversion.Number) *schema.Schema {
 			"built-in secret backends are immutable"),
 	)
 
-	var postPatchFiles []string
-	for _, postPatch := range controllerPostPatchFilesByVersion {
-		if postPatch.version.Compare(version) <= 0 {
-			postPatchFiles = append(postPatchFiles, postPatch.files...)
-		}
-	}
-	postPatches, err := readPostPatches(controllerSchemaDir, "dqlite/controller/sql", postPatchFiles)
+	sources = appendGoPatchSources(sources, "controller.go", patches)
+	postPatches, err := readPostPatchesForVersion(
+		fs, "dqlite/controller/sql", postPatchFiles, version,
+	)
 	if err != nil {
 		panic(err)
 	}
 
-	ctrlSchema := schema.New()
-	for _, fn := range patches {
-		ctrlSchema.Add(fn())
-	}
-
-	for _, fn := range postPatches {
-		ctrlSchema.Add(fn())
-	}
-
-	return ctrlSchema
+	return append(sources, postPatches...)
 }

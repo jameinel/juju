@@ -51,8 +51,10 @@ func (s *patchesSuite) TestReadPatches(c *tc.C) {
 
 	c.Assert(patches, tc.HasLen, 2)
 
-	c.Check(schema.Stmt(patches[0]()), tc.Equals, "CREATE TABLE test1 (id INTEGER);")
-	c.Check(schema.Stmt(patches[1]()), tc.Equals, "CREATE TABLE test2 (id INTEGER);")
+	c.Check(patches[0].Name, tc.Equals, "testdata/001_initial.sql")
+	c.Check(patches[1].Name, tc.Equals, "testdata/002_add_table.sql")
+	c.Check(schema.Stmt(patches[0].Patch), tc.Equals, "CREATE TABLE test1 (id INTEGER);")
+	c.Check(schema.Stmt(patches[1].Patch), tc.Equals, "CREATE TABLE test2 (id INTEGER);")
 }
 
 func (s *patchesSuite) TestReadPatchesOrdering(c *tc.C) {
@@ -105,9 +107,9 @@ func (s *patchesSuite) TestReadPatchesOrdering(c *tc.C) {
 	patches, _ := readPatches(s.fs, "testdata")
 
 	c.Assert(len(patches), tc.Equals, len(entries))
-	for i, patchFn := range patches {
+	for i, patch := range patches {
 		expected := fmt.Sprintf("SELECT 1 FROM %c", 'a'+i)
-		c.Check(schema.Stmt(patchFn()), tc.Equals, expected)
+		c.Check(schema.Stmt(patch.Patch), tc.Equals, expected)
 	}
 }
 
@@ -135,7 +137,7 @@ func (s *patchesSuite) TestReadPatchesSkipsPostPatches(c *tc.C) {
 
 	c.Assert(patches, tc.HasLen, 1)
 
-	c.Check(schema.Stmt(patches[0]()), tc.Equals, "CREATE TABLE test1 (id INTEGER);")
+	c.Check(schema.Stmt(patches[0].Patch), tc.Equals, "CREATE TABLE test1 (id INTEGER);")
 }
 
 func (s *patchesSuite) TestReadPostPatches(c *tc.C) {
@@ -157,8 +159,10 @@ func (s *patchesSuite) TestReadPostPatches(c *tc.C) {
 
 	c.Assert(patches, tc.HasLen, 2)
 
-	c.Check(schema.Stmt(patches[0]()), tc.Equals, "ALTER TABLE test1 ADD COLUMN name TEXT;")
-	c.Check(schema.Stmt(patches[1]()), tc.Equals, "ALTER TABLE test2 ADD COLUMN value INTEGER;")
+	c.Check(patches[0].Name, tc.Equals, "testdata/001_post_patch.PATCH.sql")
+	c.Check(patches[1].Name, tc.Equals, "testdata/002_post_patch.PATCH.sql")
+	c.Check(schema.Stmt(patches[0].Patch), tc.Equals, "ALTER TABLE test1 ADD COLUMN name TEXT;")
+	c.Check(schema.Stmt(patches[1].Patch), tc.Equals, "ALTER TABLE test2 ADD COLUMN value INTEGER;")
 }
 
 func (s *patchesSuite) setupMocks(c *tc.C) *gomock.Controller {

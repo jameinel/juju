@@ -134,10 +134,7 @@ const (
 // within the same major.minor version. So all entries should be of the same
 // major.minor version as the current version. The full version is only included
 // for readability.
-var modelPostPatchFilesByVersion = []struct {
-	version semversion.Number
-	files   []string
-}{}
+var modelPostPatchFilesByVersion = []versionedPostPatchFiles{}
 
 // ModelDDL is used to create model databases.
 func ModelDDL() *schema.Schema {
@@ -147,16 +144,37 @@ func ModelDDL() *schema.Schema {
 // ModelDDLForVersion returns the model database schema for the specified version.
 // The version must match the current major.minor version.
 func ModelDDLForVersion(version semversion.Number) *schema.Schema {
+	modelSchema := schema.New()
+	for _, source := range ModelPatchSourcesForVersion(version) {
+		modelSchema.Add(source.Patch)
+	}
+	return modelSchema
+}
+
+// ModelPatchSourcesForVersion returns every model schema patch in application
+// order, with its source identity for schema generation. This includes Go-built
+// patches and version-selected post-patches. The version must match the current
+// major.minor version.
+func ModelPatchSourcesForVersion(version semversion.Number) []PatchSource {
+	return modelPatchSourcesForVersion(
+		version, modelSchemaDir, modelPostPatchFilesByVersion,
+	)
+}
+
+func modelPatchSourcesForVersion(
+	version semversion.Number, fs ReadFileDirFS, postPatchFiles []versionedPostPatchFiles,
+) []PatchSource {
 	if version.Major != coreversion.Current.Major || version.Minor != coreversion.Current.Minor {
 		panic("Cannot return the model DDL for a different major.minor version")
 	}
 
-	patches, err := readPatches(modelSchemaDir, "dqlite/model/sql")
+	sources, err := readPatches(fs, "dqlite/model/sql")
 	if err != nil {
 		panic(err)
 	}
 
 	// Changestream triggers.
+	var patches []func() schema.Patch
 	patches = append(patches,
 		triggers.ChangeLogTriggersForBlockDevice("machine_uuid", tableBlockDeviceMachine),
 		triggers.ChangeLogTriggersForModelConfig("key", tableModelConfig),
@@ -403,25 +421,13 @@ END;
 
 	patches = append(patches, customModelTriggers()...)
 
-	var postPatchFiles []string
-	for _, postPatch := range modelPostPatchFilesByVersion {
-		if postPatch.version.Compare(version) <= 0 {
-			postPatchFiles = append(postPatchFiles, postPatch.files...)
-		}
-	}
-	postPatches, err := readPostPatches(modelSchemaDir, "dqlite/model/sql", postPatchFiles)
+	sources = appendGoPatchSources(sources, "model.go", patches)
+	postPatches, err := readPostPatchesForVersion(
+		fs, "dqlite/model/sql", postPatchFiles, version,
+	)
 	if err != nil {
 		panic(err)
 	}
 
-	modelSchema := schema.New()
-	for _, fn := range patches {
-		modelSchema.Add(fn())
-	}
-
-	for _, fn := range postPatches {
-		modelSchema.Add(fn())
-	}
-
-	return modelSchema
+	return append(sources, postPatches...)
 }
