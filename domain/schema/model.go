@@ -161,6 +161,13 @@ func ModelPatchSourcesForVersion(version semversion.Number) []PatchSource {
 	)
 }
 
+// ModelPostPatchFiles returns schema-relative paths of all registered model
+// post-patches, including those for later patch versions. Generators use this
+// inventory to distinguish excluded files from unregistered inputs.
+func ModelPostPatchFiles() []string {
+	return postPatchFiles("dqlite/model/sql", modelPostPatchFilesByVersion)
+}
+
 func modelPatchSourcesForVersion(
 	version semversion.Number, fs ReadFileDirFS, postPatchFiles []versionedPostPatchFiles,
 ) []PatchSource {

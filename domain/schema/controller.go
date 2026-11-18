@@ -96,6 +96,13 @@ func ControllerPatchSourcesForVersion(version semversion.Number) []PatchSource {
 	)
 }
 
+// ControllerPostPatchFiles returns schema-relative paths of all registered
+// controller post-patches, including those for later patch versions. Generators
+// use this inventory to distinguish excluded files from unregistered inputs.
+func ControllerPostPatchFiles() []string {
+	return postPatchFiles("dqlite/controller/sql", controllerPostPatchFilesByVersion)
+}
+
 func controllerPatchSourcesForVersion(
 	version semversion.Number, fs ReadFileDirFS, postPatchFiles []versionedPostPatchFiles,
 ) []PatchSource {

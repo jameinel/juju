@@ -102,6 +102,16 @@ func readPostPatchesForVersion(
 	return readPostPatches(fs, baseDir, files)
 }
 
+func postPatchFiles(baseDir string, registry []versionedPostPatchFiles) []string {
+	var files []string
+	for _, entry := range registry {
+		for _, name := range entry.files {
+			files = append(files, filepath.ToSlash(filepath.Join(baseDir, name)))
+		}
+	}
+	return files
+}
+
 // readPostPatches reads the specified post patch files from the given baseDir.
 func readPostPatches(fs fs.ReadFileFS, baseDir string, postPatchFiles []string) ([]PatchSource, error) {
 	patches := make([]PatchSource, len(postPatchFiles))

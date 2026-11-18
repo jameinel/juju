@@ -172,3 +172,8 @@ func omitHook(_ int, ddl string) (string, error) { return ddl, nil }
 func Stmt(p Patch) string {
 	return p.stmt
 }
+
+// HasArgs reports whether executing the patch requires bound arguments.
+func HasArgs(p Patch) bool {
+	return len(p.args) != 0
+}

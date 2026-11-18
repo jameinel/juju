@@ -55,6 +55,12 @@ func (s *patchSuite) TestPatchRun(c *tc.C) {
 	c.Assert(err, tc.ErrorIsNil)
 }
 
+func (s *patchSuite) TestHasArgs(c *tc.C) {
+	c.Check(HasArgs(MakePatch("SELECT 1")), tc.IsFalse)
+	c.Check(HasArgs(MakePatch("SELECT ?", 1)), tc.IsTrue)
+	c.Check(HasArgs(MakePatch("SELECT ?", nil)), tc.IsTrue)
+}
+
 func (s *patchSuite) setupMocks(c *tc.C) *gomock.Controller {
 	ctrl := gomock.NewController(c)
 

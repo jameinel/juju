@@ -184,6 +184,26 @@ func (s *patchSourcesSuite) TestMissingBaseDirectory(c *tc.C) {
 	c.Assert(err, tc.ErrorIs, fs.ErrNotExist)
 }
 
+func (s *patchSourcesSuite) TestPostPatchFileInventory(c *tc.C) {
+	current := coreversion.Current
+	future := current
+	future.Patch++
+	registry := []versionedPostPatchFiles{{
+		version: future, files: []string{"0003-future.PATCH.sql", "0001-first.PATCH.sql"},
+	}, {
+		version: current, files: []string{"0002-current.PATCH.sql"},
+	}}
+	want := []string{"sql/0003-future.PATCH.sql", "sql/0001-first.PATCH.sql", "sql/0002-current.PATCH.sql"}
+	got := postPatchFiles("sql", registry)
+	c.Check(got, tc.DeepEquals, want)
+	got[0] = "changed"
+	c.Check(postPatchFiles("sql", registry), tc.DeepEquals, want)
+	c.Check(ControllerPostPatchFiles(), tc.DeepEquals,
+		postPatchFiles("dqlite/controller/sql", controllerPostPatchFilesByVersion))
+	c.Check(ModelPostPatchFiles(), tc.DeepEquals,
+		postPatchFiles("dqlite/model/sql", modelPostPatchFilesByVersion))
+}
+
 func (s *patchSourcesSuite) TestGoPatchSourcesPreservePatches(c *tc.C) {
 	base := PatchSource{Name: "sql/0000-base.sql", Patch: coreschema.MakePatch("SELECT 1;\n")}
 	patch := coreschema.MakePatch("INSERT INTO t VALUES (?);\n", "bound value")
